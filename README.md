@@ -1,97 +1,35 @@
-This is a new [**React Native**](https://reactnative.dev) project, bootstrapped using [`@react-native-community/cli`](https://github.com/react-native-community/cli).
+# 👟 SeoulWalkApp
+서울시 산책경로 추천 및 움직임 유도 플랫폼
 
-# Getting Started
+> 사용자의 위치를 기반으로 최적의 산책 경로를 추천하고, 게이미피케이션 요소를 통해 지속적인 움직임을 유도하는 모바일 플랫폼입니다.
 
-> **Note**: Make sure you have completed the [Set Up Your Environment](https://reactnative.dev/docs/set-up-your-environment) guide before proceeding.
+---
 
-## Step 1: Start Metro
+### 🛠 기술 스택 (Tech Stack)
+#### Frontend
+- **Framework**: React Native (CLI)
+- **Map Engine**: Mapbox SDK for React Native
+- **Animation**: React Native Reanimated, Lottie
+- **State Management**: Zustand / React Query
 
-First, you will need to run **Metro**, the JavaScript build tool for React Native.
+---
 
-To start the Metro dev server, run the following command from the root of your React Native project:
+### 📌 협업 규칙 (Git Convention)
+본 프로젝트는 GitHub Issue 기반으로 작업을 진행합니다. 등록된 이슈 템플릿에 맞춰 이슈를 생성한 뒤, 해당 이슈 번호를 브랜치명에 포함하여 작업합니다.
 
-```sh
-# Using npm
-npm start
+#### 브랜치 명명 규칙 (Branch Naming)
+**형식:** `태그/#이슈번호` (또는 `태그/이슈번호`)
+*(예시: `feat/#1`, `bugfix/#12`, `setting/#3`)*
 
-# OR using Yarn
-yarn start
-```
+#### 이슈 태그 가이드 (Issue Templates)
+| 태그 (Tag) | 설명 |
+| :--- | :--- |
+| `setting` | ⚙️ 개발 환경 세팅 및 패키지 설치 |
+| `feat` | ✨ 새로운 기능 개발 |
+| `bugfix` | 🐞 버그 및 에러 수정 |
+| `refactor` | 🔨 코드 구조 개선 (기능 변화 없음) |
+| `docs` | 📄 README 등 문서 작성 및 수정 |
+| `test` | ✅ 테스트 코드 작성 |
+| `deploy` | 🌍 배포 관련 작업 |
 
-## Step 2: Build and run your app
-
-With Metro running, open a new terminal window/pane from the root of your React Native project, and use one of the following commands to build and run your Android or iOS app:
-
-### Android
-
-```sh
-# Using npm
-npm run android
-
-# OR using Yarn
-yarn android
-```
-
-### iOS
-
-For iOS, remember to install CocoaPods dependencies (this only needs to be run on first clone or after updating native deps).
-
-The first time you create a new project, run the Ruby bundler to install CocoaPods itself:
-
-```sh
-bundle install
-```
-
-Then, and every time you update your native dependencies, run:
-
-```sh
-bundle exec pod install
-```
-
-For more information, please visit [CocoaPods Getting Started guide](https://guides.cocoapods.org/using/getting-started.html).
-
-```sh
-# Using npm
-npm run ios
-
-# OR using Yarn
-yarn ios
-```
-
-If everything is set up correctly, you should see your new app running in the Android Emulator, iOS Simulator, or your connected device.
-
-This is one way to run your app — you can also build it directly from Android Studio or Xcode.
-
-## Step 3: Modify your app
-
-Now that you have successfully run the app, let's make changes!
-
-Open `App.tsx` in your text editor of choice and make some changes. When you save, your app will automatically update and reflect these changes — this is powered by [Fast Refresh](https://reactnative.dev/docs/fast-refresh).
-
-When you want to forcefully reload, for example to reset the state of your app, you can perform a full reload:
-
-- **Android**: Press the <kbd>R</kbd> key twice or select **"Reload"** from the **Dev Menu**, accessed via <kbd>Ctrl</kbd> + <kbd>M</kbd> (Windows/Linux) or <kbd>Cmd ⌘</kbd> + <kbd>M</kbd> (macOS).
-- **iOS**: Press <kbd>R</kbd> in iOS Simulator.
-
-## Congratulations! :tada:
-
-You've successfully run and modified your React Native App. :partying_face:
-
-### Now what?
-
-- If you want to add this new React Native code to an existing application, check out the [Integration guide](https://reactnative.dev/docs/integration-with-existing-apps).
-- If you're curious to learn more about React Native, check out the [docs](https://reactnative.dev/docs/getting-started).
-
-# Troubleshooting
-
-If you're having issues getting the above steps to work, see the [Troubleshooting](https://reactnative.dev/docs/troubleshooting) page.
-
-# Learn More
-
-To learn more about React Native, take a look at the following resources:
-
-- [React Native Website](https://reactnative.dev) - learn more about React Native.
-- [Getting Started](https://reactnative.dev/docs/environment-setup) - an **overview** of React Native and how setup your environment.
-- [Learn the Basics](https://reactnative.dev/docs/getting-started) - a **guided tour** of the React Native **basics**.
-- [Blog](https://reactnative.dev/blog) - read the latest official React Native **Blog** posts.
-- [`@facebook/react-native`](https://github.com/facebook/react-native) - the Open Source; GitHub **repository** for React Native.
+> **작업 플로우:** > Issue 생성 ➔ 브랜치 생성(`feat/#이슈번호`) ➔ 작업 및 Commit ➔ PR(Pull Request) ➔ Review 후 `dev` 브랜치에 Merge
