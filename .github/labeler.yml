@@ -1,0 +1,33 @@
+# .github/labeler.yml
+
+"⚙ Setting":
+  - head-branch: ['^setting/.*', '^setup/.*', '^config/.*', '^chore/.*']
+  - changed-files:
+      - any-glob-to-any-file: ['package.json', 'package-lock.json', 'tsconfig.json']
+
+"✅ Test":
+  - head-branch: ['^test/.*']
+
+"✨ Feat":
+  - head-branch: ['^feat/.*', '^feature/.*']
+
+"🌏 Deploy":
+  - head-branch: ['^deploy/.*', '^release/.*']
+
+"🐞 BugFix":
+  - head-branch: ['^fix/.*', '^bugfix/.*', '^hotfix/.*']
+
+"💻 CrossBrowsing":
+  - head-branch: ['^crossbrowsing/.*']
+
+"📃 Docs":
+  - head-branch: ['^docs/.*']
+
+"📬 API":
+  - head-branch: ['^api/.*']
+
+"🔨 Refactor":
+  - head-branch: ['^refactor/.*']
+
+"🥰 Accessibility":
+  - head-branch: ['^accessibility/.*', '^a11y/.*']

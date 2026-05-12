@@ -1,0 +1,20 @@
+# .github/workflows/pr-labeler.yml
+
+name: "Pull Request Auto Labeler"
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  labeler:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write # 라벨 부착 권한
+
+    steps:
+      - name: 커밋 및 브랜치 확인 후 라벨 부착
+        uses: actions/labeler@v5
+        with:
+          repo-token: "${{ secrets.GITHUB_TOKEN }}"
+          sync-labels: true
