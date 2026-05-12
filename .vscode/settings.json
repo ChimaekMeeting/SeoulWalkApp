@@ -1,0 +1,8 @@
+{
+  "java.import.exclusions": [
+    "**/node_modules/**",
+    "**/android/.gradle/**",
+    "**/android/**/build/**"
+  ],
+  "java.configuration.updateBuildConfiguration": "interactive"
+}
