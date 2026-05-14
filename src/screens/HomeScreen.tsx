@@ -8,7 +8,15 @@ import {
   View,
 } from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
+import Mapbox from '@rnmapbox/maps';
+import {useLocation} from '../hooks/useLocation';
 import {MockMapView} from '../components/MockMapView';
+import mockPois from '../data/mockPois.json';
+import mockRoute from '../data/mockRoute.json';
+import {StaticPOILayer} from '../components/map/StaticPOILayer';
+import {DynamicPOILayer} from '../components/map/DynamicPOILayer';
+import {RouteLayer} from '../components/map/RouteLayer';
+import {WalkMapRenderer} from '../components/map/WalkMapRenderer';
 import {
   chatbotFlow,
   Course,
@@ -45,6 +53,7 @@ export function HomeScreen() {
   const [persona, setPersona] = useState<PersonaId>('killtime');
   const [recommendedFilter, setRecommendedFilter] = useState<CourseType | undefined>();
   const [walkResult, setWalkResult] = useState<{dist: string; time: string} | null>(null);
+  const [activeMapCourse, setActiveMapCourse] = useState<string | null>(null);
 
   const go = (next: Route | TabName) => {
     if (typeof next === 'string') {
@@ -71,13 +80,18 @@ export function HomeScreen() {
     <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.card} />
       <View style={styles.appShell}>
-        {route.name === 'home' ? (
-          <HomeTab persona={persona} go={go} openCourse={id => go({name: 'course', id})} />
+        {route.name === 'home' || route.name === 'chat' ? (
+          <HomeTab 
+             persona={persona} 
+             activeMapCourse={activeMapCourse}
+             go={go} 
+             openCourse={id => go({name: 'course', id})} 
+          />
         ) : null}
         {route.name === 'chat' ? (
-          <ChatTab
+          <ChatBottomSheet
             persona={persona}
-            setRecommendedFilter={setRecommendedFilter}
+            onSelectCourse={(id) => setActiveMapCourse(id)}
             go={go}
           />
         ) : null}
@@ -123,14 +137,29 @@ function getTab(route: Route): TabName {
 
 function HomeTab({
   persona,
+  activeMapCourse,
   go,
   openCourse,
 }: {
   persona: PersonaId;
+  activeMapCourse: string | null;
   go: (route: Route | TabName) => void;
   openCourse: (id: string) => void;
 }) {
+  const {hasPermission} = useLocation();
   const [topTab, setTopTab] = useState<'nearby' | 'trending' | 'time'>('nearby');
+
+  const staticData = {
+    ...mockPois,
+    features: mockPois.features.filter((f: any) => ['bench', 'toilet', 'cctv'].includes(f.properties.type))
+  };
+
+  const dynamicData = {
+    ...mockPois,
+    features: mockPois.features.filter((f: any) => ['cafe', 'spot'].includes(f.properties.type))
+  };
+
+  const routeData = activeMapCourse ? mockRoute : null;
   const personaInfo = personas[persona];
   const featured = courses.filter(course => course.persona.includes(persona)).slice(0, 5);
   const visibleCourses = topTab === 'trending' ? courses.slice(0, 4) : featured;
@@ -138,7 +167,18 @@ function HomeTab({
   return (
     <View style={styles.fill}>
       <View style={styles.homeMap}>
-        <MockMapView mode="detail" />
+        <Mapbox.MapView style={{flex: 1}} styleURL={'mapbox://styles/mapbox/streets-v12'}>
+          <Mapbox.Camera
+            zoomLevel={15}
+            centerCoordinate={[126.9780, 37.5665]}
+            // followUserLocation={hasPermission} // 에뮬레이터 GPS(미국)를 따라가지 않도록 임시 비활성화
+            // followUserMode="normal"
+          />
+          {routeData && <RouteLayer data={routeData} />}
+          <StaticPOILayer data={staticData} />
+          <DynamicPOILayer data={dynamicData} />
+          {hasPermission && <Mapbox.UserLocation />}
+        </Mapbox.MapView>
         <Pressable onPress={() => go('chat')} style={styles.aiSearch}>
           <View style={styles.searchSpark}>
             <Text style={styles.searchSparkText}>✳</Text>
@@ -221,13 +261,13 @@ function HomeTab({
   );
 }
 
-function ChatTab({
+function ChatBottomSheet({
   persona,
-  setRecommendedFilter,
+  onSelectCourse,
   go,
 }: {
   persona: PersonaId;
-  setRecommendedFilter: (filter: CourseType | undefined) => void;
+  onSelectCourse: (id: string) => void;
   go: (route: Route | TabName) => void;
 }) {
   const [step, setStep] = useState(0);
@@ -241,21 +281,20 @@ function ChatTab({
   const choose = (answer: string) => {
     const nextAnswers = [...answers, answer];
     setAnswers(nextAnswers);
-    if (step === chatbotFlow.length - 1) {
-      setRecommendedFilter(answer.startsWith('편도') ? 'oneway' : 'loop');
-    }
+    // (Optional) Could set filters here if needed
     setStep(current => current + 1);
   };
 
   return (
-    <View style={styles.pageSoft}>
-      <ScreenHeader
-        title="AI 산책 도우미"
-        subtitle={`${personas[persona].icon} ${personas[persona].label} 페르소나로 추천 중`}
-        onBack={() => go('home')}
-        right="설정"
-      />
-      <ScrollView contentContainerStyle={styles.chatContent} showsVerticalScrollIndicator={false}>
+    <View style={styles.chatOverlay}>
+      <View style={styles.chatSheet}>
+        <View style={styles.chatHeader}>
+          <Text style={styles.chatHeaderTitle}>AI 산책 도우미 ({personas[persona].label})</Text>
+          <Pressable onPress={() => go('home')} style={styles.chatCloseBtn}>
+            <Text style={styles.chatCloseBtnText}>✕</Text>
+          </Pressable>
+        </View>
+        <ScrollView contentContainerStyle={styles.chatContent} showsVerticalScrollIndicator={false}>
         <ChatBubble text="안녕하세요 채원님 👋" />
         <ChatBubble text="몇 가지만 물어볼게요. 오늘에 맞는 길을 찾아드릴게요." />
         {chatbotFlow.slice(0, Math.min(step + 1, chatbotFlow.length)).map((flow, index) => (
@@ -276,7 +315,10 @@ function ChatTab({
         {done ? (
           <View>
             <ChatBubble text="좋아요. 정리해보면 오늘은 이 길이 어울려요." />
-            <Pressable onPress={() => go({name: 'course', id: recommended.id})} style={styles.recommendBubble}>
+            <Pressable onPress={() => {
+              onSelectCourse(recommended.id);
+              go('home');
+            }} style={styles.recommendBubble}>
               <View style={[styles.recommendIcon, {backgroundColor: `${recommended.color}22`}]}>
                 <Text style={styles.recommendMood}>{recommended.mood}</Text>
               </View>
@@ -307,6 +349,7 @@ function ChatTab({
           </View>
         ) : null}
       </ScrollView>
+      </View>
     </View>
   );
 }
@@ -467,22 +510,7 @@ function WalkTab({
 
   return (
     <View style={styles.walkPage}>
-      {mode === 'map' ? (
-        <MockMapView mode="dark" course={course} progress={progress} />
-      ) : (
-        <View style={styles.gameScene}>
-          <View style={styles.skyline} />
-          <View style={[styles.glowRoute, {backgroundColor: course.color}]} />
-          <View style={styles.glowRouteDash} />
-          <View style={styles.buildingLeft} />
-          <View style={styles.buildingRight} />
-          <View style={styles.buildingBack} />
-          <View style={styles.avatarWalker}>
-            <View style={styles.avatarHead} />
-            <View style={[styles.avatarBody, {backgroundColor: course.color}]} />
-          </View>
-        </View>
-      )}
+      <WalkMapRenderer course={course} progress={progress} isGameMode={mode === 'game'} />
 
       <View style={styles.walkTop}>
         <View style={styles.weatherDark}>
@@ -2307,5 +2335,41 @@ const styles = StyleSheet.create({
   },
   navActiveText: {
     color: colors.mintDeep,
+  },
+  chatOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'flex-end',
+    zIndex: 100,
+  },
+  chatSheet: {
+    height: '80%',
+    backgroundColor: colors.bgSoft,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    overflow: 'hidden',
+    ...shadows.medium,
+  },
+  chatHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: spacing.lg,
+    backgroundColor: colors.card,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.line,
+  },
+  chatHeaderTitle: {
+    fontSize: 16,
+    fontWeight: '900',
+    color: colors.ink,
+  },
+  chatCloseBtn: {
+    padding: spacing.sm,
+  },
+  chatCloseBtnText: {
+    fontSize: 20,
+    color: colors.ink3,
+    fontWeight: '700',
   },
 });
