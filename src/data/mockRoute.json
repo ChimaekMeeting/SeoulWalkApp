@@ -1,0 +1,22 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [126.9780, 37.5665],
+          [126.9790, 37.5670],
+          [126.9800, 37.5660],
+          [126.9810, 37.5650]
+        ]
+      },
+      "properties": {
+        "distance": 1.2,
+        "duration": 15,
+        "mode": "healing"
+      }
+    }
+  ]
+}
