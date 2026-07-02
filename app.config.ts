@@ -27,6 +27,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
         RNMapboxMapsDownloadToken: process.env.RNMAPBOX_MAPS_DOWNLOAD_TOKEN,
       },
     ],
+    './plugins/withMapboxAccessToken',
   ],
   extra: {
     eas: {
