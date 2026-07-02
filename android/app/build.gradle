@@ -85,6 +85,9 @@ android {
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
         versionName "1.0"
+        // Mapbox's native SDK looks up this exact resource name at MapView inflation time.
+        // Sourcing it here avoids a race with the JS-side Mapbox.setAccessToken() call.
+        resValue "string", "mapbox_access_token", "\"${project.env.MAPBOX_PUBLIC_ACCESS_TOKEN}\""
     }
     signingConfigs {
         debug {
