@@ -30,3 +30,4 @@ allprojects {
         }
     }
 }
+apply plugin: "expo-root-project"

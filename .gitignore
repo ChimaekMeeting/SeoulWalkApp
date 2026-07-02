@@ -80,3 +80,8 @@ android/local.properties
 .env
 .env.*
 !.env.example
+
+# Expo
+.expo
+dist/
+web-build/
