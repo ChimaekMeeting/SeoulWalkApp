@@ -15,7 +15,6 @@ Expo CLI는 별도 전역 설치 불필요 — `npx`로 자동 실행됩니다.
 ```bash
 git clone https://github.com/ChimaekMeeting/SeoulWalkApp.git
 cd SeoulWalkApp
-git checkout setting/expo-migration   # dev로 머지되기 전까지는 이 브랜치
 npm install
 ```
 
@@ -24,7 +23,7 @@ npm install
 프로젝트 루트에 `.env` 파일 생성:
 
 ```
-EXPO_PUBLIC_MAPBOX_PUBLIC_ACCESS_TOKEN=pk.xxxxx  # 팀 리더에게 받기
+EXPO_PUBLIC_MAPBOX_PUBLIC_ACCESS_TOKEN=pk.xxxxx  # 자신의 public token 입력
 EXPO_PUBLIC_API_BASE_URL=http://localhost:8000
 ```
 
@@ -42,7 +41,7 @@ https://expo.dev/artifacts/eas/0SlG55GRjXXgw6fPi30GSCoJjav12RwuoL9GOsG8nKM.apk
 - 실기기라면 이 링크를 폰 브라우저로 열어서 다운로드 → 설치(출처를 알 수 없는 앱 설치 허용 필요).
 - 에뮬레이터라면 `adb install -r 파일경로.apk`.
 
-> iOS는 아직 빌드가 없습니다. Apple Developer 계정이 준비되면 추가될 예정입니다.
+> iOS는 아직 빌드가 없습니다. 빌드 시 Apple Developer 계정이 필요합니다.
 
 ## 5. 개발 서버 실행 + 접속
 
