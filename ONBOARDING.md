@@ -25,6 +25,7 @@ npm install
 ```
 EXPO_PUBLIC_MAPBOX_PUBLIC_ACCESS_TOKEN=pk.xxxxx  # 자신의 public token 입력
 EXPO_PUBLIC_API_BASE_URL=http://localhost:8000
+EXPO_PUBLIC_KAKAO_NATIVE_APP_KEY=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx  # 팀 리더에게 받기 (Mapbox와 달리 전원 동일한 값 사용 — 각자 발급 불가)
 ```
 
 `.env.example` 파일을 참고하면 형식을 확인할 수 있습니다.
@@ -34,7 +35,7 @@ EXPO_PUBLIC_API_BASE_URL=http://localhost:8000
 Android 실기기 또는 에뮬레이터에 아래 APK를 다운로드해서 설치합니다.
 
 ```
-https://expo.dev/artifacts/eas/0SlG55GRjXXgw6fPi30GSCoJjav12RwuoL9GOsG8nKM.apk
+https://expo.dev/artifacts/eas/j_FEKL42CBywI_g_xOrP9MoKGZmpEM72U6g98wNnxyo.apk
 ```
 
 - 이 링크는 로그인 없이 다운로드 가능합니다.
@@ -61,8 +62,10 @@ npm run start
 
 ## 6. (선택) EAS 빌드를 직접 돌리고 싶다면
 
-현재 프로젝트는 `kuty2004` 개인 계정 소유이므로, 팀원이 직접 `eas build`를 실행하려면 프로젝트에 협업자로 초대받아야 합니다. 필요하면 아래에서 초대할 수 있습니다.
+프로젝트는 `chimaekmeeting` 조직(Organization) 계정 소유입니다 (`@chimaekmeeting/seoulwalkapp`). 조직 멤버로 초대받으면 별도 프로젝트 초대 없이 바로 `eas build`를 실행할 수 있습니다. 아직 멤버가 아니라면 조직 관리자(`kuty2004`)에게 초대를 요청하세요.
 
-```
-https://expo.dev/accounts/kuty2004/projects/seoulwalkapp/settings
+```bash
+npx eas-cli login       # 본인 Expo 계정으로 로그인
+npx eas-cli whoami       # chimaekmeeting 계정이 목록에 보이면 정상
+npx eas-cli build --profile development --platform android
 ```
