@@ -1,5 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
+  Animated,
+  Dimensions,
+  PanResponder,
   Pressable,
   ScrollView,
   StatusBar,
@@ -27,11 +30,22 @@ import {
 } from '../data/chimeakData';
 import { colors, radii, shadows, spacing } from '../theme/tokens';
 import { Route, TabName, Navigate } from '../navigation/types';
-import { ChatScreen } from './ChatScreen';
+import { ChatConversation } from '../components/chat/ChatConversation';
+
+const { height: SCREEN_H } = Dimensions.get('window');
+// 바텀시트 스냅 위치 (fill 컨테이너 기준 top 좌표)
+const SHEET_TOP_UP = 40; // 위: 채팅 가득 (지도 거의 가려짐)
+const SHEET_TOP_HALF = 400; // 기본 시작: 중간보다 약간 아래
+const SHEET_TOP_DOWN = 600; // 아래: 지도 많이 보임
+
+// translateY 기준값 (= 각 top - SHEET_TOP_UP). 0 = 맨 위, 값이 클수록 아래로 내려감
+const SNAP_UP = 0;
+const SNAP_HALF = SHEET_TOP_HALF - SHEET_TOP_UP; // 400
+const SNAP_DOWN = SHEET_TOP_DOWN - SHEET_TOP_UP; // 560
+const SNAP_POINTS = [SNAP_UP, SNAP_HALF, SNAP_DOWN];
 
 const navItems: { name: TabName; label: string; icon: string }[] = [
   { name: 'home', label: '홈', icon: '⌂' },
-  { name: 'chat', label: 'AI 산책', icon: '✳' },
   { name: 'courses', label: '추천 코스', icon: '♬' },
   { name: 'record', label: '기록', icon: '♧' },
   { name: 'me', label: '내 정보', icon: '♙' },
@@ -55,8 +69,6 @@ export function HomeScreen() {
         setRoute({ name: 'courses', filter: recommendedFilter ?? 'all' });
       } else if (next === 'home') {
         setRoute({ name: 'home' });
-      } else if (next === 'chat') {
-        setRoute({ name: 'chat' });
       } else if (next === 'record') {
         setRoute({ name: 'record' });
       } else {
@@ -68,7 +80,7 @@ export function HomeScreen() {
   };
 
   const activeTab = getTab(route);
-  const showNav = ['home', 'chat', 'courses', 'record', 'me'].includes(
+  const showNav = ['home', 'courses', 'record', 'me'].includes(
     route.name,
   );
 
@@ -80,15 +92,9 @@ export function HomeScreen() {
           <HomeTab
             persona={persona}
             activeMapCourse={activeMapCourse}
+            chatOpen={route.name === 'chat'}
             go={go}
-            openCourse={id => go({ name: 'course', id })}
-          />
-        ) : null}
-        {route.name === 'chat' ? (
-          <ChatScreen
-            persona={persona}
             onSelectCourse={id => setActiveMapCourse(id)}
-            go={go}
           />
         ) : null}
         {route.name === 'courses' ? (
@@ -136,18 +142,58 @@ function getTab(route: Route): TabName {
 function HomeTab({
   persona,
   activeMapCourse,
+  chatOpen,
   go,
-  openCourse,
+  onSelectCourse,
 }: {
   persona: PersonaId;
   activeMapCourse: string | null;
+  chatOpen: boolean;
   go: Navigate;
-  openCourse: (id: string) => void;
+  onSelectCourse: (id: string) => void;
 }) {
   const { hasPermission } = useLocation();
-  const [topTab, setTopTab] = useState<'nearby' | 'trending' | 'time'>(
-    'nearby',
-  );
+
+  // 바텀시트 위치 애니메이션: 0 = 맨 위, 값이 클수록 아래. 시작은 중간(SNAP_HALF).
+  const translateY = useRef(new Animated.Value(SNAP_HALF)).current;
+  const restingY = useRef(SNAP_HALF); // 손을 뗐을 때의 현재 스냅 위치
+
+  const snapTo = (target: number) => {
+    restingY.current = target;
+    Animated.spring(translateY, {
+      toValue: target,
+      useNativeDriver: true,
+      bounciness: 3,
+      speed: 14,
+    }).start();
+  };
+
+  const panResponder = useRef(
+    PanResponder.create({
+      // 세로로 4px 이상 움직일 때만 드래그로 인식 (탭/가로스크롤과 구분)
+      onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dy) > 4,
+      onPanResponderMove: (_, g) => {
+        let next = restingY.current + g.dy;
+        if (next < SNAP_UP) next = SNAP_UP; // 위 한계
+        if (next > SNAP_DOWN) next = SNAP_DOWN; // 아래 한계
+        translateY.setValue(next);
+      },
+      onPanResponderRelease: (_, g) => {
+        // 놓는 순간 위치에 속도를 살짝 반영해, 가장 가까운 스냅 포인트로 이동
+        const projected = restingY.current + g.dy + g.vy * 100;
+        const target = SNAP_POINTS.reduce((best, p) =>
+          Math.abs(projected - p) < Math.abs(projected - best) ? p : best,
+        );
+        snapTo(target);
+      },
+    }),
+  ).current;
+
+  // 하단 'AI 산책' 탭을 누르면(chatOpen=true) 시트를 맨 위로, 홈으로 돌아오면 기본(중간)으로
+  useEffect(() => {
+    snapTo(chatOpen ? SNAP_UP : SNAP_HALF);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chatOpen]);
 
   const staticData = {
     ...mockPois,
@@ -164,11 +210,6 @@ function HomeTab({
   };
 
   const routeData = activeMapCourse ? mockRoute : null;
-  const personaInfo = personas[persona];
-  const featured = courses
-    .filter(course => course.persona.includes(persona))
-    .slice(0, 5);
-  const visibleCourses = topTab === 'trending' ? courses.slice(0, 4) : featured;
 
   return (
     <View style={styles.fill}>
@@ -180,47 +221,14 @@ function HomeTab({
           <Mapbox.Camera
             zoomLevel={15}
             centerCoordinate={[126.978, 37.5665]}
-            // followUserLocation={hasPermission} // 에뮬레이터 GPS(미국)를 따라가지 않도록 임시 비활성화
-            // followUserMode="normal"
+          // followUserLocation={hasPermission} // 에뮬레이터 GPS(미국)를 따라가지 않도록 임시 비활성화
+          // followUserMode="normal"
           />
           {routeData && <RouteLayer data={routeData} />}
           <StaticPOILayer data={staticData} />
           <DynamicPOILayer data={dynamicData} />
           {hasPermission && <Mapbox.UserLocation />}
         </Mapbox.MapView>
-        <Pressable onPress={() => go('chat')} style={styles.aiSearch}>
-          <View style={styles.searchSpark}>
-            <Text style={styles.searchSparkText}>✳</Text>
-          </View>
-          <View style={styles.searchBody}>
-            <Text style={styles.searchMeta}>
-              AI · {personaInfo.label.toUpperCase()}
-            </Text>
-            <Text style={styles.searchQuestion}>오늘 기분 어때요?</Text>
-          </View>
-          <Text style={styles.searchMic}>마이크</Text>
-        </Pressable>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.suggestionScroller}
-          contentContainerStyle={styles.suggestionContent}
-        >
-          {[
-            '30분만 가볍게 걷고 싶어요',
-            '오늘 야경 보러 갈 곳',
-            '한강 근처 편도 코스',
-            '카페 들르면서 천천히',
-          ].map(suggestion => (
-            <Pressable
-              key={suggestion}
-              onPress={() => go('chat')}
-              style={styles.suggestionChip}
-            >
-              <Text style={styles.suggestionText}>✳ {suggestion}</Text>
-            </Pressable>
-          ))}
-        </ScrollView>
         <View style={styles.weatherPill}>
           <Text style={styles.weatherText}>☁ 17° · 미세 ●</Text>
         </View>
@@ -230,68 +238,22 @@ function HomeTab({
         </View>
       </View>
 
-      <View style={styles.homeSheet}>
-        <View style={styles.dragHandle} />
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.segmentStrip}
-        >
-          {[
-            { id: 'nearby', label: '내 주변', icon: '⌖' },
-            { id: 'trending', label: '서울 트렌딩', icon: '↗' },
-            { id: 'time', label: '지금 이 시간', icon: '◷' },
-          ].map(tab => (
-            <Pressable
-              key={tab.id}
-              onPress={() =>
-                setTopTab(tab.id as 'nearby' | 'trending' | 'time')
-              }
-              style={[styles.pill, topTab === tab.id && styles.pillActive]}
-            >
-              <Text
-                style={[
-                  styles.pillText,
-                  topTab === tab.id && styles.pillTextActive,
-                ]}
-              >
-                {tab.icon} {tab.label}
-              </Text>
-            </Pressable>
-          ))}
-        </ScrollView>
-
-        <View style={styles.sectionHeader}>
-          <View style={styles.inlineTitle}>
-            <Text style={styles.sectionTitle}>
-              {topTab === 'trending'
-                ? '서울 산책 TOP 5'
-                : topTab === 'time'
-                ? '오늘 저녁에 좋아요'
-                : '내 주변 AI 추천'}
-            </Text>
-            <Text style={styles.sectionSub}>· 4분 전 업데이트</Text>
-          </View>
-          <Pressable onPress={() => go('courses')}>
-            <Text style={styles.sectionAction}>전체 보기 →</Text>
-          </Pressable>
+      <Animated.View
+        style={[styles.homeSheet, { transform: [{ translateY }] }]}
+      >
+        <View style={styles.sheetGrabZone} {...panResponder.panHandlers}>
+          <View style={styles.dragHandle} />
         </View>
-
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.courseCarousel}
-        >
-          {visibleCourses.map((course, index) => (
-            <CourseCard
-              key={course.id}
-              course={course}
-              rank={topTab === 'trending' ? index + 1 : undefined}
-              onPress={() => openCourse(course.id)}
-            />
-          ))}
-        </ScrollView>
-      </View>
+        <ChatConversation
+          persona={persona}
+          go={go}
+          onSelectCourse={onSelectCourse}
+          onRequestClose={() => {
+            snapTo(SNAP_DOWN);
+            go('home');
+          }}
+        />
+      </Animated.View>
     </View>
   );
 }
@@ -328,15 +290,13 @@ function CoursesTab({
             { id: 'all', label: `전체 ${courses.length}` },
             {
               id: 'loop',
-              label: `순환 ${
-                courses.filter(course => course.type === 'loop').length
-              }`,
+              label: `순환 ${courses.filter(course => course.type === 'loop').length
+                }`,
             },
             {
               id: 'oneway',
-              label: `편도 ${
-                courses.filter(course => course.type === 'oneway').length
-              }`,
+              label: `편도 ${courses.filter(course => course.type === 'oneway').length
+                }`,
             },
           ].map(item => (
             <Pressable
@@ -450,7 +410,7 @@ function CourseDetail({ id, go }: { id: string; go: Navigate }) {
                 </Text>
               ) : null}
               {index === course.waypoints.length - 1 &&
-              course.type === 'oneway' ? (
+                course.type === 'oneway' ? (
                 <Text style={[styles.startText, { color: course.color }]}>
                   END
                 </Text>
@@ -833,8 +793,8 @@ function MyPageTab({
                   {id === 'killtime'
                     ? '30분 내'
                     : id === 'exercise'
-                    ? '심박↑'
-                    : '조용함'}
+                      ? '심박↑'
+                      : '조용함'}
                 </Text>
               </Pressable>
             );
@@ -1066,7 +1026,7 @@ const styles = StyleSheet.create({
     paddingBottom: 76,
   },
   homeMap: {
-    height: 430,
+    flex: 1,
     overflow: 'hidden',
     backgroundColor: colors.bgSoft,
   },
@@ -1178,13 +1138,24 @@ const styles = StyleSheet.create({
     fontWeight: '900',
   },
   homeSheet: {
-    marginTop: -74,
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: SHEET_TOP_UP,
+    height: SCREEN_H, // 접혔을 때도 화면 아래를 항상 덮도록 넉넉하게
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     backgroundColor: 'rgba(255,255,255,0.98)',
-    paddingTop: spacing.sm,
     paddingBottom: spacing.lg,
     ...shadows.soft,
+  },
+  sheetGrabZone: {
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.sm,
+    alignItems: 'center',
+  },
+  sheetScroller: {
+    flexGrow: 0, // 시트 안에서 세로로 늘어나지 않도록 (내용 높이만 차지)
   },
   dragHandle: {
     width: 38,

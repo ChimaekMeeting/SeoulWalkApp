@@ -12,7 +12,7 @@ export type Route =
   | { name: 'me' };
 
 /* 하단 네비게이션 탭 이름 */
-export type TabName = 'home' | 'chat' | 'courses' | 'record' | 'me';
+export type TabName = 'home' | 'courses' | 'record' | 'me';
 
 /* 화면 이동 함수 타입 (탭 이름 또는 Route 객체를 받아 해당 화면으로 전환) */
 export type Navigate = (route: Route | TabName) => void;
