@@ -1,5 +1,8 @@
-import React, {useState} from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
+  Animated,
+  Dimensions,
+  PanResponder,
   Pressable,
   ScrollView,
   StatusBar,
@@ -7,66 +10,68 @@ import {
   Text,
   View,
 } from 'react-native';
-import {SafeAreaView} from 'react-native-safe-area-context';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import Mapbox from '@rnmapbox/maps';
-import {useLocation} from '../hooks/useLocation';
-import {MockMapView} from '../components/MockMapView';
+import { useLocation } from '../hooks/useLocation';
+import { MockMapView } from '../components/MockMapView';
 import mockPois from '../data/mockPois.json';
 import mockRoute from '../data/mockRoute.json';
-import {StaticPOILayer} from '../components/map/StaticPOILayer';
-import {DynamicPOILayer} from '../components/map/DynamicPOILayer';
-import {RouteLayer} from '../components/map/RouteLayer';
-import {WalkMapRenderer} from '../components/map/WalkMapRenderer';
+import { StaticPOILayer } from '../components/map/StaticPOILayer';
+import { DynamicPOILayer } from '../components/map/DynamicPOILayer';
+import { RouteLayer } from '../components/map/RouteLayer';
+import { WalkMapRenderer } from '../components/map/WalkMapRenderer';
 import {
-  chatbotFlow,
-  Course,
   courses,
   CourseType,
   PersonaId,
   personas,
   recentWalks,
 } from '../data/chimeakData';
-import {colors, radii, shadows, spacing} from '../theme/tokens';
+import { colors, radii, shadows, spacing } from '../theme/tokens';
+import { Route, TabName, Navigate } from '../navigation/types';
+import { ChatConversation } from '../components/chat/ChatConversation';
 
-type Route =
-  | {name: 'home'}
-  | {name: 'chat'}
-  | {name: 'courses'; filter?: CourseType | 'all'}
-  | {name: 'course'; id: string}
-  | {name: 'walk'; id: string}
-  | {name: 'postwalk'; id: string}
-  | {name: 'record'}
-  | {name: 'me'};
+const { height: SCREEN_H } = Dimensions.get('window');
+// 바텀시트 스냅 위치 (fill 컨테이너 기준 top 좌표)
+const SHEET_TOP_UP = 40; // 위: 채팅 가득 (지도 거의 가려짐)
+const SHEET_TOP_HALF = 400; // 기본 시작: 중간보다 약간 아래
+const SHEET_TOP_DOWN = 600; // 아래: 지도 많이 보임
 
-type TabName = 'home' | 'chat' | 'courses' | 'record' | 'me';
+// translateY 기준값 (= 각 top - SHEET_TOP_UP). 0 = 맨 위, 값이 클수록 아래로 내려감
+const SNAP_UP = 0;
+const SNAP_HALF = SHEET_TOP_HALF - SHEET_TOP_UP; // 400
+const SNAP_DOWN = SHEET_TOP_DOWN - SHEET_TOP_UP; // 560
+const SNAP_POINTS = [SNAP_UP, SNAP_HALF, SNAP_DOWN];
 
-const navItems: {name: TabName; label: string; icon: string}[] = [
-  {name: 'home', label: '홈', icon: '⌂'},
-  {name: 'chat', label: 'AI 산책', icon: '✳'},
-  {name: 'courses', label: '추천 코스', icon: '♬'},
-  {name: 'record', label: '기록', icon: '♧'},
-  {name: 'me', label: '내 정보', icon: '♙'},
+const navItems: { name: TabName; label: string; icon: string }[] = [
+  { name: 'home', label: '홈', icon: '⌂' },
+  { name: 'courses', label: '추천 코스', icon: '♬' },
+  { name: 'record', label: '기록', icon: '♧' },
+  { name: 'me', label: '내 정보', icon: '♙' },
 ];
 
 export function HomeScreen() {
-  const [route, setRoute] = useState<Route>({name: 'home'});
+  const [route, setRoute] = useState<Route>({ name: 'home' });
   const [persona, setPersona] = useState<PersonaId>('killtime');
-  const [recommendedFilter, setRecommendedFilter] = useState<CourseType | undefined>();
-  const [walkResult, setWalkResult] = useState<{dist: string; time: string} | null>(null);
+  const [recommendedFilter, setRecommendedFilter] = useState<
+    CourseType | undefined
+  >();
+  const [walkResult, setWalkResult] = useState<{
+    dist: string;
+    time: string;
+  } | null>(null);
   const [activeMapCourse, setActiveMapCourse] = useState<string | null>(null);
 
   const go = (next: Route | TabName) => {
     if (typeof next === 'string') {
       if (next === 'courses') {
-        setRoute({name: 'courses', filter: recommendedFilter ?? 'all'});
+        setRoute({ name: 'courses', filter: recommendedFilter ?? 'all' });
       } else if (next === 'home') {
-        setRoute({name: 'home'});
-      } else if (next === 'chat') {
-        setRoute({name: 'chat'});
+        setRoute({ name: 'home' });
       } else if (next === 'record') {
-        setRoute({name: 'record'});
+        setRoute({ name: 'record' });
       } else {
-        setRoute({name: next});
+        setRoute({ name: next });
       }
       return;
     }
@@ -74,25 +79,19 @@ export function HomeScreen() {
   };
 
   const activeTab = getTab(route);
-  const showNav = ['home', 'chat', 'courses', 'record', 'me'].includes(route.name);
+  const showNav = ['home', 'courses', 'record', 'me'].includes(route.name);
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.card} />
       <View style={styles.appShell}>
         {route.name === 'home' || route.name === 'chat' ? (
-          <HomeTab 
-             persona={persona} 
-             activeMapCourse={activeMapCourse}
-             go={go} 
-             openCourse={id => go({name: 'course', id})} 
-          />
-        ) : null}
-        {route.name === 'chat' ? (
-          <ChatBottomSheet
+          <HomeTab
             persona={persona}
-            onSelectCourse={(id) => setActiveMapCourse(id)}
+            activeMapCourse={activeMapCourse}
+            chatOpen={route.name === 'chat'}
             go={go}
+            onSelectCourse={id => setActiveMapCourse(id)}
           />
         ) : null}
         {route.name === 'courses' ? (
@@ -101,14 +100,16 @@ export function HomeScreen() {
             go={go}
           />
         ) : null}
-        {route.name === 'course' ? <CourseDetail id={route.id} go={go} /> : null}
+        {route.name === 'course' ? (
+          <CourseDetail id={route.id} go={go} />
+        ) : null}
         {route.name === 'walk' ? (
           <WalkTab
             id={route.id}
             go={go}
             onDone={(dist, time) => {
-              setWalkResult({dist, time});
-              go({name: 'postwalk', id: route.id});
+              setWalkResult({ dist, time });
+              go({ name: 'postwalk', id: route.id });
             }}
           />
         ) : null}
@@ -138,39 +139,85 @@ function getTab(route: Route): TabName {
 function HomeTab({
   persona,
   activeMapCourse,
+  chatOpen,
   go,
-  openCourse,
+  onSelectCourse,
 }: {
   persona: PersonaId;
   activeMapCourse: string | null;
-  go: (route: Route | TabName) => void;
-  openCourse: (id: string) => void;
+  chatOpen: boolean;
+  go: Navigate;
+  onSelectCourse: (id: string) => void;
 }) {
-  const {hasPermission} = useLocation();
-  const [topTab, setTopTab] = useState<'nearby' | 'trending' | 'time'>('nearby');
+  const { hasPermission } = useLocation();
+
+  // 바텀시트 위치 애니메이션: 0 = 맨 위, 값이 클수록 아래. 시작은 중간(SNAP_HALF).
+  const translateY = useRef(new Animated.Value(SNAP_HALF)).current;
+  const restingY = useRef(SNAP_HALF); // 손을 뗐을 때의 현재 스냅 위치
+
+  const snapTo = (target: number) => {
+    restingY.current = target;
+    Animated.spring(translateY, {
+      toValue: target,
+      useNativeDriver: true,
+      bounciness: 3,
+      speed: 14,
+    }).start();
+  };
+
+  const panResponder = useRef(
+    PanResponder.create({
+      // 세로로 4px 이상 움직일 때만 드래그로 인식 (탭/가로스크롤과 구분)
+      onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dy) > 4,
+      onPanResponderMove: (_, g) => {
+        let next = restingY.current + g.dy;
+        if (next < SNAP_UP) next = SNAP_UP; // 위 한계
+        if (next > SNAP_DOWN) next = SNAP_DOWN; // 아래 한계
+        translateY.setValue(next);
+      },
+      onPanResponderRelease: (_, g) => {
+        // 놓는 순간 위치에 속도를 살짝 반영해, 가장 가까운 스냅 포인트로 이동
+        const projected = restingY.current + g.dy + g.vy * 100;
+        const target = SNAP_POINTS.reduce((best, p) =>
+          Math.abs(projected - p) < Math.abs(projected - best) ? p : best,
+        );
+        snapTo(target);
+      },
+    }),
+  ).current;
+
+  // 하단 'AI 산책' 탭을 누르면(chatOpen=true) 시트를 맨 위로, 홈으로 돌아오면 기본(중간)으로
+  useEffect(() => {
+    snapTo(chatOpen ? SNAP_UP : SNAP_HALF);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chatOpen]);
 
   const staticData = {
     ...mockPois,
-    features: mockPois.features.filter((f: any) => ['bench', 'toilet', 'cctv'].includes(f.properties.type))
+    features: mockPois.features.filter((f: any) =>
+      ['bench', 'toilet', 'cctv'].includes(f.properties.type),
+    ),
   };
 
   const dynamicData = {
     ...mockPois,
-    features: mockPois.features.filter((f: any) => ['cafe', 'spot'].includes(f.properties.type))
+    features: mockPois.features.filter((f: any) =>
+      ['cafe', 'spot'].includes(f.properties.type),
+    ),
   };
 
   const routeData = activeMapCourse ? mockRoute : null;
-  const personaInfo = personas[persona];
-  const featured = courses.filter(course => course.persona.includes(persona)).slice(0, 5);
-  const visibleCourses = topTab === 'trending' ? courses.slice(0, 4) : featured;
 
   return (
     <View style={styles.fill}>
       <View style={styles.homeMap}>
-        <Mapbox.MapView style={{flex: 1}} styleURL={'mapbox://styles/mapbox/streets-v12'}>
+        <Mapbox.MapView
+          style={{ flex: 1 }}
+          styleURL={'mapbox://styles/mapbox/streets-v12'}
+        >
           <Mapbox.Camera
             zoomLevel={15}
-            centerCoordinate={[126.9780, 37.5665]}
+            centerCoordinate={[126.978, 37.5665]}
             // followUserLocation={hasPermission} // 에뮬레이터 GPS(미국)를 따라가지 않도록 임시 비활성화
             // followUserMode="normal"
           />
@@ -179,29 +226,6 @@ function HomeTab({
           <DynamicPOILayer data={dynamicData} />
           {hasPermission && <Mapbox.UserLocation />}
         </Mapbox.MapView>
-        <Pressable onPress={() => go('chat')} style={styles.aiSearch}>
-          <View style={styles.searchSpark}>
-            <Text style={styles.searchSparkText}>✳</Text>
-          </View>
-          <View style={styles.searchBody}>
-            <Text style={styles.searchMeta}>AI · {personaInfo.label.toUpperCase()}</Text>
-            <Text style={styles.searchQuestion}>오늘 기분 어때요?</Text>
-          </View>
-          <Text style={styles.searchMic}>마이크</Text>
-        </Pressable>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.suggestionScroller}
-          contentContainerStyle={styles.suggestionContent}>
-          {['30분만 가볍게 걷고 싶어요', '오늘 야경 보러 갈 곳', '한강 근처 편도 코스', '카페 들르면서 천천히'].map(
-            suggestion => (
-              <Pressable key={suggestion} onPress={() => go('chat')} style={styles.suggestionChip}>
-                <Text style={styles.suggestionText}>✳ {suggestion}</Text>
-              </Pressable>
-            ),
-          )}
-        </ScrollView>
         <View style={styles.weatherPill}>
           <Text style={styles.weatherText}>☁ 17° · 미세 ●</Text>
         </View>
@@ -211,145 +235,22 @@ function HomeTab({
         </View>
       </View>
 
-      <View style={styles.homeSheet}>
-        <View style={styles.dragHandle} />
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.segmentStrip}>
-          {[
-            {id: 'nearby', label: '내 주변', icon: '⌖'},
-            {id: 'trending', label: '서울 트렌딩', icon: '↗'},
-            {id: 'time', label: '지금 이 시간', icon: '◷'},
-          ].map(tab => (
-            <Pressable
-              key={tab.id}
-              onPress={() => setTopTab(tab.id as 'nearby' | 'trending' | 'time')}
-              style={[styles.pill, topTab === tab.id && styles.pillActive]}>
-              <Text style={[styles.pillText, topTab === tab.id && styles.pillTextActive]}>
-                {tab.icon} {tab.label}
-              </Text>
-            </Pressable>
-          ))}
-        </ScrollView>
-
-        <View style={styles.sectionHeader}>
-          <View style={styles.inlineTitle}>
-            <Text style={styles.sectionTitle}>
-              {topTab === 'trending'
-                ? '서울 산책 TOP 5'
-                : topTab === 'time'
-                  ? '오늘 저녁에 좋아요'
-                  : '내 주변 AI 추천'}
-            </Text>
-            <Text style={styles.sectionSub}>· 4분 전 업데이트</Text>
-          </View>
-          <Pressable onPress={() => go('courses')}>
-            <Text style={styles.sectionAction}>전체 보기 →</Text>
-          </Pressable>
+      <Animated.View
+        style={[styles.homeSheet, { transform: [{ translateY }] }]}
+      >
+        <View style={styles.sheetGrabZone} {...panResponder.panHandlers}>
+          <View style={styles.dragHandle} />
         </View>
-
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.courseCarousel}>
-          {visibleCourses.map((course, index) => (
-            <CourseCard
-              key={course.id}
-              course={course}
-              rank={topTab === 'trending' ? index + 1 : undefined}
-              onPress={() => openCourse(course.id)}
-            />
-          ))}
-        </ScrollView>
-      </View>
-    </View>
-  );
-}
-
-function ChatBottomSheet({
-  persona,
-  onSelectCourse,
-  go,
-}: {
-  persona: PersonaId;
-  onSelectCourse: (id: string) => void;
-  go: (route: Route | TabName) => void;
-}) {
-  const [step, setStep] = useState(0);
-  const [answers, setAnswers] = useState<string[]>([]);
-  const done = step >= chatbotFlow.length;
-  const recommendType = answers[3]?.startsWith('편도') ? 'oneway' : 'loop';
-  const recommended =
-    courses.find(course => course.type === recommendType && course.persona.includes(persona)) ??
-    courses[0];
-
-  const choose = (answer: string) => {
-    const nextAnswers = [...answers, answer];
-    setAnswers(nextAnswers);
-    // (Optional) Could set filters here if needed
-    setStep(current => current + 1);
-  };
-
-  return (
-    <View style={styles.chatOverlay}>
-      <View style={styles.chatSheet}>
-        <View style={styles.chatHeader}>
-          <Text style={styles.chatHeaderTitle}>AI 산책 도우미 ({personas[persona].label})</Text>
-          <Pressable onPress={() => go('home')} style={styles.chatCloseBtn}>
-            <Text style={styles.chatCloseBtnText}>✕</Text>
-          </Pressable>
-        </View>
-        <ScrollView contentContainerStyle={styles.chatContent} showsVerticalScrollIndicator={false}>
-        <ChatBubble text="안녕하세요 채원님 👋" />
-        <ChatBubble text="몇 가지만 물어볼게요. 오늘에 맞는 길을 찾아드릴게요." />
-        {chatbotFlow.slice(0, Math.min(step + 1, chatbotFlow.length)).map((flow, index) => (
-          <View key={flow.q}>
-            <ChatBubble text={flow.q} />
-            {answers[index] ? <MyBubble text={answers[index]} /> : null}
-            {index === step && !done ? (
-              <View style={styles.answerRow}>
-                {flow.a.map(answer => (
-                  <Pressable key={answer} onPress={() => choose(answer)} style={styles.answerChip}>
-                    <Text style={styles.answerText}>{answer}</Text>
-                  </Pressable>
-                ))}
-              </View>
-            ) : null}
-          </View>
-        ))}
-        {done ? (
-          <View>
-            <ChatBubble text="좋아요. 정리해보면 오늘은 이 길이 어울려요." />
-            <Pressable onPress={() => {
-              onSelectCourse(recommended.id);
-              go('home');
-            }} style={styles.recommendBubble}>
-              <View style={[styles.recommendIcon, {backgroundColor: `${recommended.color}22`}]}>
-                <Text style={styles.recommendMood}>{recommended.mood}</Text>
-              </View>
-              <View style={styles.recommendBody}>
-                <Text style={[styles.recommendType, {color: recommended.color}]}>
-                  {recommended.type === 'loop' ? '순환 · LOOP' : '편도 · ONE-WAY'}
-                </Text>
-                <Text style={styles.recommendTitle}>{recommended.title}</Text>
-                <Text style={styles.recommendMeta}>
-                  {recommended.distance}km · {recommended.duration}분 · {recommended.kcal}kcal
-                </Text>
-              </View>
-              <Text style={styles.chevron}>›</Text>
-            </Pressable>
-            <View style={styles.chatButtons}>
-              <Pressable onPress={() => go('courses')} style={styles.primaryButtonSmall}>
-                <Text style={styles.primaryButtonText}>다른 코스 더 보기</Text>
-              </Pressable>
-              <Pressable
-                onPress={() => {
-                  setAnswers([]);
-                  setStep(0);
-                }}
-                style={styles.ghostButtonSmall}>
-                <Text style={styles.ghostButtonText}>다시 묻기</Text>
-              </Pressable>
-            </View>
-          </View>
-        ) : null}
-      </ScrollView>
-      </View>
+        <ChatConversation
+          persona={persona}
+          go={go}
+          onSelectCourse={onSelectCourse}
+          onRequestClose={() => {
+            snapTo(SNAP_DOWN);
+            go('home');
+          }}
+        />
+      </Animated.View>
     </View>
   );
 }
@@ -359,26 +260,55 @@ function CoursesTab({
   go,
 }: {
   filter: CourseType | 'all';
-  go: (route: Route | TabName) => void;
+  go: Navigate;
 }) {
   const [activeType, setActiveType] = useState<CourseType | 'all'>(filter);
-  const filtered = courses.filter(course => activeType === 'all' || course.type === activeType);
+  const filtered = courses.filter(
+    course => activeType === 'all' || course.type === activeType,
+  );
 
   return (
     <View style={styles.pageSoft}>
-      <ScreenHeader title="추천 코스" subtitle="힐링타임 · 6개의 길" onBack={() => go('home')} />
-      <ScrollView contentContainerStyle={styles.listContent} showsVerticalScrollIndicator={false}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterStrip}>
+      <ScreenHeader
+        title="추천 코스"
+        subtitle="힐링타임 · 6개의 길"
+        onBack={() => go('home')}
+      />
+      <ScrollView
+        contentContainerStyle={styles.listContent}
+        showsVerticalScrollIndicator={false}
+      >
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.filterStrip}
+        >
           {[
-            {id: 'all', label: `전체 ${courses.length}`},
-            {id: 'loop', label: `순환 ${courses.filter(course => course.type === 'loop').length}`},
-            {id: 'oneway', label: `편도 ${courses.filter(course => course.type === 'oneway').length}`},
+            { id: 'all', label: `전체 ${courses.length}` },
+            {
+              id: 'loop',
+              label: `순환 ${
+                courses.filter(course => course.type === 'loop').length
+              }`,
+            },
+            {
+              id: 'oneway',
+              label: `편도 ${
+                courses.filter(course => course.type === 'oneway').length
+              }`,
+            },
           ].map(item => (
             <Pressable
               key={item.id}
               onPress={() => setActiveType(item.id as CourseType | 'all')}
-              style={[styles.pill, activeType === item.id && styles.pillActive]}>
-              <Text style={[styles.pillText, activeType === item.id && styles.pillTextActive]}>
+              style={[styles.pill, activeType === item.id && styles.pillActive]}
+            >
+              <Text
+                style={[
+                  styles.pillText,
+                  activeType === item.id && styles.pillTextActive,
+                ]}
+              >
                 {item.label}
               </Text>
             </Pressable>
@@ -399,12 +329,13 @@ function CoursesTab({
         {filtered.map(course => (
           <Pressable
             key={course.id}
-            onPress={() => go({name: 'course', id: course.id})}
-            style={styles.courseRow}>
+            onPress={() => go({ name: 'course', id: course.id })}
+            style={styles.courseRow}
+          >
             <MockMapView mode="overview" course={course} />
             <View style={styles.courseRowBody}>
               <View style={styles.inlineRow}>
-                <Text style={[styles.loopText, {color: course.color}]}>
+                <Text style={[styles.loopText, { color: course.color }]}>
                   {course.type === 'loop' ? '◯ LOOP' : '→ ONE-WAY'}
                 </Text>
                 <Badge label={course.badges[0]} color={course.color} />
@@ -422,7 +353,7 @@ function CoursesTab({
   );
 }
 
-function CourseDetail({id, go}: {id: string; go: (route: Route | TabName) => void}) {
+function CourseDetail({ id, go }: { id: string; go: Navigate }) {
   const course = getCourse(id);
 
   return (
@@ -436,9 +367,15 @@ function CourseDetail({id, go}: {id: string; go: (route: Route | TabName) => voi
           <Text style={styles.circleIcon}>♡</Text>
         </View>
       </View>
-      <ScrollView contentContainerStyle={styles.detailSheet} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.detailSheet}
+        showsVerticalScrollIndicator={false}
+      >
         <View style={styles.tagStrip}>
-          <Badge label={course.type === 'loop' ? '◯ 순환' : '→ 편도'} color={course.color} />
+          <Badge
+            label={course.type === 'loop' ? '◯ 순환' : '→ 편도'}
+            color={course.color}
+          />
           {course.badges.map(badge => (
             <Badge key={badge} label={badge} color={colors.accent} />
           ))}
@@ -450,23 +387,32 @@ function CourseDetail({id, go}: {id: string; go: (route: Route | TabName) => voi
           <StatTile label="시간" value={`${course.duration}`} unit="분" />
           <StatTile label="칼로리" value={`${course.kcal}`} unit="kcal" />
         </View>
-        <Text style={styles.blockTitle}>경유지 {course.waypoints.length}곳</Text>
+        <Text style={styles.blockTitle}>
+          경유지 {course.waypoints.length}곳
+        </Text>
         <View style={styles.waypointList}>
           {course.waypoints.map((waypoint, index) => (
             <View key={`${waypoint}-${index}`} style={styles.waypointRow}>
               <View
                 style={[
                   styles.waypointDot,
-                  {borderColor: course.color},
+                  { borderColor: course.color },
                   (index === 0 || index === course.waypoints.length - 1) && {
                     backgroundColor: course.color,
                   },
                 ]}
               />
               <Text style={styles.waypointText}>{waypoint}</Text>
-              {index === 0 ? <Text style={[styles.startText, {color: course.color}]}>START</Text> : null}
-              {index === course.waypoints.length - 1 && course.type === 'oneway' ? (
-                <Text style={[styles.startText, {color: course.color}]}>END</Text>
+              {index === 0 ? (
+                <Text style={[styles.startText, { color: course.color }]}>
+                  START
+                </Text>
+              ) : null}
+              {index === course.waypoints.length - 1 &&
+              course.type === 'oneway' ? (
+                <Text style={[styles.startText, { color: course.color }]}>
+                  END
+                </Text>
               ) : null}
             </View>
           ))}
@@ -480,7 +426,10 @@ function CourseDetail({id, go}: {id: string; go: (route: Route | TabName) => voi
           ))}
         </View>
         <View style={styles.actionRow}>
-          <Pressable onPress={() => go({name: 'walk', id: course.id})} style={styles.startButton}>
+          <Pressable
+            onPress={() => go({ name: 'walk', id: course.id })}
+            style={styles.startButton}
+          >
             <Text style={styles.startButtonText}>▶ 지금 산책 시작</Text>
           </Pressable>
           <Pressable style={styles.scheduleButton}>
@@ -498,7 +447,7 @@ function WalkTab({
   onDone,
 }: {
   id: string;
-  go: (route: Route | TabName) => void;
+  go: Navigate;
   onDone: (dist: string, time: string) => void;
 }) {
   const course = getCourse(id);
@@ -510,16 +459,25 @@ function WalkTab({
 
   return (
     <View style={styles.walkPage}>
-      <WalkMapRenderer course={course} progress={progress} isGameMode={mode === 'game'} />
+      <WalkMapRenderer
+        course={course}
+        progress={progress}
+        isGameMode={mode === 'game'}
+      />
 
       <View style={styles.walkTop}>
         <View style={styles.weatherDark}>
-          <Text style={styles.weatherDarkText}>☾ 날씨: 흐림{'\n'}시간: 저녁</Text>
+          <Text style={styles.weatherDarkText}>
+            ☾ 날씨: 흐림{'\n'}시간: 저녁
+          </Text>
         </View>
         <Pressable
           onPress={() => setMode(mode === 'game' ? 'map' : 'game')}
-          style={styles.modeButton}>
-          <Text style={styles.modeButtonText}>{mode === 'game' ? '지도 모드' : '게임 모드'}</Text>
+          style={styles.modeButton}
+        >
+          <Text style={styles.modeButtonText}>
+            {mode === 'game' ? '지도 모드' : '게임 모드'}
+          </Text>
         </Pressable>
         <Pressable onPress={() => go('home')} style={styles.closeButton}>
           <Text style={styles.closeText}>×</Text>
@@ -528,7 +486,9 @@ function WalkTab({
 
       <View style={styles.nextTip}>
         <Text style={styles.nextTipMeta}>📍 다음 경유지</Text>
-        <Text style={styles.nextTipTitle}>{course.waypoints[2] ?? course.waypoints[1]}</Text>
+        <Text style={styles.nextTipTitle}>
+          {course.waypoints[2] ?? course.waypoints[1]}
+        </Text>
       </View>
 
       <View style={styles.walkPanel}>
@@ -537,26 +497,45 @@ function WalkTab({
           <MockMapView mode="overview" course={course} progress={progress} />
           <View style={styles.walkInfoBody}>
             <Text style={styles.walkMeta}>NEXT WAYPOINT · 320m</Text>
-            <Text style={styles.walkTitle}>{course.waypoints[2] ?? course.title}</Text>
+            <Text style={styles.walkTitle}>
+              {course.waypoints[2] ?? course.title}
+            </Text>
             <View style={styles.pointsBadge}>
-              <Text style={styles.pointsBadgeText}>⚡ +{Math.round(progress * 240)}P</Text>
+              <Text style={styles.pointsBadgeText}>
+                ⚡ +{Math.round(progress * 240)}P
+              </Text>
             </View>
           </View>
         </View>
         <View style={styles.progressLine}>
-          <View style={[styles.progressLineFill, {width: `${progress * 100}%`, backgroundColor: course.color}]} />
+          <View
+            style={[
+              styles.progressLineFill,
+              { width: `${progress * 100}%`, backgroundColor: course.color },
+            ]}
+          />
         </View>
         <View style={styles.walkStats}>
           <DarkMetric label="시간" value="10:27" />
           <DarkMetric label="페이스" value="6:09" color={colors.mint} />
-          <DarkMetric label="칼로리" value={`${kcalNow}kcal`} color={colors.coral} />
+          <DarkMetric
+            label="칼로리"
+            value={`${kcalNow}kcal`}
+            color={colors.coral}
+          />
         </View>
         <View style={styles.walkControls}>
           <RoundDark label="⌁" />
-          <Pressable onPress={() => setPaused(value => !value)} style={styles.pauseButton}>
+          <Pressable
+            onPress={() => setPaused(value => !value)}
+            style={styles.pauseButton}
+          >
             <Text style={styles.pauseText}>{paused ? '▶' : 'Ⅱ'}</Text>
           </Pressable>
-          <Pressable onPress={() => onDone(distNow, '10:27')} style={styles.doneButton}>
+          <Pressable
+            onPress={() => onDone(distNow, '10:27')}
+            style={styles.doneButton}
+          >
             <Text style={styles.doneText}>✓</Text>
           </Pressable>
         </View>
@@ -571,23 +550,39 @@ function PostWalkTab({
   go,
 }: {
   id: string;
-  walkResult: {dist: string; time: string} | null;
-  go: (route: Route | TabName) => void;
+  walkResult: { dist: string; time: string } | null;
+  go: Navigate;
 }) {
   const course = getCourse(id);
   const [rating, setRating] = useState(0);
   const [tags, setTags] = useState<string[]>([]);
-  const moodTags = ['야경 좋음', '한적함', '적당히 빡셈', '카페 들름', '사진 명소'];
+  const moodTags = [
+    '야경 좋음',
+    '한적함',
+    '적당히 빡셈',
+    '카페 들름',
+    '사진 명소',
+  ];
 
   return (
     <View style={styles.pageSoft}>
-      <ScreenHeader title="산책 기록" subtitle="오늘 다녀온 길을 기록해주세요" onBack={() => go('home')} />
-      <ScrollView contentContainerStyle={styles.listContent} showsVerticalScrollIndicator={false}>
-        <View style={[styles.completedCard, {backgroundColor: course.color}]}>
+      <ScreenHeader
+        title="산책 기록"
+        subtitle="오늘 다녀온 길을 기록해주세요"
+        onBack={() => go('home')}
+      />
+      <ScrollView
+        contentContainerStyle={styles.listContent}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={[styles.completedCard, { backgroundColor: course.color }]}>
           <Text style={styles.completedMeta}>COMPLETED · 오늘</Text>
           <Text style={styles.completedTitle}>{course.title}</Text>
           <View style={styles.completedStats}>
-            <LightMetric label="거리" value={`${walkResult?.dist ?? course.distance}km`} />
+            <LightMetric
+              label="거리"
+              value={`${walkResult?.dist ?? course.distance}km`}
+            />
             <LightMetric label="시간" value={walkResult?.time ?? '00:00'} />
             <LightMetric label="걸음" value="5,842" />
           </View>
@@ -599,7 +594,9 @@ function PostWalkTab({
         <View style={styles.starRow}>
           {[1, 2, 3, 4, 5].map(item => (
             <Pressable key={item} onPress={() => setRating(item)}>
-              <Text style={[styles.star, item <= rating && styles.starActive]}>★</Text>
+              <Text style={[styles.star, item <= rating && styles.starActive]}>
+                ★
+              </Text>
             </Pressable>
           ))}
         </View>
@@ -611,10 +608,18 @@ function PostWalkTab({
               <Pressable
                 key={tag}
                 onPress={() =>
-                  setTags(active ? tags.filter(item => item !== tag) : [...tags, tag])
+                  setTags(
+                    active ? tags.filter(item => item !== tag) : [...tags, tag],
+                  )
                 }
-                style={[styles.reviewTag, active && styles.reviewTagActive]}>
-                <Text style={[styles.reviewTagText, active && styles.reviewTagTextActive]}>
+                style={[styles.reviewTag, active && styles.reviewTagActive]}
+              >
+                <Text
+                  style={[
+                    styles.reviewTagText,
+                    active && styles.reviewTagTextActive,
+                  ]}
+                >
                   {tag}
                 </Text>
               </Pressable>
@@ -639,11 +644,24 @@ function RecordTab() {
   return (
     <View style={styles.pageSoft}>
       <ScreenHeader title="기록" subtitle="이번 달 산책 일지" />
-      <ScrollView contentContainerStyle={styles.listContent} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.listContent}
+        showsVerticalScrollIndicator={false}
+      >
         <View style={styles.monthRow}>
           {['3월', '4월', '5월', '6월'].map((month, index) => (
-            <View key={month} style={[styles.monthChip, index === 2 && styles.monthChipActive]}>
-              <Text style={[styles.monthText, index === 2 && styles.monthTextActive]}>{month}</Text>
+            <View
+              key={month}
+              style={[styles.monthChip, index === 2 && styles.monthChipActive]}
+            >
+              <Text
+                style={[
+                  styles.monthText,
+                  index === 2 && styles.monthTextActive,
+                ]}
+              >
+                {month}
+              </Text>
             </View>
           ))}
         </View>
@@ -674,7 +692,7 @@ function RecordTab() {
         <View style={styles.calendarCard}>
           <Text style={styles.cardTitle}>주간 활동</Text>
           <View style={styles.calendarGrid}>
-            {Array.from({length: 28}).map((_, index) => (
+            {Array.from({ length: 28 }).map((_, index) => (
               <View
                 key={index}
                 style={[
@@ -714,46 +732,72 @@ function MyPageTab({
 }: {
   persona: PersonaId;
   setPersona: (persona: PersonaId) => void;
-  go: (route: Route | TabName) => void;
+  go: Navigate;
 }) {
   return (
     <View style={styles.pageSoft}>
       <ScreenHeader title="내 정보" right="설정" />
-      <ScrollView contentContainerStyle={styles.listContent} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.listContent}
+        showsVerticalScrollIndicator={false}
+      >
         <View style={styles.profileCard}>
           <View style={styles.avatar}>
             <Text style={styles.avatarText}>채</Text>
           </View>
           <View style={styles.profileBody}>
             <Text style={styles.profileName}>채원님</Text>
-            <Text style={styles.profileEmail}>chaewon@gmail.com · 8일째 산책</Text>
+            <Text style={styles.profileEmail}>
+              chaewon@gmail.com · 8일째 산책
+            </Text>
           </View>
           <Text style={styles.editText}>편집</Text>
         </View>
         <Text style={styles.subhead}>AI 추천 페르소나</Text>
         <View style={styles.preferenceGrid}>
-          {(Object.entries(personas) as [PersonaId, (typeof personas)[PersonaId]][]).map(
-            ([id, item]) => {
-              const active = id === persona;
-              return (
-                <Pressable
-                  key={id}
-                  onPress={() => setPersona(id)}
+          {(
+            Object.entries(personas) as [
+              PersonaId,
+              (typeof personas)[PersonaId],
+            ][]
+          ).map(([id, item]) => {
+            const active = id === persona;
+            return (
+              <Pressable
+                key={id}
+                onPress={() => setPersona(id)}
+                style={[
+                  styles.preferenceCard,
+                  active && {
+                    backgroundColor: item.color,
+                    borderColor: item.color,
+                  },
+                ]}
+              >
+                <Text style={styles.preferenceIcon}>{item.icon}</Text>
+                <Text
                   style={[
-                    styles.preferenceCard,
-                    active && {backgroundColor: item.color, borderColor: item.color},
-                  ]}>
-                  <Text style={styles.preferenceIcon}>{item.icon}</Text>
-                  <Text style={[styles.preferenceTitle, active && styles.preferenceTitleActive]}>
-                    {item.label}
-                  </Text>
-                  <Text style={[styles.preferenceMeta, active && styles.preferenceMetaActive]}>
-                    {id === 'killtime' ? '30분 내' : id === 'exercise' ? '심박↑' : '조용함'}
-                  </Text>
-                </Pressable>
-              );
-            },
-          )}
+                    styles.preferenceTitle,
+                    active && styles.preferenceTitleActive,
+                  ]}
+                >
+                  {item.label}
+                </Text>
+                <Text
+                  style={[
+                    styles.preferenceMeta,
+                    active && styles.preferenceMetaActive,
+                  ]}
+                >
+                  {id === 'killtime'
+                    ? '30분 내'
+                    : id === 'exercise'
+                    ? '심박↑'
+                    : '조용함'}
+                </Text>
+              </Pressable>
+            );
+          })}
         </View>
         <View style={styles.metricRow}>
           <StatTile label="총 산책" value="23" unit="회" />
@@ -769,7 +813,8 @@ function MyPageTab({
           <Pressable
             key={label}
             onPress={() => label === '산책 기록' && go('record')}
-            style={styles.menuRow}>
+            style={styles.menuRow}
+          >
             <Text style={styles.menuText}>{label}</Text>
             <Text style={styles.menuMeta}>{meta} ›</Text>
           </Pressable>
@@ -783,40 +828,6 @@ function MyPageTab({
         </View>
       </ScrollView>
     </View>
-  );
-}
-
-function CourseCard({
-  course,
-  rank,
-  onPress,
-}: {
-  course: Course;
-  rank?: number;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable onPress={onPress} style={styles.courseCard}>
-      <View style={styles.cardMap}>
-        <MockMapView mode="overview" course={course} />
-        {rank ? (
-          <View style={styles.rankBadge}>
-            <Text style={styles.rankText}>{rank}</Text>
-          </View>
-        ) : null}
-        <View style={styles.typeBadge}>
-          <Text style={[styles.typeBadgeText, {color: course.color}]}>
-            {course.type === 'loop' ? '↻ 순환' : '→ 편도'}
-          </Text>
-        </View>
-        <Text style={styles.moodText}>{course.mood}</Text>
-      </View>
-      <Text style={styles.cardTitle}>{course.title}</Text>
-      <Text style={styles.cardSub}>{course.subtitle}</Text>
-      <Text style={styles.cardMeta}>
-        {course.distance}km · {course.duration}분 · {course.kcal}kcal
-      </Text>
-    </Pressable>
   );
 }
 
@@ -835,9 +846,14 @@ function BottomNav({
           <Pressable
             key={item.name}
             onPress={() => onChange(item.name)}
-            style={styles.navItem}>
-            <Text style={[styles.navIcon, isActive && styles.navActiveText]}>{item.icon}</Text>
-            <Text style={[styles.navLabel, isActive && styles.navActiveText]}>{item.label}</Text>
+            style={styles.navItem}
+          >
+            <Text style={[styles.navIcon, isActive && styles.navActiveText]}>
+              {item.icon}
+            </Text>
+            <Text style={[styles.navLabel, isActive && styles.navActiveText]}>
+              {item.label}
+            </Text>
           </Pressable>
         );
       })}
@@ -865,45 +881,24 @@ function ScreenHeader({
       ) : null}
       <View style={styles.headerBody}>
         <Text style={styles.headerTitle}>{title}</Text>
-        {subtitle ? <Text style={styles.headerSubtitle}>{subtitle}</Text> : null}
+        {subtitle ? (
+          <Text style={styles.headerSubtitle}>{subtitle}</Text>
+        ) : null}
       </View>
       {right ? <Text style={styles.headerRight}>{right}</Text> : null}
     </View>
   );
 }
 
-function ChatBubble({text}: {text: string}) {
+function Badge({ label, color }: { label: string; color: string }) {
   return (
-    <View style={styles.chatLine}>
-      <View style={styles.chatIcon}>
-        <Text style={styles.chatIconText}>✳</Text>
-      </View>
-      <View style={styles.chatBubble}>
-        <Text style={styles.chatText}>{text}</Text>
-      </View>
+    <View style={[styles.badge, { backgroundColor: `${color}1f` }]}>
+      <Text style={[styles.badgeText, { color }]}>{label}</Text>
     </View>
   );
 }
 
-function MyBubble({text}: {text: string}) {
-  return (
-    <View style={styles.myBubbleWrap}>
-      <View style={styles.myBubble}>
-        <Text style={styles.myBubbleText}>{text}</Text>
-      </View>
-    </View>
-  );
-}
-
-function Badge({label, color}: {label: string; color: string}) {
-  return (
-    <View style={[styles.badge, {backgroundColor: `${color}1f`}]}>
-      <Text style={[styles.badgeText, {color}]}>{label}</Text>
-    </View>
-  );
-}
-
-function RoundButton({label}: {label: string}) {
+function RoundButton({ label }: { label: string }) {
   return (
     <View style={styles.roundButton}>
       <Text style={styles.roundButtonText}>{label}</Text>
@@ -911,7 +906,15 @@ function RoundButton({label}: {label: string}) {
   );
 }
 
-function StatTile({label, value, unit}: {label: string; value: string; unit?: string}) {
+function StatTile({
+  label,
+  value,
+  unit,
+}: {
+  label: string;
+  value: string;
+  unit?: string;
+}) {
   return (
     <View style={styles.statTile}>
       <Text style={styles.statLabel}>{label}</Text>
@@ -923,16 +926,24 @@ function StatTile({label, value, unit}: {label: string; value: string; unit?: st
   );
 }
 
-function DarkMetric({label, value, color = colors.card}: {label: string; value: string; color?: string}) {
+function DarkMetric({
+  label,
+  value,
+  color = colors.card,
+}: {
+  label: string;
+  value: string;
+  color?: string;
+}) {
   return (
     <View style={styles.darkMetric}>
       <Text style={styles.darkMetricLabel}>{label}</Text>
-      <Text style={[styles.darkMetricValue, {color}]}>{value}</Text>
+      <Text style={[styles.darkMetricValue, { color }]}>{value}</Text>
     </View>
   );
 }
 
-function LightMetric({label, value}: {label: string; value: string}) {
+function LightMetric({ label, value }: { label: string; value: string }) {
   return (
     <View style={styles.lightMetric}>
       <Text style={styles.lightMetricLabel}>{label}</Text>
@@ -941,7 +952,7 @@ function LightMetric({label, value}: {label: string; value: string}) {
   );
 }
 
-function DarkOnMintMetric({label, value}: {label: string; value: string}) {
+function DarkOnMintMetric({ label, value }: { label: string; value: string }) {
   return (
     <View style={styles.mintMetric}>
       <Text style={styles.mintMetricLabel}>{label}</Text>
@@ -950,7 +961,7 @@ function DarkOnMintMetric({label, value}: {label: string; value: string}) {
   );
 }
 
-function RoundDark({label}: {label: string}) {
+function RoundDark({ label }: { label: string }) {
   return (
     <View style={styles.roundDark}>
       <Text style={styles.roundDarkText}>{label}</Text>
@@ -980,81 +991,9 @@ const styles = StyleSheet.create({
     paddingBottom: 76,
   },
   homeMap: {
-    height: 430,
+    flex: 1,
     overflow: 'hidden',
     backgroundColor: colors.bgSoft,
-  },
-  aiSearch: {
-    position: 'absolute',
-    top: 12,
-    left: 14,
-    right: 14,
-    height: 58,
-    borderRadius: 28,
-    backgroundColor: 'rgba(255,255,255,0.98)',
-    borderWidth: 1.5,
-    borderColor: '#aeead8',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    padding: 4,
-    ...shadows.soft,
-  },
-  searchSpark: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-    backgroundColor: colors.mint,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  searchSparkText: {
-    color: colors.card,
-    fontSize: 18,
-    fontWeight: '900',
-  },
-  searchBody: {
-    flex: 1,
-  },
-  searchMeta: {
-    color: colors.mintDeep,
-    fontSize: 10,
-    fontWeight: '900',
-    letterSpacing: 1,
-  },
-  searchQuestion: {
-    color: colors.ink,
-    fontSize: 16,
-    fontWeight: '800',
-    marginTop: 2,
-  },
-  searchMic: {
-    color: colors.mintDeep,
-    fontSize: 11,
-    fontWeight: '900',
-    paddingRight: spacing.md,
-  },
-  suggestionScroller: {
-    position: 'absolute',
-    top: 80,
-    left: 14,
-    right: 0,
-  },
-  suggestionContent: {
-    gap: spacing.sm,
-    paddingRight: spacing.lg,
-  },
-  suggestionChip: {
-    borderRadius: 999,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 8,
-    backgroundColor: 'rgba(255,255,255,0.94)',
-    ...shadows.soft,
-  },
-  suggestionText: {
-    color: colors.ink2,
-    fontSize: 12,
-    fontWeight: '700',
   },
   weatherPill: {
     position: 'absolute',
@@ -1092,13 +1031,21 @@ const styles = StyleSheet.create({
     fontWeight: '900',
   },
   homeSheet: {
-    marginTop: -74,
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: SHEET_TOP_UP,
+    height: SCREEN_H, // 접혔을 때도 화면 아래를 항상 덮도록 넉넉하게
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     backgroundColor: 'rgba(255,255,255,0.98)',
-    paddingTop: spacing.sm,
     paddingBottom: spacing.lg,
     ...shadows.soft,
+  },
+  sheetGrabZone: {
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.sm,
+    alignItems: 'center',
   },
   dragHandle: {
     width: 38,
@@ -1107,11 +1054,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.line2,
     alignSelf: 'center',
     marginBottom: spacing.md,
-  },
-  segmentStrip: {
-    gap: spacing.sm,
-    paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.sm,
   },
   pill: {
     paddingHorizontal: spacing.md,
@@ -1133,104 +1075,10 @@ const styles = StyleSheet.create({
   pillTextActive: {
     color: colors.card,
   },
-  sectionHeader: {
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    justifyContent: 'space-between',
-  },
-  inlineTitle: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-  },
-  sectionTitle: {
-    color: colors.ink,
-    fontSize: 17,
-    fontWeight: '900',
-  },
-  sectionSub: {
-    color: colors.ink3,
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  sectionAction: {
-    color: colors.mintDeep,
-    fontSize: 12,
-    fontWeight: '900',
-  },
-  courseCarousel: {
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.sm,
-    gap: spacing.md,
-  },
-  courseCard: {
-    width: 230,
-    borderRadius: radii.lg,
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.line,
-    padding: spacing.md,
-  },
-  cardMap: {
-    height: 104,
-    borderRadius: 10,
-    overflow: 'hidden',
-    backgroundColor: colors.bgSoft,
-  },
-  rankBadge: {
-    position: 'absolute',
-    left: spacing.sm,
-    top: spacing.sm,
-    width: 28,
-    height: 28,
-    borderRadius: 8,
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  rankText: {
-    color: colors.card,
-    fontSize: 13,
-    fontWeight: '900',
-  },
-  typeBadge: {
-    position: 'absolute',
-    right: spacing.sm,
-    top: spacing.sm,
-    borderRadius: 8,
-    backgroundColor: 'rgba(255,255,255,0.94)',
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-  },
-  typeBadgeText: {
-    fontSize: 10,
-    fontWeight: '900',
-  },
-  moodText: {
-    position: 'absolute',
-    right: spacing.md,
-    bottom: spacing.sm,
-    color: colors.ink,
-    fontSize: 14,
-    fontWeight: '900',
-  },
   cardTitle: {
     color: colors.ink,
     fontSize: 14,
     fontWeight: '900',
-    marginTop: spacing.sm,
-  },
-  cardSub: {
-    color: colors.ink3,
-    fontSize: 11,
-    lineHeight: 16,
-    marginTop: spacing.xs,
-  },
-  cardMeta: {
-    color: colors.ink2,
-    fontSize: 11,
-    fontWeight: '800',
     marginTop: spacing.sm,
   },
   header: {
@@ -1274,155 +1122,6 @@ const styles = StyleSheet.create({
     color: colors.ink2,
     fontSize: 12,
     fontWeight: '800',
-  },
-  chatContent: {
-    padding: spacing.lg,
-    paddingBottom: 108,
-    gap: spacing.md,
-  },
-  chatLine: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: spacing.sm,
-  },
-  chatIcon: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: colors.mint,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  chatIconText: {
-    color: colors.card,
-    fontSize: 12,
-    fontWeight: '900',
-  },
-  chatBubble: {
-    maxWidth: '82%',
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: 18,
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.line,
-  },
-  chatText: {
-    color: colors.ink,
-    fontSize: 14,
-    lineHeight: 20,
-    fontWeight: '700',
-  },
-  myBubbleWrap: {
-    alignItems: 'flex-end',
-    marginTop: spacing.sm,
-  },
-  myBubble: {
-    maxWidth: '78%',
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: 18,
-    backgroundColor: colors.mintDeep,
-  },
-  myBubbleText: {
-    color: colors.card,
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  answerRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
-    marginTop: spacing.sm,
-    paddingLeft: 38,
-  },
-  answerChip: {
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: colors.mint,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-  },
-  answerText: {
-    color: colors.mintDeep,
-    fontSize: 12,
-    fontWeight: '900',
-  },
-  recommendBubble: {
-    marginLeft: 38,
-    marginTop: spacing.sm,
-    padding: spacing.md,
-    borderRadius: radii.lg,
-    backgroundColor: colors.card,
-    borderWidth: 2,
-    borderColor: colors.mint,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-  },
-  recommendIcon: {
-    width: 62,
-    height: 62,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  recommendMood: {
-    color: colors.ink,
-    fontWeight: '900',
-    fontSize: 12,
-  },
-  recommendBody: {
-    flex: 1,
-  },
-  recommendType: {
-    fontSize: 11,
-    fontWeight: '900',
-  },
-  recommendTitle: {
-    color: colors.ink,
-    fontSize: 15,
-    fontWeight: '900',
-    marginTop: 2,
-  },
-  recommendMeta: {
-    color: colors.ink3,
-    fontSize: 11,
-    fontWeight: '800',
-    marginTop: spacing.xs,
-  },
-  chevron: {
-    color: colors.ink3,
-    fontSize: 28,
-  },
-  chatButtons: {
-    marginTop: spacing.lg,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: spacing.sm,
-  },
-  primaryButtonSmall: {
-    borderRadius: 999,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    backgroundColor: colors.mintDeep,
-  },
-  primaryButtonText: {
-    color: colors.card,
-    fontSize: 12,
-    fontWeight: '900',
-  },
-  ghostButtonSmall: {
-    borderRadius: 999,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    borderWidth: 1,
-    borderColor: colors.line2,
-  },
-  ghostButtonText: {
-    color: colors.ink2,
-    fontSize: 12,
-    fontWeight: '900',
   },
   listContent: {
     padding: spacing.lg,
@@ -1656,87 +1355,6 @@ const styles = StyleSheet.create({
   walkPage: {
     flex: 1,
     backgroundColor: '#0a0f12',
-  },
-  gameScene: {
-    flex: 1,
-    backgroundColor: '#10272d',
-    overflow: 'hidden',
-  },
-  skyline: {
-    position: 'absolute',
-    left: -40,
-    right: -20,
-    top: 210,
-    height: 120,
-    backgroundColor: '#18383d',
-    transform: [{rotate: '-8deg'}],
-  },
-  glowRoute: {
-    position: 'absolute',
-    top: 64,
-    left: '53%',
-    width: 18,
-    height: 480,
-    borderRadius: 12,
-    opacity: 0.6,
-    transform: [{rotate: '-14deg'}],
-  },
-  glowRouteDash: {
-    position: 'absolute',
-    top: 64,
-    left: '55%',
-    width: 5,
-    height: 480,
-    borderRadius: 3,
-    backgroundColor: 'rgba(255,255,255,0.75)',
-    transform: [{rotate: '-14deg'}],
-  },
-  buildingLeft: {
-    position: 'absolute',
-    left: 20,
-    bottom: 210,
-    width: 120,
-    height: 120,
-    backgroundColor: '#1b3338',
-    transform: [{rotate: '-18deg'}],
-  },
-  buildingRight: {
-    position: 'absolute',
-    right: 26,
-    bottom: 260,
-    width: 150,
-    height: 160,
-    backgroundColor: '#172c32',
-    transform: [{rotate: '16deg'}],
-  },
-  buildingBack: {
-    position: 'absolute',
-    left: 130,
-    top: 180,
-    width: 120,
-    height: 110,
-    backgroundColor: '#203c42',
-    transform: [{rotate: '12deg'}],
-  },
-  avatarWalker: {
-    position: 'absolute',
-    left: '48%',
-    top: '48%',
-    width: 42,
-    height: 60,
-    alignItems: 'center',
-  },
-  avatarHead: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    backgroundColor: '#d8b77a',
-  },
-  avatarBody: {
-    width: 20,
-    height: 30,
-    borderRadius: 5,
-    marginTop: -2,
   },
   walkTop: {
     position: 'absolute',
@@ -2335,41 +1953,5 @@ const styles = StyleSheet.create({
   },
   navActiveText: {
     color: colors.mintDeep,
-  },
-  chatOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.4)',
-    justifyContent: 'flex-end',
-    zIndex: 100,
-  },
-  chatSheet: {
-    height: '80%',
-    backgroundColor: colors.bgSoft,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    overflow: 'hidden',
-    ...shadows.medium,
-  },
-  chatHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: spacing.lg,
-    backgroundColor: colors.card,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.line,
-  },
-  chatHeaderTitle: {
-    fontSize: 16,
-    fontWeight: '900',
-    color: colors.ink,
-  },
-  chatCloseBtn: {
-    padding: spacing.sm,
-  },
-  chatCloseBtnText: {
-    fontSize: 20,
-    color: colors.ink3,
-    fontWeight: '700',
   },
 });
