@@ -1,6 +1,11 @@
 import React, { useState } from 'react';
 import { Pressable, ScrollView, Text, View, StyleSheet } from 'react-native';
-import { chatbotFlow, courses, PersonaId, personas } from '../../data/chimeakData';
+import {
+  chatbotFlow,
+  courses,
+  PersonaId,
+  personas,
+} from '../../data/chimeakData';
 import { Navigate } from '../../navigation/types';
 import { ChatBubble } from './ChatBubble';
 import { MyBubble } from './MyBubble';
@@ -89,7 +94,9 @@ export function ChatConversation({
                 <Text
                   style={[styles.recommendType, { color: recommended.color }]}
                 >
-                  {recommended.type === 'loop' ? '순환 · LOOP' : '편도 · ONE-WAY'}
+                  {recommended.type === 'loop'
+                    ? '순환 · LOOP'
+                    : '편도 · ONE-WAY'}
                 </Text>
                 <Text style={styles.recommendTitle}>{recommended.title}</Text>
                 <Text style={styles.recommendMeta}>

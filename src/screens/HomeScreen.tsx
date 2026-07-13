@@ -21,7 +21,6 @@ import { DynamicPOILayer } from '../components/map/DynamicPOILayer';
 import { RouteLayer } from '../components/map/RouteLayer';
 import { WalkMapRenderer } from '../components/map/WalkMapRenderer';
 import {
-  Course,
   courses,
   CourseType,
   PersonaId,
@@ -80,9 +79,7 @@ export function HomeScreen() {
   };
 
   const activeTab = getTab(route);
-  const showNav = ['home', 'courses', 'record', 'me'].includes(
-    route.name,
-  );
+  const showNav = ['home', 'courses', 'record', 'me'].includes(route.name);
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
@@ -221,8 +218,8 @@ function HomeTab({
           <Mapbox.Camera
             zoomLevel={15}
             centerCoordinate={[126.978, 37.5665]}
-          // followUserLocation={hasPermission} // 에뮬레이터 GPS(미국)를 따라가지 않도록 임시 비활성화
-          // followUserMode="normal"
+            // followUserLocation={hasPermission} // 에뮬레이터 GPS(미국)를 따라가지 않도록 임시 비활성화
+            // followUserMode="normal"
           />
           {routeData && <RouteLayer data={routeData} />}
           <StaticPOILayer data={staticData} />
@@ -290,13 +287,15 @@ function CoursesTab({
             { id: 'all', label: `전체 ${courses.length}` },
             {
               id: 'loop',
-              label: `순환 ${courses.filter(course => course.type === 'loop').length
-                }`,
+              label: `순환 ${
+                courses.filter(course => course.type === 'loop').length
+              }`,
             },
             {
               id: 'oneway',
-              label: `편도 ${courses.filter(course => course.type === 'oneway').length
-                }`,
+              label: `편도 ${
+                courses.filter(course => course.type === 'oneway').length
+              }`,
             },
           ].map(item => (
             <Pressable
@@ -410,7 +409,7 @@ function CourseDetail({ id, go }: { id: string; go: Navigate }) {
                 </Text>
               ) : null}
               {index === course.waypoints.length - 1 &&
-                course.type === 'oneway' ? (
+              course.type === 'oneway' ? (
                 <Text style={[styles.startText, { color: course.color }]}>
                   END
                 </Text>
@@ -793,8 +792,8 @@ function MyPageTab({
                   {id === 'killtime'
                     ? '30분 내'
                     : id === 'exercise'
-                      ? '심박↑'
-                      : '조용함'}
+                    ? '심박↑'
+                    : '조용함'}
                 </Text>
               </Pressable>
             );
@@ -829,40 +828,6 @@ function MyPageTab({
         </View>
       </ScrollView>
     </View>
-  );
-}
-
-function CourseCard({
-  course,
-  rank,
-  onPress,
-}: {
-  course: Course;
-  rank?: number;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable onPress={onPress} style={styles.courseCard}>
-      <View style={styles.cardMap}>
-        <MockMapView mode="overview" course={course} />
-        {rank ? (
-          <View style={styles.rankBadge}>
-            <Text style={styles.rankText}>{rank}</Text>
-          </View>
-        ) : null}
-        <View style={styles.typeBadge}>
-          <Text style={[styles.typeBadgeText, { color: course.color }]}>
-            {course.type === 'loop' ? '↻ 순환' : '→ 편도'}
-          </Text>
-        </View>
-        <Text style={styles.moodText}>{course.mood}</Text>
-      </View>
-      <Text style={styles.cardTitle}>{course.title}</Text>
-      <Text style={styles.cardSub}>{course.subtitle}</Text>
-      <Text style={styles.cardMeta}>
-        {course.distance}km · {course.duration}분 · {course.kcal}kcal
-      </Text>
-    </Pressable>
   );
 }
 
@@ -1030,78 +995,6 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     backgroundColor: colors.bgSoft,
   },
-  aiSearch: {
-    position: 'absolute',
-    top: 12,
-    left: 14,
-    right: 14,
-    height: 58,
-    borderRadius: 28,
-    backgroundColor: 'rgba(255,255,255,0.98)',
-    borderWidth: 1.5,
-    borderColor: '#aeead8',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    padding: 4,
-    ...shadows.soft,
-  },
-  searchSpark: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-    backgroundColor: colors.mint,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  searchSparkText: {
-    color: colors.card,
-    fontSize: 18,
-    fontWeight: '900',
-  },
-  searchBody: {
-    flex: 1,
-  },
-  searchMeta: {
-    color: colors.mintDeep,
-    fontSize: 10,
-    fontWeight: '900',
-    letterSpacing: 1,
-  },
-  searchQuestion: {
-    color: colors.ink,
-    fontSize: 16,
-    fontWeight: '800',
-    marginTop: 2,
-  },
-  searchMic: {
-    color: colors.mintDeep,
-    fontSize: 11,
-    fontWeight: '900',
-    paddingRight: spacing.md,
-  },
-  suggestionScroller: {
-    position: 'absolute',
-    top: 80,
-    left: 14,
-    right: 0,
-  },
-  suggestionContent: {
-    gap: spacing.sm,
-    paddingRight: spacing.lg,
-  },
-  suggestionChip: {
-    borderRadius: 999,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 8,
-    backgroundColor: 'rgba(255,255,255,0.94)',
-    ...shadows.soft,
-  },
-  suggestionText: {
-    color: colors.ink2,
-    fontSize: 12,
-    fontWeight: '700',
-  },
   weatherPill: {
     position: 'absolute',
     top: 128,
@@ -1154,9 +1047,6 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.sm,
     alignItems: 'center',
   },
-  sheetScroller: {
-    flexGrow: 0, // 시트 안에서 세로로 늘어나지 않도록 (내용 높이만 차지)
-  },
   dragHandle: {
     width: 38,
     height: 4,
@@ -1164,11 +1054,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.line2,
     alignSelf: 'center',
     marginBottom: spacing.md,
-  },
-  segmentStrip: {
-    gap: spacing.sm,
-    paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.sm,
   },
   pill: {
     paddingHorizontal: spacing.md,
@@ -1190,104 +1075,10 @@ const styles = StyleSheet.create({
   pillTextActive: {
     color: colors.card,
   },
-  sectionHeader: {
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    justifyContent: 'space-between',
-  },
-  inlineTitle: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-  },
-  sectionTitle: {
-    color: colors.ink,
-    fontSize: 17,
-    fontWeight: '900',
-  },
-  sectionSub: {
-    color: colors.ink3,
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  sectionAction: {
-    color: colors.mintDeep,
-    fontSize: 12,
-    fontWeight: '900',
-  },
-  courseCarousel: {
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.sm,
-    gap: spacing.md,
-  },
-  courseCard: {
-    width: 230,
-    borderRadius: radii.lg,
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.line,
-    padding: spacing.md,
-  },
-  cardMap: {
-    height: 104,
-    borderRadius: 10,
-    overflow: 'hidden',
-    backgroundColor: colors.bgSoft,
-  },
-  rankBadge: {
-    position: 'absolute',
-    left: spacing.sm,
-    top: spacing.sm,
-    width: 28,
-    height: 28,
-    borderRadius: 8,
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  rankText: {
-    color: colors.card,
-    fontSize: 13,
-    fontWeight: '900',
-  },
-  typeBadge: {
-    position: 'absolute',
-    right: spacing.sm,
-    top: spacing.sm,
-    borderRadius: 8,
-    backgroundColor: 'rgba(255,255,255,0.94)',
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-  },
-  typeBadgeText: {
-    fontSize: 10,
-    fontWeight: '900',
-  },
-  moodText: {
-    position: 'absolute',
-    right: spacing.md,
-    bottom: spacing.sm,
-    color: colors.ink,
-    fontSize: 14,
-    fontWeight: '900',
-  },
   cardTitle: {
     color: colors.ink,
     fontSize: 14,
     fontWeight: '900',
-    marginTop: spacing.sm,
-  },
-  cardSub: {
-    color: colors.ink3,
-    fontSize: 11,
-    lineHeight: 16,
-    marginTop: spacing.xs,
-  },
-  cardMeta: {
-    color: colors.ink2,
-    fontSize: 11,
-    fontWeight: '800',
     marginTop: spacing.sm,
   },
   header: {
@@ -1564,87 +1355,6 @@ const styles = StyleSheet.create({
   walkPage: {
     flex: 1,
     backgroundColor: '#0a0f12',
-  },
-  gameScene: {
-    flex: 1,
-    backgroundColor: '#10272d',
-    overflow: 'hidden',
-  },
-  skyline: {
-    position: 'absolute',
-    left: -40,
-    right: -20,
-    top: 210,
-    height: 120,
-    backgroundColor: '#18383d',
-    transform: [{ rotate: '-8deg' }],
-  },
-  glowRoute: {
-    position: 'absolute',
-    top: 64,
-    left: '53%',
-    width: 18,
-    height: 480,
-    borderRadius: 12,
-    opacity: 0.6,
-    transform: [{ rotate: '-14deg' }],
-  },
-  glowRouteDash: {
-    position: 'absolute',
-    top: 64,
-    left: '55%',
-    width: 5,
-    height: 480,
-    borderRadius: 3,
-    backgroundColor: 'rgba(255,255,255,0.75)',
-    transform: [{ rotate: '-14deg' }],
-  },
-  buildingLeft: {
-    position: 'absolute',
-    left: 20,
-    bottom: 210,
-    width: 120,
-    height: 120,
-    backgroundColor: '#1b3338',
-    transform: [{ rotate: '-18deg' }],
-  },
-  buildingRight: {
-    position: 'absolute',
-    right: 26,
-    bottom: 260,
-    width: 150,
-    height: 160,
-    backgroundColor: '#172c32',
-    transform: [{ rotate: '16deg' }],
-  },
-  buildingBack: {
-    position: 'absolute',
-    left: 130,
-    top: 180,
-    width: 120,
-    height: 110,
-    backgroundColor: '#203c42',
-    transform: [{ rotate: '12deg' }],
-  },
-  avatarWalker: {
-    position: 'absolute',
-    left: '48%',
-    top: '48%',
-    width: 42,
-    height: 60,
-    alignItems: 'center',
-  },
-  avatarHead: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    backgroundColor: '#d8b77a',
-  },
-  avatarBody: {
-    width: 20,
-    height: 30,
-    borderRadius: 5,
-    marginTop: -2,
   },
   walkTop: {
     position: 'absolute',
