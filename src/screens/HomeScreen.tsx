@@ -50,7 +50,12 @@ const navItems: { name: TabName; label: string; icon: string }[] = [
   { name: 'me', label: '내 정보', icon: '♙' },
 ];
 
-export function HomeScreen() {
+interface HomeScreenProps {
+  onLogout?: () => void;
+  userId?: string | null;
+}
+
+export function HomeScreen({ onLogout, userId }: HomeScreenProps) {
   const [route, setRoute] = useState<Route>({ name: 'home' });
   const [persona, setPersona] = useState<PersonaId>('killtime');
   const [recommendedFilter, setRecommendedFilter] = useState<
@@ -118,7 +123,12 @@ export function HomeScreen() {
         ) : null}
         {route.name === 'record' ? <RecordTab /> : null}
         {route.name === 'me' ? (
-          <MyPageTab persona={persona} setPersona={setPersona} go={go} />
+          <MyPageTab
+            persona={persona}
+            setPersona={setPersona}
+            go={go}
+            onLogout={onLogout}
+          />
         ) : null}
         {showNav ? <BottomNav active={activeTab} onChange={go} /> : null}
       </View>
@@ -729,10 +739,12 @@ function MyPageTab({
   persona,
   setPersona,
   go,
+  onLogout,
 }: {
   persona: PersonaId;
   setPersona: (persona: PersonaId) => void;
   go: Navigate;
+  onLogout?: () => void;
 }) {
   return (
     <View style={styles.pageSoft}>
@@ -823,9 +835,9 @@ function MyPageTab({
           <Text style={styles.menuText}>설정</Text>
           <Text style={styles.menuMeta}>›</Text>
         </View>
-        <View style={styles.menuRow}>
+        <Pressable style={styles.menuRow} onPress={onLogout}>
           <Text style={styles.logoutText}>로그아웃</Text>
-        </View>
+        </Pressable>
       </ScrollView>
     </View>
   );
