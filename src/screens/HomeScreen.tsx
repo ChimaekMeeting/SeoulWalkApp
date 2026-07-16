@@ -164,8 +164,6 @@ function HomeTab({
   const { hasPermission } = useLocation();
   const chatRef = useRef<ChatConversationHandle>(null);
   const [chatDone, setChatDone] = useState(false);
-  // 헤더 + 인사말 2개 + 첫 질문(말풍선 2~3개)의 실측 높이. 대화가 길어져도 이 미리보기
-  // 묶음 자체는 커지지 않으므로, "중간" 스냅 위치가 항상 이만큼만 보여주게 된다.
   const [previewHeight, setPreviewHeight] = useState(50);
 
   // 화면 하단에 떠 있는 ChatInput의 위치/높이. 바텀내비게이션 바로 위에 여백 없이 붙인다.
