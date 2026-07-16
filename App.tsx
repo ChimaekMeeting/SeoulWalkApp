@@ -9,6 +9,7 @@ import { LoginScreen } from './src/screens/LoginScreen';
 import { LocationPermissionScreen } from './src/screens/LocationPermissionScreen';
 import { HomeScreen } from './src/screens/HomeScreen';
 import { colors } from './src/theme/tokens';
+import { WalkFlowDevPreview } from './src/screens/walk/WalkFlowDevPreview';
 
 Mapbox.setAccessToken(env.MAPBOX_PUBLIC_ACCESS_TOKEN);
 
@@ -88,6 +89,10 @@ function App() {
   return (
     <SafeAreaProvider>
       <HomeScreen onLogout={signOut} userId={userId} />
+      {/* 산책 전·중·후(6a~6d) 화면 미리보기용 개발 전용 버튼. 프리워크 챗봇이 아직 WalkFlow에
+          연결되기 전이라 mock 데이터로 열어볼 수 있게 해둠 — __DEV__ 빌드에서만 보이고
+          프로덕션에는 렌더되지 않음. src/screens/walk/WalkFlowDevPreview.tsx 참고 */}
+      <WalkFlowDevPreview />
     </SafeAreaProvider>
   );
 }

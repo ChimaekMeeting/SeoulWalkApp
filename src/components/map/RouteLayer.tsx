@@ -1,7 +1,13 @@
 import React from 'react';
 import Mapbox from '@rnmapbox/maps';
 
-export const RouteLayer = ({ data }: { data: any }) => {
+interface RouteLayerProps {
+  data: any;
+  dashed?: boolean;
+  color?: string;
+}
+
+export const RouteLayer = ({ data, dashed = false, color = '#4A90E2' }: RouteLayerProps) => {
   return (
     <Mapbox.ShapeSource id="route-source" shape={data}>
       {/* Background shadow for route */}
@@ -12,16 +18,18 @@ export const RouteLayer = ({ data }: { data: any }) => {
           lineWidth: 8,
           lineJoin: 'round',
           lineCap: 'round',
+          ...(dashed ? { lineDasharray: [1, 1.5] } : {}),
         }}
       />
       {/* Main route line */}
       <Mapbox.LineLayer
         id="route-line"
         style={{
-          lineColor: '#4A90E2',
+          lineColor: color,
           lineWidth: 5,
           lineJoin: 'round',
           lineCap: 'round',
+          ...(dashed ? { lineDasharray: [1, 1.5] } : {}),
         }}
       />
     </Mapbox.ShapeSource>
