@@ -29,19 +29,21 @@ import {
 } from '../data/chimeakData';
 import { colors, radii, shadows, spacing } from '../theme/tokens';
 import { Route, TabName, Navigate } from '../navigation/types';
-import { ChatConversation } from '../components/chat/ChatConversation';
+import {
+  ChatConversation,
+  ChatConversationHandle,
+} from '../components/chat/ChatConversation';
+import { ChatInput } from '../components/chat/ChatInput';
 
 const { height: SCREEN_H } = Dimensions.get('window');
 // 바텀시트 스냅 위치 (fill 컨테이너 기준 top 좌표)
 const SHEET_TOP_UP = 40; // 위: 채팅 가득 (지도 거의 가려짐)
-const SHEET_TOP_HALF = 400; // 기본 시작: 중간보다 약간 아래
-const SHEET_TOP_DOWN = 600; // 아래: 지도 많이 보임
+const SHEET_TOP_DOWN_MAX = 550; // 아래 스냅의 기본(최대) 위치 — 대화가 짧을 때 기준
 
 // translateY 기준값 (= 각 top - SHEET_TOP_UP). 0 = 맨 위, 값이 클수록 아래로 내려감
 const SNAP_UP = 0;
-const SNAP_HALF = SHEET_TOP_HALF - SHEET_TOP_UP; // 400
-const SNAP_DOWN = SHEET_TOP_DOWN - SHEET_TOP_UP; // 560
-const SNAP_POINTS = [SNAP_UP, SNAP_HALF, SNAP_DOWN];
+const BOTTOM_NAV_HEIGHT = 76;
+const CHAT_INPUT_HEIGHT = 140;
 
 const navItems: { name: TabName; label: string; icon: string }[] = [
   { name: 'home', label: '홈', icon: '⌂' },
@@ -160,10 +162,31 @@ function HomeTab({
   onSelectCourse: (id: string) => void;
 }) {
   const { hasPermission } = useLocation();
+  const chatRef = useRef<ChatConversationHandle>(null);
+  const [chatDone, setChatDone] = useState(false);
+  // 헤더 + 인사말 2개 + 첫 질문(말풍선 2~3개)의 실측 높이. 대화가 길어져도 이 미리보기
+  // 묶음 자체는 커지지 않으므로, "중간" 스냅 위치가 항상 이만큼만 보여주게 된다.
+  const [previewHeight, setPreviewHeight] = useState(50);
 
-  // 바텀시트 위치 애니메이션: 0 = 맨 위, 값이 클수록 아래. 시작은 중간(SNAP_HALF).
-  const translateY = useRef(new Animated.Value(SNAP_HALF)).current;
-  const restingY = useRef(SNAP_HALF); // 손을 뗐을 때의 현재 스냅 위치
+  // 화면 하단에 떠 있는 ChatInput의 위치/높이. 바텀내비게이션 바로 위에 여백 없이 붙인다.
+  // ChatConversation에도 같은 값을 여백(bottomInset)으로 전달해 대화 목록이 가리지 않게 한다.
+  const chatInputBottom = chatOpen ? 0 : BOTTOM_NAV_HEIGHT;
+  const chatBottomInset = chatInputBottom + CHAT_INPUT_HEIGHT;
+
+  // "아래로 완전히 접기"는 대화 길이와 무관하게 항상 같은 고정 위치.
+  const downTop = SHEET_TOP_DOWN_MAX;
+  // "중간"은 말풍선 미리보기(2~3개)가 ChatInput 위에 딱 맞게 다 보이는 위치로 계산한다.
+  // 말풍선 묶음 단위로 측정한 값이라, 중간에 잘려 보이는 일이 없다.
+  const halfTop = Math.max(
+    SHEET_TOP_UP,
+    Math.min(downTop, SCREEN_H - chatBottomInset - previewHeight),
+  );
+  const snapDown = downTop - SHEET_TOP_UP;
+  const snapHalf = halfTop - SHEET_TOP_UP;
+
+  // 바텀시트 위치 애니메이션: 0 = 맨 위, 값이 클수록 아래. 시작은 계산된 중간 스냅 위치.
+  const translateY = useRef(new Animated.Value(snapHalf)).current;
+  const restingY = useRef(snapHalf); // 손을 뗐을 때의 현재 스냅 위치
 
   const snapTo = (target: number) => {
     restingY.current = target;
@@ -175,6 +198,22 @@ function HomeTab({
     }).start();
   };
 
+  // PanResponder의 클로저는 최초 생성 시점의 값을 캡처하므로, 매 렌더 최신값을 ref에 담아 읽는다.
+  const snapDownRef = useRef(snapDown);
+  const snapHalfRef = useRef(snapHalf);
+  const prevSnapHalfRef = useRef(snapHalf);
+  useEffect(() => {
+    snapDownRef.current = snapDown;
+    snapHalfRef.current = snapHalf;
+    // 말풍선 실측치가 (추정값에서) 갱신되면서 half 위치가 바뀌었는데, 마침 시트가
+    // 이전 half 위치에 머물러 있었다면 새 half 위치로 다시 맞춰준다.
+    if (Math.abs(restingY.current - prevSnapHalfRef.current) < 1) {
+      snapTo(snapHalf);
+    }
+    prevSnapHalfRef.current = snapHalf;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [snapDown, snapHalf]);
+
   const panResponder = useRef(
     PanResponder.create({
       // 세로로 4px 이상 움직일 때만 드래그로 인식 (탭/가로스크롤과 구분)
@@ -182,25 +221,20 @@ function HomeTab({
       onPanResponderMove: (_, g) => {
         let next = restingY.current + g.dy;
         if (next < SNAP_UP) next = SNAP_UP; // 위 한계
-        if (next > SNAP_DOWN) next = SNAP_DOWN; // 아래 한계
+        if (next > snapDownRef.current) next = snapDownRef.current; // 아래 한계
         translateY.setValue(next);
       },
       onPanResponderRelease: (_, g) => {
         // 놓는 순간 위치에 속도를 살짝 반영해, 가장 가까운 스냅 포인트로 이동
         const projected = restingY.current + g.dy + g.vy * 100;
-        const target = SNAP_POINTS.reduce((best, p) =>
+        const points = [SNAP_UP, snapHalfRef.current, snapDownRef.current];
+        const target = points.reduce((best, p) =>
           Math.abs(projected - p) < Math.abs(projected - best) ? p : best,
         );
         snapTo(target);
       },
     }),
   ).current;
-
-  // 하단 'AI 산책' 탭을 누르면(chatOpen=true) 시트를 맨 위로, 홈으로 돌아오면 기본(중간)으로
-  useEffect(() => {
-    snapTo(chatOpen ? SNAP_UP : SNAP_HALF);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chatOpen]);
 
   const staticData = {
     ...mockPois,
@@ -228,8 +262,8 @@ function HomeTab({
           <Mapbox.Camera
             zoomLevel={15}
             centerCoordinate={[126.978, 37.5665]}
-            // followUserLocation={hasPermission} // 에뮬레이터 GPS(미국)를 따라가지 않도록 임시 비활성화
-            // followUserMode="normal"
+          // followUserLocation={hasPermission} // 에뮬레이터 GPS(미국)를 따라가지 않도록 임시 비활성화
+          // followUserMode="normal"
           />
           {routeData && <RouteLayer data={routeData} />}
           <StaticPOILayer data={staticData} />
@@ -252,15 +286,30 @@ function HomeTab({
           <View style={styles.dragHandle} />
         </View>
         <ChatConversation
+          ref={chatRef}
           persona={persona}
           go={go}
           onSelectCourse={onSelectCourse}
+          onDoneChange={setChatDone}
+          onPreviewHeightChange={setPreviewHeight}
+          bottomInset={chatBottomInset}
           onRequestClose={() => {
-            snapTo(SNAP_DOWN);
+            snapTo(snapDown);
             go('home');
           }}
         />
       </Animated.View>
+
+      <View style={[styles.chatInputBar, { bottom: chatInputBottom }]}>
+        <ChatInput
+          onSend={text => {
+            chatRef.current?.submitAnswer(text);
+            // 메시지를 보내는 순간, 3단계 스와이프 중 가장 위(꽉 찬) 상태로 올려준다.
+            snapTo(SNAP_UP);
+          }}
+          disabled={chatDone}
+        />
+      </View>
     </View>
   );
 }
@@ -297,15 +346,13 @@ function CoursesTab({
             { id: 'all', label: `전체 ${courses.length}` },
             {
               id: 'loop',
-              label: `순환 ${
-                courses.filter(course => course.type === 'loop').length
-              }`,
+              label: `순환 ${courses.filter(course => course.type === 'loop').length
+                }`,
             },
             {
               id: 'oneway',
-              label: `편도 ${
-                courses.filter(course => course.type === 'oneway').length
-              }`,
+              label: `편도 ${courses.filter(course => course.type === 'oneway').length
+                }`,
             },
           ].map(item => (
             <Pressable
@@ -419,7 +466,7 @@ function CourseDetail({ id, go }: { id: string; go: Navigate }) {
                 </Text>
               ) : null}
               {index === course.waypoints.length - 1 &&
-              course.type === 'oneway' ? (
+                course.type === 'oneway' ? (
                 <Text style={[styles.startText, { color: course.color }]}>
                   END
                 </Text>
@@ -804,8 +851,8 @@ function MyPageTab({
                   {id === 'killtime'
                     ? '30분 내'
                     : id === 'exercise'
-                    ? '심박↑'
-                    : '조용함'}
+                      ? '심박↑'
+                      : '조용함'}
                 </Text>
               </Pressable>
             );
@@ -1053,6 +1100,14 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.98)',
     paddingBottom: spacing.lg,
     ...shadows.soft,
+  },
+  chatInputBar: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    backgroundColor: colors.card,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
   },
   sheetGrabZone: {
     paddingTop: spacing.sm,
@@ -1938,7 +1993,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    height: 76,
+    height: BOTTOM_NAV_HEIGHT,
     paddingBottom: spacing.sm,
     backgroundColor: 'rgba(255,255,255,0.97)',
     borderTopWidth: 1,
