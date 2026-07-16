@@ -11,15 +11,11 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import Mapbox from '@rnmapbox/maps';
 import { useLocation } from '../hooks/useLocation';
 import { MockMapView } from '../components/MockMapView';
-import mockPois from '../data/mockPois.json';
-import mockRoute from '../data/mockRoute.json';
-import { StaticPOILayer } from '../components/map/StaticPOILayer';
-import { DynamicPOILayer } from '../components/map/DynamicPOILayer';
-import { RouteLayer } from '../components/map/RouteLayer';
+import { AppMapView } from '../components/map/AppMapView';
 import { WalkMapRenderer } from '../components/map/WalkMapRenderer';
+import { LocationInfo } from '../types/prewalk';
 import {
   courses,
   CourseType,
@@ -161,7 +157,13 @@ function HomeTab({
   go: Navigate;
   onSelectCourse: (id: string) => void;
 }) {
-  const { hasPermission } = useLocation();
+  const { coords } = useLocation();
+  const currentLocation: LocationInfo = {
+    lat: coords?.latitude ?? null,
+    lon: coords?.longitude ?? null,
+    address: null,
+    place_name: null,
+  };
   const chatRef = useRef<ChatConversationHandle>(null);
   const [chatDone, setChatDone] = useState(false);
   const [previewHeight, setPreviewHeight] = useState(50);
@@ -234,40 +236,10 @@ function HomeTab({
     }),
   ).current;
 
-  const staticData = {
-    ...mockPois,
-    features: mockPois.features.filter((f: any) =>
-      ['bench', 'toilet', 'cctv'].includes(f.properties.type),
-    ),
-  };
-
-  const dynamicData = {
-    ...mockPois,
-    features: mockPois.features.filter((f: any) =>
-      ['cafe', 'spot'].includes(f.properties.type),
-    ),
-  };
-
-  const routeData = activeMapCourse ? mockRoute : null;
-
   return (
     <View style={styles.fill}>
       <View style={styles.homeMap}>
-        <Mapbox.MapView
-          style={{ flex: 1 }}
-          styleURL={'mapbox://styles/mapbox/streets-v12'}
-        >
-          <Mapbox.Camera
-            zoomLevel={15}
-            centerCoordinate={[126.978, 37.5665]}
-          // followUserLocation={hasPermission} // 에뮬레이터 GPS(미국)를 따라가지 않도록 임시 비활성화
-          // followUserMode="normal"
-          />
-          {routeData && <RouteLayer data={routeData} />}
-          <StaticPOILayer data={staticData} />
-          <DynamicPOILayer data={dynamicData} />
-          {hasPermission && <Mapbox.UserLocation />}
-        </Mapbox.MapView>
+        <AppMapView mode="overview" currentLocation={currentLocation} />
         <View style={styles.weatherPill}>
           <Text style={styles.weatherText}>☁ 17° · 미세 ●</Text>
         </View>
