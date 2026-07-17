@@ -24,6 +24,7 @@ import {
   recentWalks,
 } from '../data/chimeakData';
 import { colors, radii, shadows, spacing } from '../theme/tokens';
+import { authStorage } from '../auth/authStorage';
 import { Route, TabName, Navigate } from '../navigation/types';
 import {
   ChatConversation,
@@ -56,6 +57,17 @@ interface HomeScreenProps {
 export function HomeScreen({ onLogout, userId }: HomeScreenProps) {
   const [route, setRoute] = useState<Route>({ name: 'home' });
   const [persona, setPersona] = useState<PersonaId>('killtime');
+  const [nickname, setNickname] = useState<string | null>(null);
+  const [email, setEmail] = useState<string | null>(null);
+
+  useEffect(() => {
+    Promise.all([authStorage.getNickname(), authStorage.getEmail()]).then(
+      ([n, e]) => {
+        setNickname(n);
+        setEmail(e);
+      },
+    );
+  }, [userId]);
   const [recommendedFilter, setRecommendedFilter] = useState<
     CourseType | undefined
   >();
@@ -119,13 +131,15 @@ export function HomeScreen({ onLogout, userId }: HomeScreenProps) {
         {route.name === 'postwalk' ? (
           <PostWalkTab id={route.id} walkResult={walkResult} go={go} />
         ) : null}
-        {route.name === 'record' ? <RecordTab /> : null}
+        {route.name === 'record' ? <RecordTab nickname={nickname} /> : null}
         {route.name === 'me' ? (
           <MyPageTab
             persona={persona}
             setPersona={setPersona}
             go={go}
             onLogout={onLogout}
+            nickname={nickname}
+            email={email}
           />
         ) : null}
         {showNav ? <BottomNav active={activeTab} onChange={go} /> : null}
@@ -667,7 +681,7 @@ function PostWalkTab({
   );
 }
 
-function RecordTab() {
+function RecordTab({ nickname }: { nickname: string | null }) {
   return (
     <View style={styles.pageSoft}>
       <ScreenHeader title="기록" subtitle="이번 달 산책 일지" />
@@ -693,7 +707,9 @@ function RecordTab() {
           ))}
         </View>
         <View style={styles.pointsCard}>
-          <Text style={styles.pointsKicker}>WALKING POINTS · 채원님</Text>
+          <Text style={styles.pointsKicker}>
+            WALKING POINTS · {nickname ? `${nickname}님` : '회원님'}
+          </Text>
           <Text style={styles.pointsValue}>2,847P</Text>
           <View style={styles.progressTrack}>
             <View style={styles.progressFill} />
@@ -757,11 +773,15 @@ function MyPageTab({
   setPersona,
   go,
   onLogout,
+  nickname,
+  email,
 }: {
   persona: PersonaId;
   setPersona: (persona: PersonaId) => void;
   go: Navigate;
   onLogout?: () => void;
+  nickname: string | null;
+  email: string | null;
 }) {
   return (
     <View style={styles.pageSoft}>
@@ -772,12 +792,12 @@ function MyPageTab({
       >
         <View style={styles.profileCard}>
           <View style={styles.avatar}>
-            <Text style={styles.avatarText}>채</Text>
+            <Text style={styles.avatarText}>{nickname?.charAt(0) ?? '?'}</Text>
           </View>
           <View style={styles.profileBody}>
-            <Text style={styles.profileName}>채원님</Text>
+            <Text style={styles.profileName}>{nickname ? `${nickname}님` : '사용자님'}</Text>
             <Text style={styles.profileEmail}>
-              chaewon@gmail.com · 8일째 산책
+              {email ?? '카카오 계정'} · 8일째 산책
             </Text>
           </View>
           <Text style={styles.editText}>편집</Text>
