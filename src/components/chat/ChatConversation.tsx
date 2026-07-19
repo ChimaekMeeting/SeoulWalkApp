@@ -242,10 +242,7 @@ export const ChatConversation = forwardRef(function ChatConversation(
             <View>
               <RouteCandidate
                 route={routeResult}
-                onPress={() => {
-                  onRouteReady(routeResult);
-                  onRequestClose();
-                }}
+                onPress={() => onRouteReady(routeResult)}
               />
               <View style={styles.chatButtons}>
                 <Pressable

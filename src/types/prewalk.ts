@@ -83,6 +83,8 @@ export interface WalkRouteResponse {
   mode: WalkMode;
   coordinates: [number, number][]; // [위도, 경도]
   total_km: number;
+  // RouteHistory로 자동 저장된 경우에만 채워짐(즐겨찾기 PATCH /api/user/routes/{id}/favorite 호출에 사용).
+  id?: number | null;
 }
 
 /* 대화 상태 관련 스키마 */

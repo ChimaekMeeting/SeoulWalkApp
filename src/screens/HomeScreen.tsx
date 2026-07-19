@@ -2,7 +2,9 @@ import React, { useState, useRef, useEffect } from 'react';
 import {
   Animated,
   Dimensions,
+  Keyboard,
   PanResponder,
+  Platform,
   Pressable,
   ScrollView,
   StatusBar,
@@ -115,8 +117,10 @@ export function HomeScreen({ onLogout, userId }: HomeScreenProps) {
             persona={persona}
             currentLocation={currentLocation}
             activeRoute={activeRoute}
-            onRouteReady={setActiveRoute}
-            onStartWalk={() => go({ name: 'realWalk' })}
+            onRouteReady={route => {
+              setActiveRoute(route);
+              go({ name: 'realWalk' });
+            }}
             chatOpen={route.name === 'chat'}
             go={go}
           />
@@ -144,7 +148,6 @@ export function HomeScreen({ onLogout, userId }: HomeScreenProps) {
           <WalkFlow
             routeResult={activeRoute}
             currentLocation={currentLocation}
-            initialStage="walking"
             onExitToHome={() => {
               setActiveRoute(null);
               go('home');
@@ -186,7 +189,6 @@ function HomeTab({
   currentLocation,
   activeRoute,
   onRouteReady,
-  onStartWalk,
   chatOpen,
   go,
 }: {
@@ -194,17 +196,18 @@ function HomeTab({
   currentLocation: LocationInfo;
   activeRoute: WalkRouteResponse | null;
   onRouteReady: (route: WalkRouteResponse) => void;
-  onStartWalk: () => void;
   chatOpen: boolean;
   go: Navigate;
 }) {
   const chatRef = useRef<ChatConversationHandle>(null);
   const [chatDone, setChatDone] = useState(false);
   const [previewHeight, setPreviewHeight] = useState(50);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
 
-  // 화면 하단에 떠 있는 ChatInput의 위치/높이. 바텀내비게이션 바로 위에 여백 없이 붙인다.
+  // 화면 하단에 떠 있는 ChatInput의 위치/높이. 바텀내비게이션 바로 위에 여백 없이 붙이고,
+  // 키보드가 열려있으면 그 높이만큼 더 띄운다.
   // ChatConversation에도 같은 값을 여백(bottomInset)으로 전달해 대화 목록이 가리지 않게 한다.
-  const chatInputBottom = chatOpen ? 0 : BOTTOM_NAV_HEIGHT;
+  const chatInputBottom = (chatOpen ? 0 : BOTTOM_NAV_HEIGHT) + keyboardHeight;
   const chatBottomInset = chatInputBottom + CHAT_INPUT_HEIGHT;
 
   // "아래로 완전히 접기"는 대화 길이와 무관하게 항상 같은 고정 위치.
@@ -231,6 +234,27 @@ function HomeTab({
       speed: 14,
     }).start();
   };
+
+  // 키보드가 열리면 그 높이를 chatInputBottom에 반영해 입력창/시트가 가려지지 않게 하고,
+  // 채팅에 집중하는 상황이니 시트도 맨 위(SNAP_UP)로 펼친다.
+  useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+
+    const showSub = Keyboard.addListener(showEvent, e => {
+      setKeyboardHeight(e.endCoordinates.height);
+      snapTo(SNAP_UP);
+    });
+    const hideSub = Keyboard.addListener(hideEvent, () => {
+      setKeyboardHeight(0);
+    });
+
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // PanResponder의 클로저는 최초 생성 시점의 값을 캡처하므로, 매 렌더 최신값을 ref에 담아 읽는다.
   const snapDownRef = useRef(snapDown);
@@ -278,11 +302,6 @@ function HomeTab({
           currentLocation={currentLocation}
           previewRoute={activeRoute?.coordinates ?? undefined}
         />
-        {activeRoute ? (
-          <Pressable onPress={onStartWalk} style={styles.startWalkButton}>
-            <Text style={styles.startWalkButtonText}>▶ 산책 시작</Text>
-          </Pressable>
-        ) : null}
       </View>
 
       <Animated.View
@@ -1058,23 +1077,6 @@ const styles = StyleSheet.create({
     flex: 1,
     overflow: 'hidden',
     backgroundColor: colors.bgSoft,
-  },
-  // 바텀시트가 "아래로 접힘" 상태(top: SHEET_TOP_DOWN_MAX)일 때도 항상 가려지지 않도록
-  // 그 경계 바로 위에 고정한다.
-  startWalkButton: {
-    position: 'absolute',
-    top: SHEET_TOP_DOWN_MAX - 76,
-    alignSelf: 'center',
-    borderRadius: 999,
-    paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.md,
-    backgroundColor: colors.mintDeep,
-    ...shadows.soft,
-  },
-  startWalkButtonText: {
-    color: colors.card,
-    fontSize: 15,
-    fontWeight: '900',
   },
   homeSheet: {
     position: 'absolute',
