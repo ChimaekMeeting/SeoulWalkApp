@@ -10,8 +10,6 @@ type Stage = 'prep' | 'walking' | 'complete';
 interface Props {
   routeResult: WalkRouteResponse;
   currentLocation: LocationInfo | null;
-  /** WalkRouteResponse에 아직 route id가 없어 optional. 있으면 6d 즐겨찾기가 활성화된다. */
-  routeId?: number;
   /** 시작 단계. 기본은 6a(산책 전)이지만, 이미 확인 절차를 거친 진입점은 6b부터 바로 시작할 수 있다. */
   initialStage?: Stage;
   onExitToHome: () => void;
@@ -25,7 +23,6 @@ interface Props {
 export function WalkFlow({
   routeResult,
   currentLocation,
-  routeId,
   initialStage = 'prep',
   onExitToHome,
 }: Props) {
@@ -72,7 +69,7 @@ export function WalkFlow({
       currentLocation={currentLocation}
       traveledKm={snapshot?.traveledKm ?? 0}
       elapsedMs={snapshot?.elapsedMs ?? 0}
-      routeId={routeId}
+      routeId={routeResult.id ?? undefined}
       onHome={onExitToHome}
     />
   );

@@ -41,9 +41,8 @@ export function WalkCompleteScreen({
     if (routeId == null || favoritePending) return;
     setFavoritePending(true);
     try {
-      const next = !isFavorite;
-      await toggleFavoriteRoute(routeId, next);
-      setIsFavorite(next);
+      const updated = await toggleFavoriteRoute(routeId);
+      setIsFavorite(updated.is_favorite);
     } finally {
       setFavoritePending(false);
     }
