@@ -20,12 +20,15 @@
     "expo-dev-client": "~56.0.21",
     "expo-location": "~56.0.19",
     "expo-secure-store": "~56.0.4",
+    "expo-sensors": "~56.0.6",
     "expo-system-ui": "~56.0.5",
     "react": "19.2.3",
     "react-native": "0.85.3",
     "react-native-nitro-cookies": "^1.2.0",
     "react-native-nitro-modules": "^0.36.1",
-    "react-native-safe-area-context": "~5.7.0"
+    "react-native-safe-area-context": "~5.7.0",
+    "react-native-share": "^12.3.1",
+    "react-native-view-shot": "5.1.0"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",

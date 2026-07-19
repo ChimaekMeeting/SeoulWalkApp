@@ -14,6 +14,8 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     infoPlist: {
       NSLocationWhenInUseUsageDescription:
         '내 주변 산책 경로를 추천하기 위해 위치 정보를 사용합니다.',
+      NSMotionUsageDescription:
+        '산책 중 걸음 수를 측정하기 위해 동작 및 피트니스 정보를 사용합니다.',
       CFBundleURLTypes: [
         {
           CFBundleURLSchemes: [`kakao${process.env.EXPO_PUBLIC_KAKAO_NATIVE_APP_KEY}`],
@@ -24,7 +26,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   },
   android: {
     package: 'com.seoulwalkapp',
-    permissions: ['ACCESS_COARSE_LOCATION', 'ACCESS_FINE_LOCATION'],
+    permissions: ['ACCESS_COARSE_LOCATION', 'ACCESS_FINE_LOCATION', 'ACTIVITY_RECOGNITION'],
   },
   plugins: [
     [
@@ -58,6 +60,13 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       {
         locationWhenInUsePermission:
           '내 주변 산책 경로를 추천하기 위해 위치 정보를 사용합니다.',
+      },
+    ],
+    ['react-native-share', {}],
+    [
+      'expo-sensors',
+      {
+        motionPermission: '산책 중 걸음 수를 측정하기 위해 동작 및 피트니스 정보를 사용합니다.',
       },
     ],
   ],
