@@ -16,6 +16,7 @@ export function ChatBubble({ text }: { text: string }) {
 
 const styles = StyleSheet.create({
   chatLine: {
+    width: '100%',
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: spacing.sm,
@@ -34,6 +35,7 @@ const styles = StyleSheet.create({
     fontWeight: '900',
   },
   chatBubble: {
+    flexShrink: 1,
     maxWidth: '82%',
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
