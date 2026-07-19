@@ -15,7 +15,7 @@ import { useLocation } from '../hooks/useLocation';
 import { MockMapView } from '../components/MockMapView';
 import { AppMapView } from '../components/map/AppMapView';
 import { WalkMapRenderer } from '../components/map/WalkMapRenderer';
-import { LocationInfo } from '../types/prewalk';
+import { LocationInfo, WalkRouteResponse } from '../types/prewalk';
 import {
   courses,
   CourseType,
@@ -31,6 +31,7 @@ import {
   ChatConversationHandle,
 } from '../components/chat/ChatConversation';
 import { ChatInput } from '../components/chat/ChatInput';
+import { WalkFlow } from './walk/WalkFlow';
 
 const { height: SCREEN_H } = Dimensions.get('window');
 // 바텀시트 스냅 위치 (fill 컨테이너 기준 top 좌표)
@@ -75,7 +76,16 @@ export function HomeScreen({ onLogout, userId }: HomeScreenProps) {
     dist: string;
     time: string;
   } | null>(null);
-  const [activeMapCourse, setActiveMapCourse] = useState<string | null>(null);
+  const { coords } = useLocation();
+  const currentLocation: LocationInfo = {
+    lat: coords?.latitude ?? null,
+    lon: coords?.longitude ?? null,
+    address: null,
+    place_name: null,
+  };
+  const [activeRoute, setActiveRoute] = useState<WalkRouteResponse | null>(
+    null,
+  );
 
   const go = (next: Route | TabName) => {
     if (typeof next === 'string') {
@@ -103,10 +113,12 @@ export function HomeScreen({ onLogout, userId }: HomeScreenProps) {
         {route.name === 'home' || route.name === 'chat' ? (
           <HomeTab
             persona={persona}
-            activeMapCourse={activeMapCourse}
+            currentLocation={currentLocation}
+            activeRoute={activeRoute}
+            onRouteReady={setActiveRoute}
+            onStartWalk={() => go({ name: 'realWalk' })}
             chatOpen={route.name === 'chat'}
             go={go}
-            onSelectCourse={id => setActiveMapCourse(id)}
           />
         ) : null}
         {route.name === 'courses' ? (
@@ -125,6 +137,17 @@ export function HomeScreen({ onLogout, userId }: HomeScreenProps) {
             onDone={(dist, time) => {
               setWalkResult({ dist, time });
               go({ name: 'postwalk', id: route.id });
+            }}
+          />
+        ) : null}
+        {route.name === 'realWalk' && activeRoute ? (
+          <WalkFlow
+            routeResult={activeRoute}
+            currentLocation={currentLocation}
+            initialStage="walking"
+            onExitToHome={() => {
+              setActiveRoute(null);
+              go('home');
             }}
           />
         ) : null}
@@ -160,24 +183,21 @@ function getTab(route: Route): TabName {
 
 function HomeTab({
   persona,
-  activeMapCourse,
+  currentLocation,
+  activeRoute,
+  onRouteReady,
+  onStartWalk,
   chatOpen,
   go,
-  onSelectCourse,
 }: {
   persona: PersonaId;
-  activeMapCourse: string | null;
+  currentLocation: LocationInfo;
+  activeRoute: WalkRouteResponse | null;
+  onRouteReady: (route: WalkRouteResponse) => void;
+  onStartWalk: () => void;
   chatOpen: boolean;
   go: Navigate;
-  onSelectCourse: (id: string) => void;
 }) {
-  const { coords } = useLocation();
-  const currentLocation: LocationInfo = {
-    lat: coords?.latitude ?? null,
-    lon: coords?.longitude ?? null,
-    address: null,
-    place_name: null,
-  };
   const chatRef = useRef<ChatConversationHandle>(null);
   const [chatDone, setChatDone] = useState(false);
   const [previewHeight, setPreviewHeight] = useState(50);
@@ -253,14 +273,16 @@ function HomeTab({
   return (
     <View style={styles.fill}>
       <View style={styles.homeMap}>
-        <AppMapView mode="overview" currentLocation={currentLocation} />
-        <View style={styles.weatherPill}>
-          <Text style={styles.weatherText}>☁ 17° · 미세 ●</Text>
-        </View>
-        <View style={styles.mapControls}>
-          <RoundButton label="◎" />
-          <RoundButton label="+" />
-        </View>
+        <AppMapView
+          mode="overview"
+          currentLocation={currentLocation}
+          previewRoute={activeRoute?.coordinates ?? undefined}
+        />
+        {activeRoute ? (
+          <Pressable onPress={onStartWalk} style={styles.startWalkButton}>
+            <Text style={styles.startWalkButtonText}>▶ 산책 시작</Text>
+          </Pressable>
+        ) : null}
       </View>
 
       <Animated.View
@@ -272,8 +294,9 @@ function HomeTab({
         <ChatConversation
           ref={chatRef}
           persona={persona}
+          currentLocation={currentLocation}
           go={go}
-          onSelectCourse={onSelectCourse}
+          onRouteReady={onRouteReady}
           onDoneChange={setChatDone}
           onPreviewHeightChange={setPreviewHeight}
           bottomInset={chatBottomInset}
@@ -947,14 +970,6 @@ function Badge({ label, color }: { label: string; color: string }) {
   );
 }
 
-function RoundButton({ label }: { label: string }) {
-  return (
-    <View style={styles.roundButton}>
-      <Text style={styles.roundButtonText}>{label}</Text>
-    </View>
-  );
-}
-
 function StatTile({
   label,
   value,
@@ -1044,39 +1059,21 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     backgroundColor: colors.bgSoft,
   },
-  weatherPill: {
+  // 바텀시트가 "아래로 접힘" 상태(top: SHEET_TOP_DOWN_MAX)일 때도 항상 가려지지 않도록
+  // 그 경계 바로 위에 고정한다.
+  startWalkButton: {
     position: 'absolute',
-    top: 128,
-    right: 14,
+    top: SHEET_TOP_DOWN_MAX - 76,
+    alignSelf: 'center',
     borderRadius: 999,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    backgroundColor: colors.card,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.md,
+    backgroundColor: colors.mintDeep,
     ...shadows.soft,
   },
-  weatherText: {
-    color: colors.ink,
-    fontSize: 12,
-    fontWeight: '800',
-  },
-  mapControls: {
-    position: 'absolute',
-    top: 252,
-    right: 14,
-    gap: spacing.sm,
-  },
-  roundButton: {
-    width: 42,
-    height: 42,
-    borderRadius: 14,
-    backgroundColor: colors.card,
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...shadows.soft,
-  },
-  roundButtonText: {
-    color: colors.ink,
-    fontSize: 18,
+  startWalkButtonText: {
+    color: colors.card,
+    fontSize: 15,
     fontWeight: '900',
   },
   homeSheet: {

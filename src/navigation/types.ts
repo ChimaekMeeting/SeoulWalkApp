@@ -7,6 +7,7 @@ export type Route =
   | { name: 'courses'; filter?: CourseType | 'all' } // 코스 목록
   | { name: 'course'; id: string } // 코스 상세 화면
   | { name: 'walk'; id: string } // 산책 진행 화면
+  | { name: 'realWalk' } // prewalk 챗봇이 만든 실제 경로로 진행하는 산책 화면
   | { name: 'postwalk'; id: string } // 산책 종료 후 기록 화면
   | { name: 'record' }
   | { name: 'me' };

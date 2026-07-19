@@ -6,29 +6,44 @@ import React, {
   useState,
 } from 'react';
 import { Pressable, ScrollView, Text, View, StyleSheet } from 'react-native';
+import { getInitMessage, getMessage } from '../../api/prewalk';
 import {
-  chatbotFlow,
-  courses,
-  PersonaId,
-  personas,
-} from '../../data/chimeakData';
+  ChatResponse,
+  ChatStatus,
+  LocationInfo,
+  WalkRouteResponse,
+} from '../../types/prewalk';
+import { PersonaId, personas } from '../../data/chimeakData';
 import { Navigate } from '../../navigation/types';
 import { ChatBubble } from './ChatBubble';
 import { MyBubble } from './MyBubble';
-import { spacing, colors, radii } from '../../theme/tokens';
+import { LoadingBubble } from './LoadingBubble';
+import { RouteCandidate } from './RouteCandidate';
+import { spacing, colors } from '../../theme/tokens';
 
 export type ChatConversationHandle = {
   submitAnswer: (answer: string) => void;
 };
 
+type Message = { from: 'bot' | 'me'; text: string };
+
+const STATUS_MESSAGES: Partial<Record<ChatStatus, string>> = {
+  [ChatStatus.ACCESS_EXPIRED_TOKEN]: '로그인이 만료되었어요. 다시 로그인해주세요.',
+  [ChatStatus.INVALID_TOKEN]: '인증 정보가 올바르지 않아요. 다시 로그인해주세요.',
+  [ChatStatus.SESSION_NOT_FOUND]: '대화 세션을 찾을 수 없어요. 다시 시작해주세요.',
+  [ChatStatus.UNACCESSIBLE]: '지금은 서비스를 이용할 수 없어요.',
+  [ChatStatus.INTERNAL_ERROR]: '일시적인 오류가 발생했어요. 잠시 후 다시 시도해주세요.',
+};
+
 type Props = {
   persona: PersonaId;
-  onSelectCourse: (id: string) => void;
+  currentLocation: LocationInfo;
+  onRouteReady: (route: WalkRouteResponse) => void;
   go: Navigate;
   onRequestClose: () => void; // ✕ 또는 코스 선택 시 시트를 접는 콜백
   onDoneChange: (done: boolean) => void; // 질문이 모두 끝났는지를 외부(입력창)에 알림
   bottomInset: number; // 바텀시트 바깥에 떠 있는 ChatInput에 가려지지 않도록 남겨둘 여백
-  // 헤더 + 인사말 2개 + 첫 질문(=말풍선 2~3개)의 실측 높이를 부모(중간 스냅 계산)에 전달.
+  // 헤더 + 첫 봇 메시지의 실측 높이를 부모(중간 스냅 계산)에 전달.
   // 대화가 길어져도 이 미리보기 묶음 자체의 크기는 바뀌지 않아, 중간 스냅이 항상 같은
   // 위치(말풍선이 잘리지 않는 위치)를 가리키게 된다.
   onPreviewHeightChange: (height: number) => void;
@@ -36,10 +51,13 @@ type Props = {
 
 // 홈 바텀시트 안에 들어가는 채팅 대화 패널 (오버레이/배경 없이 시트가 컨테이너 역할)
 // 입력창(ChatInput)은 바텀시트 바깥에 떠 있는 별도 요소라 submitAnswer를 ref로 노출해 연결한다.
+// prewalk 챗봇 API(getInitMessage/getMessage)와 직접 통신하며, 대화가 끝나면(state.is_complete)
+// 백엔드가 계산한 실제 경로(state.route_result)를 onRouteReady로 상위에 전달한다.
 export const ChatConversation = forwardRef(function ChatConversation(
   {
     persona,
-    onSelectCourse,
+    currentLocation,
+    onRouteReady,
     go,
     onRequestClose,
     onDoneChange,
@@ -48,23 +66,97 @@ export const ChatConversation = forwardRef(function ChatConversation(
   }: Props,
   ref: React.Ref<ChatConversationHandle>,
 ) {
-  const [step, setStep] = useState(0);
-  const [answers, setAnswers] = useState<string[]>([]);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [threadId, setThreadId] = useState<string | null>(null);
+  const [routeResult, setRouteResult] = useState<WalkRouteResponse | null>(
+    null,
+  );
+  const [done, setDone] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [awaitingConfirmation, setAwaitingConfirmation] = useState(false);
   const [headerHeight, setHeaderHeight] = useState(0);
   const [previewGroupHeight, setPreviewGroupHeight] = useState(0);
   const scrollRef = useRef<ScrollView>(null);
-  const done = step >= chatbotFlow.length;
-  const recommendType = answers[3]?.startsWith('편도') ? 'oneway' : 'loop';
-  const recommended =
-    courses.find(
-      course =>
-        course.type === recommendType && course.persona.includes(persona),
-    ) ?? courses[0];
+  const hasStartedRef = useRef(false);
 
-  const choose = (answer: string) => {
-    setAnswers([...answers, answer]);
-    setStep(current => current + 1);
+  const applyResponse = (res: ChatResponse, options?: { reset?: boolean }) => {
+    if (res.thread_id) setThreadId(res.thread_id);
+
+    if (res.status !== ChatStatus.SUCCESS) {
+      const text =
+        STATUS_MESSAGES[res.status] ?? STATUS_MESSAGES[ChatStatus.INTERNAL_ERROR]!;
+      setMessages(prev => (options?.reset ? [] : prev).concat({ from: 'bot', text }));
+      setAwaitingConfirmation(false);
+      return;
+    }
+
+    // 경로가 완성된 응답은 ChatBubble로 따로 보여주지 않는다 — 로딩 표시가 그 자리에서
+    // 바로 RouteCandidate로 바뀌어 보이도록 한다.
+    const routeReady = !!(res.state?.is_complete && res.state?.route_result);
+    const botText = res.state?.response;
+    setMessages(prev => {
+      const base = options?.reset ? [] : prev;
+      return botText && !routeReady ? base.concat({ from: 'bot', text: botText }) : base;
+    });
+    setRouteResult(res.state?.route_result ?? null);
+    setDone(res.state?.is_complete ?? false);
+    setAwaitingConfirmation(res.state?.awaiting_confirmation ?? false);
   };
+
+  const startConversation = async () => {
+    if (currentLocation.lat == null || currentLocation.lon == null) return;
+    setSending(true);
+    try {
+      const res = await getInitMessage({
+        lat: currentLocation.lat,
+        lon: currentLocation.lon,
+      });
+      applyResponse(res, { reset: true });
+    } catch (err) {
+      // TODO: 테스트 끝나면 아래 로그 제거
+      console.error(
+        '[ChatConversation] getInitMessage failed:',
+        (err as any)?.response?.status,
+        (err as any)?.response?.data ?? err,
+      );
+      setMessages([
+        { from: 'bot', text: '대화를 시작하지 못했어요. 다시 시도해주세요.' },
+      ]);
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const submitAnswer = async (answer: string) => {
+    if (done || sending || !threadId) return;
+    setMessages(prev => [...prev, { from: 'me', text: answer }]);
+    setSending(true);
+    try {
+      const res = await getMessage({ thread_id: threadId, user_prompt: answer });
+      applyResponse(res);
+    } catch (err) {
+      // TODO: 테스트 끝나면 아래 로그 제거
+      console.error(
+        '[ChatConversation] getMessage failed:',
+        (err as any)?.response?.status,
+        (err as any)?.response?.data ?? err,
+      );
+      setMessages(prev => [
+        ...prev,
+        { from: 'bot', text: '메시지를 보내지 못했어요. 다시 시도해주세요.' },
+      ]);
+    } finally {
+      setSending(false);
+    }
+  };
+
+  useEffect(() => {
+    if (hasStartedRef.current) return;
+    if (currentLocation.lat == null || currentLocation.lon == null) return;
+    hasStartedRef.current = true;
+    startConversation();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentLocation.lat, currentLocation.lon]);
 
   useEffect(() => {
     onDoneChange(done);
@@ -78,10 +170,11 @@ export const ChatConversation = forwardRef(function ChatConversation(
 
   useImperativeHandle(ref, () => ({
     submitAnswer: (answer: string) => {
-      if (done) return;
-      choose(answer);
+      submitAnswer(answer);
     },
   }));
+
+  const awaitingLocation = !threadId && messages.length === 0 && !sending;
 
   return (
     <View style={styles.chatPanel}>
@@ -90,7 +183,7 @@ export const ChatConversation = forwardRef(function ChatConversation(
         onLayout={e => setHeaderHeight(e.nativeEvent.layout.height)}
       >
         <Text style={styles.chatHeaderTitle}>
-          AI 산책 도우미 ({personas[persona].label})
+          Roudi ({personas[persona].label})
         </Text>
       </View>
       <ScrollView
@@ -108,81 +201,55 @@ export const ChatConversation = forwardRef(function ChatConversation(
         }
       >
         <View style={styles.bubbleStack}>
-          <View
-            style={styles.previewGroup}
-            onLayout={e =>
-              setPreviewGroupHeight(e.nativeEvent.layout.height)
-            }
-          >
-            <ChatBubble text="안녕하세요 채원님 👋" />
-            <ChatBubble text="몇 가지만 물어볼게요. 오늘에 맞는 길을 찾아드릴게요." />
-            <ChatBubble text={chatbotFlow[0].q} />
-          </View>
-          {answers[0] ? <MyBubble text={answers[0]} /> : null}
-          {chatbotFlow
-            .slice(1, Math.min(step + 1, chatbotFlow.length))
-            .map((flow, offset) => {
-              const index = offset + 1;
+          {awaitingLocation ? (
+            <ChatBubble text="위치 정보를 확인하는 중이에요…" />
+          ) : null}
+          {messages.map((message, index) => {
+            const bubble =
+              message.from === 'bot' ? (
+                <ChatBubble text={message.text} />
+              ) : (
+                <MyBubble text={message.text} />
+              );
+            // 첫 봇 메시지만 실측해 중간 스냅 높이 계산에 사용한다.
+            if (index === 0) {
               return (
-                <View key={flow.q}>
-                  <ChatBubble text={flow.q} />
-                  {answers[index] ? <MyBubble text={answers[index]} /> : null}
+                <View
+                  key={index}
+                  style={styles.previewGroup}
+                  onLayout={e =>
+                    setPreviewGroupHeight(e.nativeEvent.layout.height)
+                  }
+                >
+                  {bubble}
                 </View>
               );
-            })}
-          {done ? (
+            }
+            return <View key={index}>{bubble}</View>;
+          })}
+          {sending ? (
+            <LoadingBubble
+              text={
+                !threadId
+                  ? '오늘 날씨를 살펴보고 있어요.'
+                  : awaitingConfirmation
+                    ? '경로를 생성 중입니다. 조금만 기다려주세요.'
+                    : '좋은 답변을 생각 중입니다.'
+              }
+            />
+          ) : null}
+          {done && routeResult ? (
             <View>
-              <ChatBubble text="좋아요. 정리해보면 오늘은 이 길이 어울려요." />
-              <Pressable
+              <RouteCandidate
+                route={routeResult}
                 onPress={() => {
-                  onSelectCourse(recommended.id);
+                  onRouteReady(routeResult);
                   onRequestClose();
                 }}
-                style={styles.recommendBubble}
-              >
-                <View
-                  style={[
-                    styles.recommendIcon,
-                    { backgroundColor: `${recommended.color}22` },
-                  ]}
-                >
-                  <Text style={styles.recommendMood}>{recommended.mood}</Text>
-                </View>
-                <View style={styles.recommendBody}>
-                  <Text
-                    style={[
-                      styles.recommendType,
-                      { color: recommended.color },
-                    ]}
-                  >
-                    {recommended.type === 'loop'
-                      ? '순환 · LOOP'
-                      : '편도 · ONE-WAY'}
-                  </Text>
-                  <Text style={styles.recommendTitle}>
-                    {recommended.title}
-                  </Text>
-                  <Text style={styles.recommendMeta}>
-                    {recommended.distance}km · {recommended.duration}분 ·{' '}
-                    {recommended.kcal}kcal
-                  </Text>
-                </View>
-                <Text style={styles.chevron}>›</Text>
-              </Pressable>
+              />
               <View style={styles.chatButtons}>
                 <Pressable
-                  onPress={() => go('courses')}
-                  style={styles.primaryButtonSmall}
-                >
-                  <Text style={styles.primaryButtonText}>
-                    다른 코스 더 보기
-                  </Text>
-                </Pressable>
-                <Pressable
-                  onPress={() => {
-                    setAnswers([]);
-                    setStep(0);
-                  }}
+                  onPress={() => startConversation()}
                   style={styles.ghostButtonSmall}
                 >
                   <Text style={styles.ghostButtonText}>다시 묻기</Text>
@@ -221,57 +288,11 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
   },
   bubbleStack: {
+    width: '100%',
     gap: spacing.md,
   },
   previewGroup: {
     gap: spacing.md,
-  },
-  recommendBubble: {
-    marginLeft: 38,
-    marginTop: spacing.sm,
-    padding: spacing.md,
-    borderRadius: radii.lg,
-    backgroundColor: colors.card,
-    borderWidth: 2,
-    borderColor: colors.mint,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-  },
-  recommendIcon: {
-    width: 62,
-    height: 62,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  recommendMood: {
-    color: colors.ink,
-    fontWeight: '900',
-    fontSize: 12,
-  },
-  recommendBody: {
-    flex: 1,
-  },
-  recommendType: {
-    fontSize: 11,
-    fontWeight: '900',
-  },
-  recommendTitle: {
-    color: colors.ink,
-    fontSize: 15,
-    fontWeight: '900',
-    marginTop: 2,
-  },
-  recommendMeta: {
-    color: colors.ink3,
-    fontSize: 11,
-    fontWeight: '800',
-    marginTop: spacing.xs,
-  },
-  chevron: {
-    color: colors.ink3,
-    fontSize: 28,
   },
   chatButtons: {
     marginTop: spacing.lg,
