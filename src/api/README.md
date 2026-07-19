@@ -28,7 +28,7 @@ import { ChatResponse, InitRequest } from '../types/prewalk';
 export const getInitMessage = async (
   body: InitRequest,
 ): Promise<ChatResponse> => {
-  const { data } = await client.post<ChatResponse>('/prewalk/init', body);
+  const { data } = await client.post<ChatResponse>('/api/prewalk/init', body);
   return data;
 };
 ```
