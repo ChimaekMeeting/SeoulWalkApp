@@ -55,6 +55,7 @@ const navItems: { name: TabName; label: string; icon: string }[] = [
 interface HomeScreenProps {
   onLogout?: () => void;
   userId?: string | null;
+  activityPermission?: 'granted' | 'denied';
 }
 
 export function HomeScreen({ onLogout, userId }: HomeScreenProps) {
