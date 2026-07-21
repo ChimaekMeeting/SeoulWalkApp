@@ -2,11 +2,13 @@ import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, AppState, AppStateStatus, StyleSheet, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
+import { Pedometer } from 'expo-sensors';
 import Mapbox from '@rnmapbox/maps';
 import { env } from './src/config/env';
 import { useKakaoAuth } from './src/auth/useKakaoAuth';
 import { LoginScreen } from './src/screens/LoginScreen';
 import { LocationPermissionScreen } from './src/screens/LocationPermissionScreen';
+import { ActivityPermissionScreen } from './src/screens/ActivityPermissionScreen';
 import { HomeScreen } from './src/screens/HomeScreen';
 import { colors } from './src/theme/tokens';
 
@@ -17,6 +19,8 @@ type PermissionStatus = 'checking' | 'granted' | 'denied' | 'undetermined';
 function App() {
   const { authState, userId, error, signIn, signOut } = useKakaoAuth();
   const [permissionStatus, setPermissionStatus] =
+    useState<PermissionStatus>('checking');
+  const [activityStatus, setActivityStatus] =
     useState<PermissionStatus>('checking');
 
   const appState = useRef<AppStateStatus>(AppState.currentState);
@@ -61,7 +65,26 @@ function App() {
     setPermissionStatus(status === 'granted' ? 'granted' : 'denied');
   };
 
-  if (authState === 'loading' || (authState === 'loggedIn' && permissionStatus === 'checking')) {
+  // 위치 권한이 확정된 뒤 신체 활동 권한을 확인합니다.
+  useEffect(() => {
+    if (authState !== 'loggedIn' || permissionStatus !== 'granted') return;
+    Pedometer.getPermissionsAsync().then(({ status }) => {
+      if (status === 'granted') {
+        setActivityStatus('granted');
+      } else if (status === 'denied') {
+        // 이미 거부한 적 있으면 화면 없이 HomeScreen으로
+        setActivityStatus('denied');
+      } else {
+        setActivityStatus('undetermined');
+      }
+    });
+  }, [authState, permissionStatus]);
+
+  const isCheckingPermissions =
+    permissionStatus === 'checking' ||
+    (permissionStatus === 'granted' && activityStatus === 'checking');
+
+  if (authState === 'loading' || (authState === 'loggedIn' && isCheckingPermissions)) {
     return <SplashView />;
   }
 
@@ -85,9 +108,25 @@ function App() {
     );
   }
 
+  if (activityStatus === 'undetermined') {
+    return (
+      <SafeAreaProvider>
+        <ActivityPermissionScreen
+          status="undetermined"
+          onGranted={() => setActivityStatus('granted')}
+          onSkip={() => setActivityStatus('denied')}
+        />
+      </SafeAreaProvider>
+    );
+  }
+
   return (
     <SafeAreaProvider>
-      <HomeScreen onLogout={signOut} userId={userId} />
+      <HomeScreen
+        onLogout={signOut}
+        userId={userId}
+        activityPermission={activityStatus === 'granted' ? 'granted' : 'denied'}
+      />
     </SafeAreaProvider>
   );
 }
