@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { DeviceEventEmitter } from 'react-native';
 import {
   login,
   logout,
@@ -23,6 +24,14 @@ export function useKakaoAuth() {
         setAuthState('loggedOut');
       }
     });
+  }, []);
+
+  useEffect(() => {
+    const sub = DeviceEventEmitter.addListener('auth:forceLogout', () => {
+      setUserId(null);
+      setAuthState('loggedOut');
+    });
+    return () => sub.remove();
   }, []);
 
   const signIn = async () => {
