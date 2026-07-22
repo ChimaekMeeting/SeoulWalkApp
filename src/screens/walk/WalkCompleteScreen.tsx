@@ -8,10 +8,8 @@ import { estimateSteps } from '../../utils/walkEstimate';
 import { buildRouteThumbnailUrl } from '../../utils/geo';
 import { colors, radii, spacing } from '../../theme/tokens';
 import { RouteMapView } from '../../components/map';
+import { env } from '../../config/env';
 import { LocationInfo, WalkRouteResponse } from '../../types/prewalk';
-
-// Meta(Facebook) Developers에 등록한 앱 ID — Instagram 스토리 직행 공유(shareSingle)에 필수.
-const INSTAGRAM_APP_ID = '1282650127107639';
 
 interface Props {
   routeResult: WalkRouteResponse;
@@ -62,14 +60,14 @@ export function WalkCompleteScreen({
   };
 
   const handleInstagramStoryShare = async () => {
-    if (instaSharing) return;
+    if (instaSharing || !env.INSTAGRAM_APP_ID) return;
     setInstaSharing(true);
     try {
       const uri = await shareCardRef.current?.capture?.();
       if (uri) {
         await RNShare.shareSingle({
           social: Social.InstagramStories,
-          appId: INSTAGRAM_APP_ID,
+          appId: env.INSTAGRAM_APP_ID,
           stickerImage: uri,
           backgroundTopColor: colors.mintDeep,
           backgroundBottomColor: '#04302a',
