@@ -85,6 +85,8 @@ export interface WalkRouteResponse {
   total_km: number;
   // RouteHistory로 자동 저장된 경우에만 채워짐(즐겨찾기 PATCH /api/user/routes/{id}/favorite 호출에 사용).
   id?: number | null;
+  // 기록 탭에서 저장된 경로를 다시 선택해 들어온 경우에만 채워짐(그 경로의 현재 즐겨찾기 여부).
+  is_favorite?: boolean | null;
 }
 
 /* 대화 상태 관련 스키마 */

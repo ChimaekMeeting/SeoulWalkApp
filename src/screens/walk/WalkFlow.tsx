@@ -69,6 +69,7 @@ export function WalkFlow({
       currentLocation={currentLocation}
       traveledKm={snapshot?.traveledKm ?? 0}
       elapsedMs={snapshot?.elapsedMs ?? 0}
+      steps={snapshot?.steps}
       routeId={routeResult.id ?? undefined}
       onHome={onExitToHome}
     />

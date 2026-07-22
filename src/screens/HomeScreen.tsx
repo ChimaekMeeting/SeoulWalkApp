@@ -23,7 +23,6 @@ import {
   CourseType,
   PersonaId,
   personas,
-  recentWalks,
 } from '../data/chimeakData';
 import { colors, radii, shadows, spacing } from '../theme/tokens';
 import { authStorage } from '../auth/authStorage';
@@ -34,6 +33,8 @@ import {
 } from '../components/chat/ChatConversation';
 import { ChatInput } from '../components/chat/ChatInput';
 import { WalkFlow } from './walk/WalkFlow';
+import { RecordTab } from './record/RecordTab';
+import { ScreenHeader } from '../components/ScreenHeader';
 
 const { height: SCREEN_H } = Dimensions.get('window');
 // 바텀시트 스냅 위치 (fill 컨테이너 기준 top 좌표)
@@ -158,7 +159,14 @@ export function HomeScreen({ onLogout, userId }: HomeScreenProps) {
         {route.name === 'postwalk' ? (
           <PostWalkTab id={route.id} walkResult={walkResult} go={go} />
         ) : null}
-        {route.name === 'record' ? <RecordTab nickname={nickname} /> : null}
+        {route.name === 'record' ? (
+          <RecordTab
+            onSelectRoute={selected => {
+              setActiveRoute(selected);
+              go({ name: 'realWalk' });
+            }}
+          />
+        ) : null}
         {route.name === 'me' ? (
           <MyPageTab
             persona={persona}
@@ -724,93 +732,6 @@ function PostWalkTab({
   );
 }
 
-function RecordTab({ nickname }: { nickname: string | null }) {
-  return (
-    <View style={styles.pageSoft}>
-      <ScreenHeader title="기록" subtitle="이번 달 산책 일지" />
-      <ScrollView
-        contentContainerStyle={styles.listContent}
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.monthRow}>
-          {['3월', '4월', '5월', '6월'].map((month, index) => (
-            <View
-              key={month}
-              style={[styles.monthChip, index === 2 && styles.monthChipActive]}
-            >
-              <Text
-                style={[
-                  styles.monthText,
-                  index === 2 && styles.monthTextActive,
-                ]}
-              >
-                {month}
-              </Text>
-            </View>
-          ))}
-        </View>
-        <View style={styles.pointsCard}>
-          <Text style={styles.pointsKicker}>
-            WALKING POINTS · {nickname ? `${nickname}님` : '회원님'}
-          </Text>
-          <Text style={styles.pointsValue}>2,847P</Text>
-          <View style={styles.progressTrack}>
-            <View style={styles.progressFill} />
-          </View>
-          <View style={styles.pointsSubRow}>
-            <Text style={styles.pointsSub}>LV.5까지 1,153P</Text>
-            <Text style={styles.pointsSub}>오늘 +240P</Text>
-          </View>
-          <View style={styles.pointsMiniRow}>
-            <LightMetric label="오늘 걸음" value="8,420" />
-            <LightMetric label="연속" value="8일" />
-            <LightMetric label="뱃지" value="12개" />
-          </View>
-        </View>
-        <View style={styles.summaryCard}>
-          <Text style={styles.summaryMeta}>2026 · MAY</Text>
-          <View style={styles.metricRow}>
-            <DarkOnMintMetric label="총 거리" value="9.1km" />
-            <DarkOnMintMetric label="총 시간" value="02:19" />
-            <DarkOnMintMetric label="산책일" value="8일" />
-          </View>
-        </View>
-        <View style={styles.calendarCard}>
-          <Text style={styles.cardTitle}>주간 활동</Text>
-          <View style={styles.calendarGrid}>
-            {Array.from({ length: 28 }).map((_, index) => (
-              <View
-                key={index}
-                style={[
-                  styles.calendarCell,
-                  index % 3 === 0 && styles.calendarCellMid,
-                  index % 6 === 0 && styles.calendarCellStrong,
-                ]}
-              />
-            ))}
-          </View>
-        </View>
-        <Text style={styles.blockTitle}>최근 산책</Text>
-        {recentWalks.map(walk => (
-          <View key={walk.date} style={styles.historyRow}>
-            <View style={styles.datePill}>
-              <Text style={styles.dateText}>{walk.date}</Text>
-            </View>
-            <View style={styles.historyBody}>
-              <Text style={styles.historyTitle}>{walk.course}</Text>
-              <Text style={styles.historyMeta}>
-                {walk.dist}km · {walk.time}
-              </Text>
-              <Text style={styles.historyNote}>"{walk.note}"</Text>
-            </View>
-            <Text style={styles.starText}>★ {walk.rating}</Text>
-          </View>
-        ))}
-      </ScrollView>
-    </View>
-  );
-}
-
 function MyPageTab({
   persona,
   setPersona,
@@ -953,35 +874,6 @@ function BottomNav({
   );
 }
 
-function ScreenHeader({
-  title,
-  subtitle,
-  onBack,
-  right,
-}: {
-  title: string;
-  subtitle?: string;
-  onBack?: () => void;
-  right?: string;
-}) {
-  return (
-    <View style={styles.header}>
-      {onBack ? (
-        <Pressable onPress={onBack} style={styles.headerBack}>
-          <Text style={styles.headerBackText}>‹</Text>
-        </Pressable>
-      ) : null}
-      <View style={styles.headerBody}>
-        <Text style={styles.headerTitle}>{title}</Text>
-        {subtitle ? (
-          <Text style={styles.headerSubtitle}>{subtitle}</Text>
-        ) : null}
-      </View>
-      {right ? <Text style={styles.headerRight}>{right}</Text> : null}
-    </View>
-  );
-}
-
 function Badge({ label, color }: { label: string; color: string }) {
   return (
     <View style={[styles.badge, { backgroundColor: `${color}1f` }]}>
@@ -1032,15 +924,6 @@ function LightMetric({ label, value }: { label: string; value: string }) {
     <View style={styles.lightMetric}>
       <Text style={styles.lightMetricLabel}>{label}</Text>
       <Text style={styles.lightMetricValue}>{value}</Text>
-    </View>
-  );
-}
-
-function DarkOnMintMetric({ label, value }: { label: string; value: string }) {
-  return (
-    <View style={styles.mintMetric}>
-      <Text style={styles.mintMetricLabel}>{label}</Text>
-      <Text style={styles.mintMetricValue}>{value}</Text>
     </View>
   );
 }
@@ -1131,54 +1014,6 @@ const styles = StyleSheet.create({
   },
   pillTextActive: {
     color: colors.card,
-  },
-  cardTitle: {
-    color: colors.ink,
-    fontSize: 14,
-    fontWeight: '900',
-    marginTop: spacing.sm,
-  },
-  header: {
-    minHeight: 60,
-    backgroundColor: 'rgba(255,255,255,0.96)',
-    borderBottomWidth: 1,
-    borderBottomColor: colors.line,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
-  headerBack: {
-    marginLeft: -spacing.sm,
-    width: 32,
-    height: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  headerBackText: {
-    color: colors.ink,
-    fontSize: 34,
-    fontWeight: '500',
-  },
-  headerBody: {
-    flex: 1,
-  },
-  headerTitle: {
-    color: colors.ink,
-    fontSize: 18,
-    fontWeight: '900',
-  },
-  headerSubtitle: {
-    color: colors.ink3,
-    fontSize: 12,
-    marginTop: 2,
-    fontWeight: '700',
-  },
-  headerRight: {
-    color: colors.ink2,
-    fontSize: 12,
-    fontWeight: '800',
   },
   listContent: {
     padding: spacing.lg,
@@ -1709,166 +1544,6 @@ const styles = StyleSheet.create({
   saveButtonText: {
     color: colors.card,
     fontSize: 15,
-    fontWeight: '900',
-  },
-  monthRow: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-  },
-  monthChip: {
-    borderRadius: 999,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    backgroundColor: colors.card,
-  },
-  monthChipActive: {
-    backgroundColor: colors.mintDeep,
-  },
-  monthText: {
-    color: colors.ink2,
-    fontWeight: '900',
-  },
-  monthTextActive: {
-    color: colors.card,
-  },
-  pointsCard: {
-    borderRadius: radii.lg,
-    backgroundColor: '#00563f',
-    padding: spacing.lg,
-  },
-  pointsKicker: {
-    color: '#b7eadc',
-    fontSize: 11,
-    fontWeight: '900',
-  },
-  pointsValue: {
-    color: colors.card,
-    fontSize: 34,
-    fontWeight: '900',
-    marginTop: spacing.xs,
-  },
-  progressTrack: {
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: 'rgba(255,255,255,0.18)',
-    marginTop: spacing.md,
-  },
-  progressFill: {
-    height: 6,
-    borderRadius: 3,
-    width: '68%',
-    backgroundColor: colors.gold,
-  },
-  pointsSubRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: spacing.sm,
-  },
-  pointsSub: {
-    color: 'rgba(255,255,255,0.78)',
-    fontSize: 10,
-    fontWeight: '800',
-  },
-  pointsMiniRow: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-    marginTop: spacing.md,
-  },
-  summaryCard: {
-    borderRadius: radii.lg,
-    backgroundColor: colors.mintDeep,
-    padding: spacing.lg,
-  },
-  summaryMeta: {
-    color: 'rgba(255,255,255,0.82)',
-    fontSize: 11,
-    fontWeight: '900',
-    marginBottom: spacing.sm,
-  },
-  mintMetric: {
-    flex: 1,
-  },
-  mintMetricLabel: {
-    color: 'rgba(255,255,255,0.72)',
-    fontSize: 10,
-    fontWeight: '800',
-  },
-  mintMetricValue: {
-    color: colors.card,
-    fontSize: 23,
-    fontWeight: '900',
-  },
-  calendarCard: {
-    borderRadius: 14,
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.line,
-    padding: spacing.lg,
-  },
-  calendarGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 5,
-  },
-  calendarCell: {
-    width: '12.5%',
-    aspectRatio: 1,
-    borderRadius: 4,
-    backgroundColor: colors.bgSoft,
-    borderWidth: 1,
-    borderColor: colors.line,
-  },
-  calendarCellMid: {
-    backgroundColor: '#b9eadc',
-  },
-  calendarCellStrong: {
-    backgroundColor: colors.mint,
-  },
-  historyRow: {
-    flexDirection: 'row',
-    gap: spacing.md,
-    borderRadius: 12,
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.line,
-    padding: spacing.md,
-    alignItems: 'center',
-  },
-  datePill: {
-    width: 46,
-    height: 46,
-    borderRadius: 10,
-    backgroundColor: colors.accentSoft,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  dateText: {
-    color: colors.mintDeep,
-    fontSize: 10,
-    fontWeight: '900',
-  },
-  historyBody: {
-    flex: 1,
-  },
-  historyTitle: {
-    color: colors.ink,
-    fontSize: 14,
-    fontWeight: '900',
-  },
-  historyMeta: {
-    color: colors.ink3,
-    fontSize: 11,
-    fontWeight: '800',
-  },
-  historyNote: {
-    color: colors.ink2,
-    fontSize: 11,
-    fontStyle: 'italic',
-    marginTop: spacing.xs,
-  },
-  starText: {
-    color: colors.gold,
-    fontSize: 12,
     fontWeight: '900',
   },
   profileCard: {

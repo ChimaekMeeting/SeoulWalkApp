@@ -28,11 +28,12 @@ export function WalkMapRenderer({ course, progress, isGameMode }: WalkMapRendere
 
   return (
     <View style={{ flex: 1 }}>
-      <Mapbox.MapView 
-        style={{ flex: 1 }} 
+      <Mapbox.MapView
+        style={{ flex: 1 }}
         styleURL={'mapbox://styles/mapbox/dark-v11'}
         logoEnabled={false}
         attributionEnabled={false}
+        localizeLabels={{ locale: 'ko' }}
       >
         <Mapbox.Camera
           zoomLevel={isGameMode ? 17 : 14}
