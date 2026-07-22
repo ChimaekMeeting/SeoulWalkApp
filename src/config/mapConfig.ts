@@ -9,9 +9,10 @@ export const mapConfig = {
     ne: [127.183, 37.715],
     sw: [126.764, 37.428],
   },
+  // 커스텀 스타일(Mapbox Studio): 라벨 폰트를 Noto Sans로 통일한 버전
   styles: {
-    overview: 'mapbox://styles/mapbox/streets-v12',
-    walk: 'mapbox://styles/mapbox/dark-v11',
+    overview: 'mapbox://styles/kuty2004/cmrw5cfv400a901rdhuuq2fo8',
+    walk: 'mapbox://styles/kuty2004/cmrw5k2b400a501rja15rb3wx',
   },
   overviewCamera: {
     zoomLevel: 14,

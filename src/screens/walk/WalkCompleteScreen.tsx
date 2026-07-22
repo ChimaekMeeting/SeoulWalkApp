@@ -1,17 +1,25 @@
-import React, { useState } from 'react';
-import { Pressable, Share, StyleSheet, Text, View } from 'react-native';
+import React, { useRef, useState } from 'react';
+import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import ViewShot, { ViewShotRef } from 'react-native-view-shot';
+import RNShare, { Social } from 'react-native-share';
 import { toggleFavoriteRoute } from '../../api/routes';
 import { estimateSteps } from '../../utils/walkEstimate';
-import { radii, spacing } from '../../theme/tokens';
+import { buildRouteThumbnailUrl } from '../../utils/geo';
+import { colors, radii, spacing } from '../../theme/tokens';
 import { RouteMapView } from '../../components/map';
 import { LocationInfo, WalkRouteResponse } from '../../types/prewalk';
+
+// Meta(Facebook) Developers에 등록한 앱 ID — Instagram 스토리 직행 공유(shareSingle)에 필수.
+const INSTAGRAM_APP_ID = '1282650127107639';
 
 interface Props {
   routeResult: WalkRouteResponse;
   currentLocation: LocationInfo | null;
   traveledKm: number;
   elapsedMs: number;
+  /** 실제 만보계 걸음 수(6b에서 측정). 만보계를 못 쓴 경우 null이면 거리 기반 추정치를 대신 보여준다. */
+  steps?: number | null;
   /** WalkRouteResponse에 아직 route id가 없어 optional — 없으면 즐겨찾기 비활성. */
   routeId?: number;
   onHome: () => void;
@@ -22,19 +30,56 @@ export function WalkCompleteScreen({
   currentLocation,
   traveledKm,
   elapsedMs,
+  steps: measuredSteps,
   routeId,
   onHome,
 }: Props) {
-  const [isFavorite, setIsFavorite] = useState(false);
+  const [isFavorite, setIsFavorite] = useState(routeResult.is_favorite ?? false);
   const [favoritePending, setFavoritePending] = useState(false);
+  const [sharing, setSharing] = useState(false);
+  const [instaSharing, setInstaSharing] = useState(false);
+  const shareCardRef = useRef<ViewShotRef>(null);
 
   const minutes = Math.round(elapsedMs / 60000);
-  const steps = estimateSteps(traveledKm);
+  const steps = measuredSteps ?? estimateSteps(traveledKm);
+  const thumbnailUrl = buildRouteThumbnailUrl(routeResult.coordinates, 320);
 
-  const handleShare = () => {
-    Share.share({
-      message: `방금 ${traveledKm.toFixed(1)}km, ${minutes}분 동안 산책했어요! 🚶`,
-    });
+  const handleShare = async () => {
+    if (sharing) return;
+    setSharing(true);
+    try {
+      const uri = await shareCardRef.current?.capture?.();
+      await RNShare.open({
+        url: uri,
+        message: `방금 ${traveledKm.toFixed(1)}km, ${minutes}분 동안 산책했어요! 🚶`,
+        failOnCancel: false,
+      });
+    } catch {
+      // 캡처 실패/공유 취소 등 — 무시
+    } finally {
+      setSharing(false);
+    }
+  };
+
+  const handleInstagramStoryShare = async () => {
+    if (instaSharing) return;
+    setInstaSharing(true);
+    try {
+      const uri = await shareCardRef.current?.capture?.();
+      if (uri) {
+        await RNShare.shareSingle({
+          social: Social.InstagramStories,
+          appId: INSTAGRAM_APP_ID,
+          stickerImage: uri,
+          backgroundTopColor: colors.mintDeep,
+          backgroundBottomColor: '#04302a',
+        });
+      }
+    } catch {
+      // 인스타그램 미설치/공유 취소 등 — 무시
+    } finally {
+      setInstaSharing(false);
+    }
   };
 
   const handleFavorite = async () => {
@@ -74,12 +119,52 @@ export function WalkCompleteScreen({
         />
       </View>
 
+      {/* 화면엔 안 보이고 공유 이미지 캡처용으로만 쓰는 카드 — 실시간 지도 대신 라벨 없는 정적 지도를 써서 캡처 결과가 항상 일정하다. */}
+      <View style={styles.hiddenCaptureArea} pointerEvents="none">
+        <ViewShot
+          ref={shareCardRef}
+          style={styles.shareCard}
+          options={{ format: 'png', quality: 0.95 }}
+        >
+          <Text style={styles.shareBrandText}>🚶 ROUDIE</Text>
+
+          <View style={styles.shareCelebrate}>
+            <Text style={styles.shareCelebrateIcon}>🎉</Text>
+            <Text style={styles.shareCelebrateTitle}>축하합니다!</Text>
+          </View>
+
+          <View style={styles.shareHeroStat}>
+            <Text style={styles.shareHeroValue}>{traveledKm.toFixed(1)}</Text>
+            <Text style={styles.shareHeroUnit}>km 걸었어요</Text>
+          </View>
+
+          <View style={styles.shareStatRow}>
+            <ShareStat value={`${minutes}`} unit="분" />
+            <View style={styles.shareStatDivider} />
+            <ShareStat value={steps.toLocaleString()} unit="걸음" />
+          </View>
+
+          {thumbnailUrl ? (
+            <View style={styles.shareRoutePreview}>
+              <Image source={{ uri: thumbnailUrl }} style={styles.shareRoutePreviewImage} />
+            </View>
+          ) : null}
+        </ViewShot>
+      </View>
+
       <View style={styles.actionRow}>
         <Pressable
           onPress={handleShare}
-          style={({ pressed }) => [styles.secondaryButton, pressed && styles.buttonPressed]}
+          disabled={sharing}
+          style={({ pressed }) => [
+            styles.secondaryButton,
+            sharing && styles.secondaryButtonDisabled,
+            pressed && styles.buttonPressed,
+          ]}
         >
-          <Text style={styles.secondaryButtonText}>🔗 공유</Text>
+          <Text style={styles.secondaryButtonText} numberOfLines={1}>
+            {sharing ? '공유중...' : '🔗 공유'}
+          </Text>
         </Pressable>
         <Pressable
           onPress={handleFavorite}
@@ -90,9 +175,25 @@ export function WalkCompleteScreen({
             pressed && styles.buttonPressed,
           ]}
         >
-          <Text style={styles.secondaryButtonText}>{isFavorite ? '★ 즐겨찾기됨' : '☆ 즐겨찾기'}</Text>
+          <Text style={styles.secondaryButtonText} numberOfLines={1}>
+            {isFavorite ? '★ 즐겨찾기됨' : '☆ 즐겨찾기'}
+          </Text>
         </Pressable>
       </View>
+
+      <Pressable
+        onPress={handleInstagramStoryShare}
+        disabled={instaSharing}
+        style={({ pressed }) => [
+          styles.instagramButton,
+          instaSharing && styles.secondaryButtonDisabled,
+          pressed && styles.buttonPressed,
+        ]}
+      >
+        <Text style={styles.instagramButtonText}>
+          {instaSharing ? '공유 준비 중...' : '📸 인스타 스토리로 공유'}
+        </Text>
+      </Pressable>
 
       <Pressable
         onPress={onHome}
@@ -109,6 +210,15 @@ function Stat({ value, unit }: { value: string; unit: string }) {
     <View style={styles.stat}>
       <Text style={styles.statValue}>{value}</Text>
       <Text style={styles.statUnit}>{unit}</Text>
+    </View>
+  );
+}
+
+function ShareStat({ value, unit }: { value: string; unit: string }) {
+  return (
+    <View style={styles.shareStat}>
+      <Text style={styles.shareStatValue}>{value}</Text>
+      <Text style={styles.shareStatUnit}>{unit}</Text>
     </View>
   );
 }
@@ -167,6 +277,90 @@ const styles = StyleSheet.create({
   routePreviewMap: {
     flex: 1,
   },
+  hiddenCaptureArea: {
+    position: 'absolute',
+    top: 0,
+    left: -9999,
+    width: 320 + spacing.xl * 2,
+  },
+  shareCard: {
+    backgroundColor: colors.bgSoft,
+    borderRadius: radii.xl,
+    borderWidth: 1,
+    borderColor: colors.line,
+    padding: spacing.xl,
+  },
+  shareBrandText: {
+    alignSelf: 'center',
+    fontSize: 11,
+    fontWeight: '900',
+    letterSpacing: 1.5,
+    color: colors.mintDeep,
+  },
+  shareCelebrate: {
+    alignItems: 'center',
+    marginTop: spacing.lg,
+    gap: spacing.xs,
+  },
+  shareCelebrateIcon: {
+    fontSize: 36,
+  },
+  shareCelebrateTitle: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: '#111',
+  },
+  shareHeroStat: {
+    alignItems: 'center',
+    marginTop: spacing.lg,
+  },
+  shareHeroValue: {
+    fontSize: 52,
+    fontWeight: '900',
+    color: colors.mintDeep,
+    lineHeight: 58,
+  },
+  shareHeroUnit: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#6b7280',
+  },
+  shareStatRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xl,
+    marginTop: spacing.lg,
+  },
+  shareStatDivider: {
+    width: 1,
+    height: 28,
+    backgroundColor: colors.line,
+  },
+  shareStat: {
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  shareStatValue: {
+    fontSize: 20,
+    fontWeight: '900',
+    color: '#111',
+  },
+  shareStatUnit: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#9E9E9E',
+  },
+  shareRoutePreview: {
+    marginTop: spacing.xl,
+    borderRadius: radii.lg,
+    overflow: 'hidden',
+    backgroundColor: '#f4f4f4',
+  },
+  shareRoutePreviewImage: {
+    width: '100%',
+    aspectRatio: 1,
+  },
   actionRow: {
     flexDirection: 'row',
     gap: spacing.sm,
@@ -180,6 +374,7 @@ const styles = StyleSheet.create({
     borderColor: '#E0E0E0',
     alignItems: 'center',
     justifyContent: 'center',
+    paddingHorizontal: spacing.xs,
   },
   secondaryButtonDisabled: {
     opacity: 0.4,
@@ -188,6 +383,19 @@ const styles = StyleSheet.create({
     color: '#111',
     fontSize: 14,
     fontWeight: '700',
+  },
+  instagramButton: {
+    marginTop: spacing.sm,
+    height: 48,
+    borderRadius: radii.lg,
+    backgroundColor: '#fce3ec',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  instagramButtonText: {
+    color: '#c2185b',
+    fontSize: 14,
+    fontWeight: '800',
   },
   homeButton: {
     marginTop: 'auto',

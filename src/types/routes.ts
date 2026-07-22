@@ -11,3 +11,16 @@ export interface RouteHistoryItem {
   is_favorite: boolean;
   created_at: string;
 }
+
+/* GET /api/user/routes 응답 (백엔드 RouteHistoryResponse 그대로) */
+export interface RouteHistoryResponse {
+  histories: RouteHistoryItem[];
+  total: number;
+}
+
+/* GET /api/user/routes 쿼리 파라미터 */
+export interface RouteHistoryQuery {
+  limit?: number;
+  offset?: number;
+  is_favorite?: boolean;
+}

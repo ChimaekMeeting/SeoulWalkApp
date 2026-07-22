@@ -1,6 +1,7 @@
-import React, { useMemo, useRef } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Pedometer } from 'expo-sensors';
 import { RouteMapView } from '../../components/map';
 import { WalkRouteResponse } from '../../types/prewalk';
 import { useWatchLocation } from '../../hooks/useWatchLocation';
@@ -10,6 +11,8 @@ import { radii, spacing } from '../../theme/tokens';
 export interface WalkEndSnapshot {
   traveledKm: number;
   elapsedMs: number;
+  /** 만보계로 실시간 측정한 걸음 수. 기기에서 만보계를 못 쓰면 null(호출부에서 거리 기반 추정치로 대체). */
+  steps: number | null;
 }
 
 interface Props {
@@ -20,6 +23,24 @@ interface Props {
 export function WalkInProgressScreen({ routeResult, onRequestEnd }: Props) {
   const { coords } = useWatchLocation();
   const startedAtRef = useRef(Date.now());
+  const stepsRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    let subscription: { remove: () => void } | undefined;
+    let cancelled = false;
+    Pedometer.isAvailableAsync()
+      .then(available => {
+        if (!available || cancelled) return;
+        subscription = Pedometer.watchStepCount(result => {
+          stepsRef.current = result.steps;
+        });
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+      subscription?.remove();
+    };
+  }, []);
 
   const progress = useMemo(() => {
     if (!coords) return { traveledKm: 0, remainingKm: routeResult.total_km, progressRatio: 0 };
@@ -38,6 +59,7 @@ export function WalkInProgressScreen({ routeResult, onRequestEnd }: Props) {
     onRequestEnd({
       traveledKm: progress.traveledKm,
       elapsedMs: Date.now() - startedAtRef.current,
+      steps: stepsRef.current,
     });
   };
 

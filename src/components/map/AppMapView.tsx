@@ -57,6 +57,7 @@ export function AppMapView(props: AppMapViewProps) {
         styleURL={isWalk ? mapConfig.styles.walk : mapConfig.styles.overview}
         logoEnabled={false}
         attributionEnabled={false}
+        localizeLabels={{ locale: 'ko' }}
       >
         {isWalk ? (
           <Mapbox.Camera

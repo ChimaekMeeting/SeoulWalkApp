@@ -1,6 +1,8 @@
-import React from 'react';
-import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import { Animated, Dimensions, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { radii, spacing } from '../../theme/tokens';
+
+const SCREEN_HEIGHT = Dimensions.get('window').height;
 
 interface Props {
   visible: boolean;
@@ -9,11 +11,25 @@ interface Props {
 }
 
 export function WalkEndConfirmModal({ visible, onCancel, onConfirm }: Props) {
+  const translateY = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
+
+  useEffect(() => {
+    if (visible) {
+      Animated.timing(translateY, {
+        toValue: 0,
+        duration: 250,
+        useNativeDriver: true,
+      }).start();
+    } else {
+      translateY.setValue(SCREEN_HEIGHT);
+    }
+  }, [visible, translateY]);
+
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onCancel}>
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
       <View style={styles.backdrop}>
         <Pressable style={StyleSheet.absoluteFill} onPress={onCancel} />
-        <View style={styles.sheet}>
+        <Animated.View style={[styles.sheet, { transform: [{ translateY }] }]}>
           <View style={styles.dragHandle} />
           <Text style={styles.icon}>🚶</Text>
           <Text style={styles.title}>산책을 정말로{'\n'}종료하시겠습니까?</Text>
@@ -32,7 +48,7 @@ export function WalkEndConfirmModal({ visible, onCancel, onConfirm }: Props) {
               <Text style={styles.confirmButtonText}>종료</Text>
             </Pressable>
           </View>
-        </View>
+        </Animated.View>
       </View>
     </Modal>
   );
