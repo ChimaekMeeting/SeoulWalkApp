@@ -159,6 +159,7 @@ function HomeTab({
 }) {
   const chatRef = useRef<ChatConversationHandle>(null);
   const [chatDone, setChatDone] = useState(false);
+  const [chatSending, setChatSending] = useState(false);
   const [previewHeight, setPreviewHeight] = useState(50);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
 
@@ -274,6 +275,7 @@ function HomeTab({
           go={go}
           onRouteReady={onRouteReady}
           onDoneChange={setChatDone}
+          onSendingChange={setChatSending}
           onPreviewHeightChange={setPreviewHeight}
           bottomInset={chatBottomInset}
           onRequestClose={() => {
@@ -290,7 +292,7 @@ function HomeTab({
             // 메시지를 보내는 순간, 3단계 스와이프 중 가장 위(꽉 찬) 상태로 올려준다.
             snapTo(SNAP_UP);
           }}
-          disabled={chatDone}
+          disabled={chatDone || chatSending}
         />
       </View>
     </View>
