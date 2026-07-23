@@ -21,10 +21,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     borderRadius: 18,
-    backgroundColor: colors.mintDeep,
+    backgroundColor: colors.black,
   },
   myBubbleText: {
-    color: colors.card,
+    color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '700',
   },

@@ -3,12 +3,6 @@ import { WalkMode, WalkRouteResponse } from '../../types/prewalk';
 import { estimateDurationMinutes, estimateKcal } from '../../utils/walkEstimate';
 import { colors, radii, spacing } from '../../theme/tokens';
 
-const MODE_LABEL: Record<WalkMode, string> = {
-  [WalkMode.CIRCULAR_RANDOM]: '순환 · LOOP',
-  [WalkMode.ONEWAY_SHORTEST]: '편도 · ONE-WAY',
-  [WalkMode.ONEWAY_RANDOM]: '편도 · ONE-WAY',
-};
-
 const MODE_ICON: Record<WalkMode, string> = {
   [WalkMode.CIRCULAR_RANDOM]: '◯',
   [WalkMode.ONEWAY_SHORTEST]: '→',
@@ -19,42 +13,81 @@ const MODE_ICON: Record<WalkMode, string> = {
 export function RouteCandidate({
   route,
   onPress,
+  onRetry,
 }: {
   route: WalkRouteResponse;
   onPress: () => void;
+  onRetry: () => void;
 }) {
   const durationMinutes = estimateDurationMinutes(route.total_km);
   const kcal = estimateKcal(route.total_km);
 
   return (
-    <Pressable onPress={onPress} style={styles.card}>
-      <View style={styles.icon}>
-        <Text style={styles.iconText}>{MODE_ICON[route.mode]}</Text>
+    <View>
+      <View style={styles.chatLine}>
+        <View style={styles.chatIcon}>
+          <Text style={styles.chatIconText}>✳</Text>
+        </View>
+        <View style={styles.cardColumn}>
+          <Pressable onPress={onPress} style={styles.card}>
+            <View style={styles.icon}>
+              <Text style={styles.iconText}>{MODE_ICON[route.mode]}</Text>
+            </View>
+            <View style={styles.body}>
+              <Text style={styles.title}>Roudi가 찾은 산책 코스</Text>
+              <Text style={styles.meta}>
+                {route.total_km.toFixed(1)}km · {durationMinutes}분 · {kcal}kcal
+              </Text>
+            </View>
+          </Pressable>
+          <View style={styles.chatButtons}>
+            <Pressable onPress={onPress} style={styles.ghostButtonSmall}>
+              <Text style={styles.ghostButtonText}>산책하기</Text>
+            </Pressable>
+            <Pressable onPress={onRetry} style={styles.ghostButtonSmall}>
+              <Text style={styles.ghostButtonText}>다시 묻기</Text>
+            </Pressable>
+          </View>
+        </View>
       </View>
-      <View style={styles.body}>
-        <Text style={styles.type}>{MODE_LABEL[route.mode]}</Text>
-        <Text style={styles.title}>RouDi가 찾은 산책 코스</Text>
-        <Text style={styles.meta}>
-          {route.total_km.toFixed(1)}km · {durationMinutes}분 · {kcal}kcal
-        </Text>
-      </View>
-      <Text style={styles.chevron}>›</Text>
-    </Pressable>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  chatLine: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+  },
+  chatIcon: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: colors.black,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  chatIconText: {
+    color: colors.card,
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  cardColumn: {
+    flexShrink: 1,
+    width: '82%',
+  },
   card: {
-    marginLeft: 38,
-    marginTop: spacing.sm,
     padding: spacing.md,
     borderRadius: radii.lg,
-    backgroundColor: colors.card,
-    borderWidth: 2,
-    borderColor: colors.mint,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: colors.black,
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
+    width: '100%',
   },
   icon: {
     width: 62,
@@ -62,7 +95,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: `${colors.mintDeep}22`,
+    backgroundColor: colors.containerBackground,
   },
   iconText: {
     color: colors.ink,
@@ -71,6 +104,7 @@ const styles = StyleSheet.create({
   },
   body: {
     flex: 1,
+    width: '100%',
   },
   type: {
     fontSize: 11,
@@ -79,18 +113,35 @@ const styles = StyleSheet.create({
   },
   title: {
     color: colors.ink,
-    fontSize: 15,
+    fontSize: 18,
     fontWeight: '900',
     marginTop: 2,
   },
   meta: {
     color: colors.ink3,
-    fontSize: 11,
+    fontSize: 14,
     fontWeight: '800',
     marginTop: spacing.xs,
   },
-  chevron: {
-    color: colors.ink3,
-    fontSize: 28,
+  chatButtons: {
+    marginTop: spacing.sm,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    width: '100%',
+  },
+  ghostButtonSmall: {
+    borderRadius: 999,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.line2,
+    flex: 1,
+    alignItems: 'center',
+  },
+  ghostButtonText: {
+    color: colors.ink2,
+    fontSize: 12,
+    fontWeight: '900',
   },
 });

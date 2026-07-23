@@ -5,7 +5,7 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { Pressable, ScrollView, Text, View, StyleSheet } from 'react-native';
+import { ScrollView, Text, View, StyleSheet } from 'react-native';
 import { getInitMessage, getMessage } from '../../api/prewalk';
 import {
   ChatResponse,
@@ -40,6 +40,7 @@ type Props = {
   go: Navigate;
   onRequestClose: () => void; // ✕ 또는 코스 선택 시 시트를 접는 콜백
   onDoneChange: (done: boolean) => void; // 질문이 모두 끝났는지를 외부(입력창)에 알림
+  onSendingChange: (sending: boolean) => void; // 챗봇 응답을 기다리는 중인지를 외부(입력창)에 알림
   bottomInset: number; // 바텀시트 바깥에 떠 있는 ChatInput에 가려지지 않도록 남겨둘 여백
   // 헤더 + 첫 봇 메시지의 실측 높이를 부모(중간 스냅 계산)에 전달.
   // 대화가 길어져도 이 미리보기 묶음 자체의 크기는 바뀌지 않아, 중간 스냅이 항상 같은
@@ -58,6 +59,7 @@ export const ChatConversation = forwardRef(function ChatConversation(
     go,
     onRequestClose,
     onDoneChange,
+    onSendingChange,
     bottomInset,
     onPreviewHeightChange,
   }: Props,
@@ -160,6 +162,10 @@ export const ChatConversation = forwardRef(function ChatConversation(
   }, [done, onDoneChange]);
 
   useEffect(() => {
+    onSendingChange(sending);
+  }, [sending, onSendingChange]);
+
+  useEffect(() => {
     // previewGroupHeight는 스크롤 여백(padding)을 뺀 순수 콘텐츠 높이라,
     // 위쪽 padding(spacing.lg)만 더하면 "미리보기 영역이 실제로 차지하는 높이"가 된다.
     onPreviewHeightChange(headerHeight + previewGroupHeight + spacing.lg);
@@ -234,20 +240,11 @@ export const ChatConversation = forwardRef(function ChatConversation(
             />
           ) : null}
           {done && routeResult ? (
-            <View>
-              <RouteCandidate
-                route={routeResult}
-                onPress={() => onRouteReady(routeResult)}
-              />
-              <View style={styles.chatButtons}>
-                <Pressable
-                  onPress={() => startConversation()}
-                  style={styles.ghostButtonSmall}
-                >
-                  <Text style={styles.ghostButtonText}>다시 묻기</Text>
-                </Pressable>
-              </View>
-            </View>
+            <RouteCandidate
+              route={routeResult}
+              onPress={() => onRouteReady(routeResult)}
+              onRetry={() => startConversation()}
+            />
           ) : null}
         </View>
       </ScrollView>
@@ -267,6 +264,7 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.md,
     borderBottomWidth: 1,
     borderBottomColor: colors.line,
+    backgroundColor: '#FFFFFF'
   },
   chatHeaderTitle: {
     fontSize: 16,
@@ -275,9 +273,11 @@ const styles = StyleSheet.create({
   },
   chatScroll: {
     flex: 1,
+    backgroundColor: '#FFFFFF',
   },
   chatContent: {
     padding: spacing.lg,
+    backgroundColor: '#FFFFFF',
   },
   bubbleStack: {
     width: '100%',
@@ -285,34 +285,5 @@ const styles = StyleSheet.create({
   },
   previewGroup: {
     gap: spacing.md,
-  },
-  chatButtons: {
-    marginTop: spacing.lg,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: spacing.sm,
-  },
-  primaryButtonSmall: {
-    borderRadius: 999,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    backgroundColor: colors.mintDeep,
-  },
-  primaryButtonText: {
-    color: colors.card,
-    fontSize: 12,
-    fontWeight: '900',
-  },
-  ghostButtonSmall: {
-    borderRadius: 999,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    borderWidth: 1,
-    borderColor: colors.line2,
-  },
-  ghostButtonText: {
-    color: colors.ink2,
-    fontSize: 12,
-    fontWeight: '900',
   },
 });

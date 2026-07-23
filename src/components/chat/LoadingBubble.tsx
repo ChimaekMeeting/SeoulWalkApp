@@ -26,7 +26,7 @@ const styles = StyleSheet.create({
     width: 30,
     height: 30,
     borderRadius: 15,
-    backgroundColor: colors.mint,
+    backgroundColor: colors.black,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -44,7 +44,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     borderRadius: 18,
-    backgroundColor: colors.card,
+    backgroundColor: colors.containerBackground,
   },
   chatText: {
     flexShrink: 1,

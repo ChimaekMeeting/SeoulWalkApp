@@ -56,7 +56,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     borderRadius: 999,
-    backgroundColor: colors.card,
+    backgroundColor: '#FFFFFF',
   },
   input: {
     flex: 1,
@@ -67,18 +67,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     fontSize: 14,
     color: colors.ink,
-    backgroundColor: colors.bg,
+    backgroundColor: '#FFFFFF',
   },
   sendButton: {
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: colors.mintDeep,
+    backgroundColor: colors.black,
     alignItems: 'center',
     justifyContent: 'center',
   },
   sendButtonDisabled: {
-    backgroundColor: colors.line2,
+    backgroundColor: colors.containerBackground,
   },
   sendButtonPressed: {
     opacity: 0.75,
