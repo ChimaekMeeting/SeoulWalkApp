@@ -43,7 +43,7 @@ client.interceptors.response.use(
     try {
       const { data } = await axios.get<{ status: string; access_token: string }>(
         `${env.API_BASE_URL}/api/auth/check/refresh_token`,
-        { params: { refresh_token: refreshToken } },
+        { headers: { Authorization: `Bearer ${refreshToken}` } },
       );
 
       if (data.status !== 'SUCCESS') {
