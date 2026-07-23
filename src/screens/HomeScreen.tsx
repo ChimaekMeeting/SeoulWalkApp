@@ -14,16 +14,9 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocation } from '../hooks/useLocation';
-import { MockMapView } from '../components/MockMapView';
 import { AppMapView } from '../components/map/AppMapView';
-import { WalkMapRenderer } from '../components/map/WalkMapRenderer';
 import { LocationInfo, WalkRouteResponse } from '../types/prewalk';
-import {
-  courses,
-  CourseType,
-  PersonaId,
-  personas,
-} from '../data/chimeakData';
+import { PersonaId, personas } from '../data/chimeakData';
 import { colors, radii, shadows, spacing } from '../theme/tokens';
 import { authStorage } from '../auth/authStorage';
 import { Route, TabName, Navigate } from '../navigation/types';
@@ -48,7 +41,6 @@ const CHAT_INPUT_HEIGHT = 140;
 
 const navItems: { name: TabName; label: string; icon: string }[] = [
   { name: 'home', label: '홈', icon: '⌂' },
-  { name: 'courses', label: '추천 코스', icon: '♬' },
   { name: 'record', label: '기록', icon: '♧' },
   { name: 'me', label: '내 정보', icon: '♙' },
 ];
@@ -73,13 +65,6 @@ export function HomeScreen({ onLogout, userId }: HomeScreenProps) {
       },
     );
   }, [userId]);
-  const [recommendedFilter, setRecommendedFilter] = useState<
-    CourseType | undefined
-  >();
-  const [walkResult, setWalkResult] = useState<{
-    dist: string;
-    time: string;
-  } | null>(null);
   const { coords } = useLocation();
   const currentLocation: LocationInfo = {
     lat: coords?.latitude ?? null,
@@ -93,9 +78,7 @@ export function HomeScreen({ onLogout, userId }: HomeScreenProps) {
 
   const go = (next: Route | TabName) => {
     if (typeof next === 'string') {
-      if (next === 'courses') {
-        setRoute({ name: 'courses', filter: recommendedFilter ?? 'all' });
-      } else if (next === 'home') {
+      if (next === 'home') {
         setRoute({ name: 'home' });
       } else if (next === 'record') {
         setRoute({ name: 'record' });
@@ -108,7 +91,7 @@ export function HomeScreen({ onLogout, userId }: HomeScreenProps) {
   };
 
   const activeTab = getTab(route);
-  const showNav = ['home', 'courses', 'record', 'me'].includes(route.name);
+  const showNav = ['home', 'record', 'me'].includes(route.name);
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
@@ -127,25 +110,6 @@ export function HomeScreen({ onLogout, userId }: HomeScreenProps) {
             go={go}
           />
         ) : null}
-        {route.name === 'courses' ? (
-          <CoursesTab
-            filter={route.filter ?? recommendedFilter ?? 'all'}
-            go={go}
-          />
-        ) : null}
-        {route.name === 'course' ? (
-          <CourseDetail id={route.id} go={go} />
-        ) : null}
-        {route.name === 'walk' ? (
-          <WalkTab
-            id={route.id}
-            go={go}
-            onDone={(dist, time) => {
-              setWalkResult({ dist, time });
-              go({ name: 'postwalk', id: route.id });
-            }}
-          />
-        ) : null}
         {route.name === 'realWalk' && activeRoute ? (
           <WalkFlow
             routeResult={activeRoute}
@@ -155,9 +119,6 @@ export function HomeScreen({ onLogout, userId }: HomeScreenProps) {
               go('home');
             }}
           />
-        ) : null}
-        {route.name === 'postwalk' ? (
-          <PostWalkTab id={route.id} walkResult={walkResult} go={go} />
         ) : null}
         {route.name === 'record' ? (
           <RecordTab
@@ -184,9 +145,6 @@ export function HomeScreen({ onLogout, userId }: HomeScreenProps) {
 }
 
 function getTab(route: Route): TabName {
-  if (route.name === 'course') {
-    return 'courses';
-  }
   if (route.name === 'postwalk') {
     return 'record';
   }
@@ -349,389 +307,6 @@ function HomeTab({
   );
 }
 
-function CoursesTab({
-  filter,
-  go,
-}: {
-  filter: CourseType | 'all';
-  go: Navigate;
-}) {
-  const [activeType, setActiveType] = useState<CourseType | 'all'>(filter);
-  const filtered = courses.filter(
-    course => activeType === 'all' || course.type === activeType,
-  );
-
-  return (
-    <View style={styles.pageSoft}>
-      <ScreenHeader
-        title="추천 코스"
-        subtitle="힐링타임 · 6개의 길"
-        onBack={() => go('home')}
-      />
-      <ScrollView
-        contentContainerStyle={styles.listContent}
-        showsVerticalScrollIndicator={false}
-      >
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.filterStrip}
-        >
-          {[
-            { id: 'all', label: `전체 ${courses.length}` },
-            {
-              id: 'loop',
-              label: `순환 ${courses.filter(course => course.type === 'loop').length
-                }`,
-            },
-            {
-              id: 'oneway',
-              label: `편도 ${courses.filter(course => course.type === 'oneway').length
-                }`,
-            },
-          ].map(item => (
-            <Pressable
-              key={item.id}
-              onPress={() => setActiveType(item.id as CourseType | 'all')}
-              style={[styles.pill, activeType === item.id && styles.pillActive]}
-            >
-              <Text
-                style={[
-                  styles.pillText,
-                  activeType === item.id && styles.pillTextActive,
-                ]}
-              >
-                {item.label}
-              </Text>
-            </Pressable>
-          ))}
-          <View style={styles.pill}>
-            <Text style={styles.pillText}>↑↓ 거리순</Text>
-          </View>
-        </ScrollView>
-
-        <View style={styles.tagStrip}>
-          {['#야경', '#한강', '#골목', '#카페', '#짧게', '#운동'].map(tag => (
-            <Text key={tag} style={styles.tagFilter}>
-              {tag}
-            </Text>
-          ))}
-        </View>
-
-        {filtered.map(course => (
-          <Pressable
-            key={course.id}
-            onPress={() => go({ name: 'course', id: course.id })}
-            style={styles.courseRow}
-          >
-            <MockMapView mode="overview" course={course} />
-            <View style={styles.courseRowBody}>
-              <View style={styles.inlineRow}>
-                <Text style={[styles.loopText, { color: course.color }]}>
-                  {course.type === 'loop' ? '◯ LOOP' : '→ ONE-WAY'}
-                </Text>
-                <Badge label={course.badges[0]} color={course.color} />
-              </View>
-              <Text style={styles.courseTitle}>{course.title}</Text>
-              <Text style={styles.courseSub}>{course.subtitle}</Text>
-              <Text style={styles.courseMeta}>
-                {course.distance}km · {course.duration}분 · {course.kcal}kcal
-              </Text>
-            </View>
-          </Pressable>
-        ))}
-      </ScrollView>
-    </View>
-  );
-}
-
-function CourseDetail({ id, go }: { id: string; go: Navigate }) {
-  const course = getCourse(id);
-
-  return (
-    <View style={styles.detailPage}>
-      <View style={styles.detailMapWrap}>
-        <MockMapView mode="detail" course={course} />
-        <Pressable onPress={() => go('courses')} style={styles.backCircle}>
-          <Text style={styles.circleIcon}>‹</Text>
-        </Pressable>
-        <View style={styles.heartCircle}>
-          <Text style={styles.circleIcon}>♡</Text>
-        </View>
-      </View>
-      <ScrollView
-        contentContainerStyle={styles.detailSheet}
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.tagStrip}>
-          <Badge
-            label={course.type === 'loop' ? '◯ 순환' : '→ 편도'}
-            color={course.color}
-          />
-          {course.badges.map(badge => (
-            <Badge key={badge} label={badge} color={colors.accent} />
-          ))}
-        </View>
-        <Text style={styles.detailTitle}>{course.title}</Text>
-        <Text style={styles.detailBlurb}>{course.blurb}</Text>
-        <View style={styles.metricRow}>
-          <StatTile label="거리" value={`${course.distance}`} unit="km" />
-          <StatTile label="시간" value={`${course.duration}`} unit="분" />
-          <StatTile label="칼로리" value={`${course.kcal}`} unit="kcal" />
-        </View>
-        <Text style={styles.blockTitle}>
-          경유지 {course.waypoints.length}곳
-        </Text>
-        <View style={styles.waypointList}>
-          {course.waypoints.map((waypoint, index) => (
-            <View key={`${waypoint}-${index}`} style={styles.waypointRow}>
-              <View
-                style={[
-                  styles.waypointDot,
-                  { borderColor: course.color },
-                  (index === 0 || index === course.waypoints.length - 1) && {
-                    backgroundColor: course.color,
-                  },
-                ]}
-              />
-              <Text style={styles.waypointText}>{waypoint}</Text>
-              {index === 0 ? (
-                <Text style={[styles.startText, { color: course.color }]}>
-                  START
-                </Text>
-              ) : null}
-              {index === course.waypoints.length - 1 &&
-                course.type === 'oneway' ? (
-                <Text style={[styles.startText, { color: course.color }]}>
-                  END
-                </Text>
-              ) : null}
-            </View>
-          ))}
-        </View>
-        <Text style={styles.blockTitle}>이 길의 분위기</Text>
-        <View style={styles.tagStrip}>
-          {course.tags.map(tag => (
-            <Text key={tag} style={styles.moodTag}>
-              {tag}
-            </Text>
-          ))}
-        </View>
-        <View style={styles.actionRow}>
-          <Pressable
-            onPress={() => go({ name: 'walk', id: course.id })}
-            style={styles.startButton}
-          >
-            <Text style={styles.startButtonText}>▶ 지금 산책 시작</Text>
-          </Pressable>
-          <Pressable style={styles.scheduleButton}>
-            <Text style={styles.scheduleButtonText}>일정 추가</Text>
-          </Pressable>
-        </View>
-      </ScrollView>
-    </View>
-  );
-}
-
-function WalkTab({
-  id,
-  go,
-  onDone,
-}: {
-  id: string;
-  go: Navigate;
-  onDone: (dist: string, time: string) => void;
-}) {
-  const course = getCourse(id);
-  const [mode, setMode] = useState<'game' | 'map'>('game');
-  const [paused, setPaused] = useState(false);
-  const progress = paused ? 0.42 : 0.46;
-  const distNow = (course.distance * progress).toFixed(2);
-  const kcalNow = Math.round(course.kcal * progress);
-
-  return (
-    <View style={styles.walkPage}>
-      <WalkMapRenderer
-        course={course}
-        progress={progress}
-        isGameMode={mode === 'game'}
-      />
-
-      <View style={styles.walkTop}>
-        <View style={styles.weatherDark}>
-          <Text style={styles.weatherDarkText}>
-            ☾ 날씨: 흐림{'\n'}시간: 저녁
-          </Text>
-        </View>
-        <Pressable
-          onPress={() => setMode(mode === 'game' ? 'map' : 'game')}
-          style={styles.modeButton}
-        >
-          <Text style={styles.modeButtonText}>
-            {mode === 'game' ? '지도 모드' : '게임 모드'}
-          </Text>
-        </Pressable>
-        <Pressable onPress={() => go('home')} style={styles.closeButton}>
-          <Text style={styles.closeText}>×</Text>
-        </Pressable>
-      </View>
-
-      <View style={styles.nextTip}>
-        <Text style={styles.nextTipMeta}>📍 다음 경유지</Text>
-        <Text style={styles.nextTipTitle}>
-          {course.waypoints[2] ?? course.waypoints[1]}
-        </Text>
-      </View>
-
-      <View style={styles.walkPanel}>
-        <View style={styles.dragHandleDark} />
-        <View style={styles.walkInfoRow}>
-          <MockMapView mode="overview" course={course} progress={progress} />
-          <View style={styles.walkInfoBody}>
-            <Text style={styles.walkMeta}>NEXT WAYPOINT · 320m</Text>
-            <Text style={styles.walkTitle}>
-              {course.waypoints[2] ?? course.title}
-            </Text>
-            <View style={styles.pointsBadge}>
-              <Text style={styles.pointsBadgeText}>
-                ⚡ +{Math.round(progress * 240)}P
-              </Text>
-            </View>
-          </View>
-        </View>
-        <View style={styles.progressLine}>
-          <View
-            style={[
-              styles.progressLineFill,
-              { width: `${progress * 100}%`, backgroundColor: course.color },
-            ]}
-          />
-        </View>
-        <View style={styles.walkStats}>
-          <DarkMetric label="시간" value="10:27" />
-          <DarkMetric label="페이스" value="6:09" color={colors.mint} />
-          <DarkMetric
-            label="칼로리"
-            value={`${kcalNow}kcal`}
-            color={colors.coral}
-          />
-        </View>
-        <View style={styles.walkControls}>
-          <RoundDark label="⌁" />
-          <Pressable
-            onPress={() => setPaused(value => !value)}
-            style={styles.pauseButton}
-          >
-            <Text style={styles.pauseText}>{paused ? '▶' : 'Ⅱ'}</Text>
-          </Pressable>
-          <Pressable
-            onPress={() => onDone(distNow, '10:27')}
-            style={styles.doneButton}
-          >
-            <Text style={styles.doneText}>✓</Text>
-          </Pressable>
-        </View>
-      </View>
-    </View>
-  );
-}
-
-function PostWalkTab({
-  id,
-  walkResult,
-  go,
-}: {
-  id: string;
-  walkResult: { dist: string; time: string } | null;
-  go: Navigate;
-}) {
-  const course = getCourse(id);
-  const [rating, setRating] = useState(0);
-  const [tags, setTags] = useState<string[]>([]);
-  const moodTags = [
-    '야경 좋음',
-    '한적함',
-    '적당히 빡셈',
-    '카페 들름',
-    '사진 명소',
-  ];
-
-  return (
-    <View style={styles.pageSoft}>
-      <ScreenHeader
-        title="산책 기록"
-        subtitle="오늘 다녀온 길을 기록해주세요"
-        onBack={() => go('home')}
-      />
-      <ScrollView
-        contentContainerStyle={styles.listContent}
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={[styles.completedCard, { backgroundColor: course.color }]}>
-          <Text style={styles.completedMeta}>COMPLETED · 오늘</Text>
-          <Text style={styles.completedTitle}>{course.title}</Text>
-          <View style={styles.completedStats}>
-            <LightMetric
-              label="거리"
-              value={`${walkResult?.dist ?? course.distance}km`}
-            />
-            <LightMetric label="시간" value={walkResult?.time ?? '00:00'} />
-            <LightMetric label="걸음" value="5,842" />
-          </View>
-        </View>
-        <View style={styles.previewMap}>
-          <MockMapView mode="detail" course={course} />
-        </View>
-        <Text style={styles.blockTitle}>이 길은 어땠나요?</Text>
-        <View style={styles.starRow}>
-          {[1, 2, 3, 4, 5].map(item => (
-            <Pressable key={item} onPress={() => setRating(item)}>
-              <Text style={[styles.star, item <= rating && styles.starActive]}>
-                ★
-              </Text>
-            </Pressable>
-          ))}
-        </View>
-        <Text style={styles.blockTitle}>어떤 점이 좋았나요?</Text>
-        <View style={styles.tagStrip}>
-          {moodTags.map(tag => {
-            const active = tags.includes(tag);
-            return (
-              <Pressable
-                key={tag}
-                onPress={() =>
-                  setTags(
-                    active ? tags.filter(item => item !== tag) : [...tags, tag],
-                  )
-                }
-                style={[styles.reviewTag, active && styles.reviewTagActive]}
-              >
-                <Text
-                  style={[
-                    styles.reviewTagText,
-                    active && styles.reviewTagTextActive,
-                  ]}
-                >
-                  {tag}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
-        <View style={styles.aiLearnCard}>
-          <Text style={styles.aiLearnTitle}>관심사가 업데이트됩니다</Text>
-          <Text style={styles.aiLearnBody}>
-            이번 산책 평가를 바탕으로 다음 추천이 자연스럽게 더 맞게 변해요.
-          </Text>
-        </View>
-        <Pressable onPress={() => go('record')} style={styles.saveButton}>
-          <Text style={styles.saveButtonText}>기록 저장</Text>
-        </Pressable>
-      </ScrollView>
-    </View>
-  );
-}
-
 function MyPageTab({
   persona,
   setPersona,
@@ -874,14 +449,6 @@ function BottomNav({
   );
 }
 
-function Badge({ label, color }: { label: string; color: string }) {
-  return (
-    <View style={[styles.badge, { backgroundColor: `${color}1f` }]}>
-      <Text style={[styles.badgeText, { color }]}>{label}</Text>
-    </View>
-  );
-}
-
 function StatTile({
   label,
   value,
@@ -900,44 +467,6 @@ function StatTile({
       </Text>
     </View>
   );
-}
-
-function DarkMetric({
-  label,
-  value,
-  color = colors.card,
-}: {
-  label: string;
-  value: string;
-  color?: string;
-}) {
-  return (
-    <View style={styles.darkMetric}>
-      <Text style={styles.darkMetricLabel}>{label}</Text>
-      <Text style={[styles.darkMetricValue, { color }]}>{value}</Text>
-    </View>
-  );
-}
-
-function LightMetric({ label, value }: { label: string; value: string }) {
-  return (
-    <View style={styles.lightMetric}>
-      <Text style={styles.lightMetricLabel}>{label}</Text>
-      <Text style={styles.lightMetricValue}>{value}</Text>
-    </View>
-  );
-}
-
-function RoundDark({ label }: { label: string }) {
-  return (
-    <View style={styles.roundDark}>
-      <Text style={styles.roundDarkText}>{label}</Text>
-    </View>
-  );
-}
-
-function getCourse(id: string) {
-  return courses.find(course => course.id === id) ?? courses[0];
 }
 
 const styles = StyleSheet.create({
