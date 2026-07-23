@@ -1,8 +1,8 @@
 import React from 'react';
 import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { ScreenHeader } from '../components/ScreenHeader';
-import { MyPreferenceComponent } from '../components/My/MyPreferenceComponent';
-import { SettingComponent } from '../components/My/SettingComponent';
+import { MyPreferenceComponent } from '../components/my/MyPreferenceComponent';
+import { SettingComponent } from '../components/my/SettingComponent';
 import { colors, radii, spacing } from '../theme/tokens';
 
 interface MyScreenProps {
