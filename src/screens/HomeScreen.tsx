@@ -6,7 +6,6 @@ import {
   PanResponder,
   Platform,
   Pressable,
-  ScrollView,
   StatusBar,
   StyleSheet,
   Text,
@@ -16,8 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocation } from '../hooks/useLocation';
 import { AppMapView } from '../components/map/AppMapView';
 import { LocationInfo, WalkRouteResponse } from '../types/prewalk';
-import { PersonaId, personas } from '../data/chimeakData';
-import { colors, radii, shadows, spacing } from '../theme/tokens';
+import { colors, shadows, spacing } from '../theme/tokens';
 import { authStorage } from '../auth/authStorage';
 import { Route, TabName, Navigate } from '../navigation/types';
 import {
@@ -27,7 +25,7 @@ import {
 import { ChatInput } from '../components/chat/ChatInput';
 import { WalkFlow } from './walk/WalkFlow';
 import { RecordTab } from './record/RecordTab';
-import { ScreenHeader } from '../components/ScreenHeader';
+import { MyScreen } from './MyScreen';
 
 const { height: SCREEN_H } = Dimensions.get('window');
 // 바텀시트 스냅 위치 (fill 컨테이너 기준 top 좌표)
@@ -53,7 +51,6 @@ interface HomeScreenProps {
 
 export function HomeScreen({ onLogout, userId }: HomeScreenProps) {
   const [route, setRoute] = useState<Route>({ name: 'home' });
-  const [persona, setPersona] = useState<PersonaId>('killtime');
   const [nickname, setNickname] = useState<string | null>(null);
   const [email, setEmail] = useState<string | null>(null);
 
@@ -99,7 +96,6 @@ export function HomeScreen({ onLogout, userId }: HomeScreenProps) {
       <View style={styles.appShell}>
         {route.name === 'home' || route.name === 'chat' ? (
           <HomeTab
-            persona={persona}
             currentLocation={currentLocation}
             activeRoute={activeRoute}
             onRouteReady={route => {
@@ -129,10 +125,7 @@ export function HomeScreen({ onLogout, userId }: HomeScreenProps) {
           />
         ) : null}
         {route.name === 'me' ? (
-          <MyPageTab
-            persona={persona}
-            setPersona={setPersona}
-            go={go}
+          <MyScreen
             onLogout={onLogout}
             nickname={nickname}
             email={email}
@@ -152,14 +145,12 @@ function getTab(route: Route): TabName {
 }
 
 function HomeTab({
-  persona,
   currentLocation,
   activeRoute,
   onRouteReady,
   chatOpen,
   go,
 }: {
-  persona: PersonaId;
   currentLocation: LocationInfo;
   activeRoute: WalkRouteResponse | null;
   onRouteReady: (route: WalkRouteResponse) => void;
@@ -279,7 +270,6 @@ function HomeTab({
         </View>
         <ChatConversation
           ref={chatRef}
-          persona={persona}
           currentLocation={currentLocation}
           go={go}
           onRouteReady={onRouteReady}
@@ -303,118 +293,6 @@ function HomeTab({
           disabled={chatDone}
         />
       </View>
-    </View>
-  );
-}
-
-function MyPageTab({
-  persona,
-  setPersona,
-  go,
-  onLogout,
-  nickname,
-  email,
-}: {
-  persona: PersonaId;
-  setPersona: (persona: PersonaId) => void;
-  go: Navigate;
-  onLogout?: () => void;
-  nickname: string | null;
-  email: string | null;
-}) {
-  return (
-    <View style={styles.pageSoft}>
-      <ScreenHeader title="내 정보" right="설정" />
-      <ScrollView
-        contentContainerStyle={styles.listContent}
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.profileCard}>
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>{nickname?.charAt(0) ?? '?'}</Text>
-          </View>
-          <View style={styles.profileBody}>
-            <Text style={styles.profileName}>{nickname ? `${nickname}님` : '사용자님'}</Text>
-            <Text style={styles.profileEmail}>
-              {email ?? '카카오 계정'} · 8일째 산책
-            </Text>
-          </View>
-          <Text style={styles.editText}>편집</Text>
-        </View>
-        <Text style={styles.subhead}>AI 추천 페르소나</Text>
-        <View style={styles.preferenceGrid}>
-          {(
-            Object.entries(personas) as [
-              PersonaId,
-              (typeof personas)[PersonaId],
-            ][]
-          ).map(([id, item]) => {
-            const active = id === persona;
-            return (
-              <Pressable
-                key={id}
-                onPress={() => setPersona(id)}
-                style={[
-                  styles.preferenceCard,
-                  active && {
-                    backgroundColor: item.color,
-                    borderColor: item.color,
-                  },
-                ]}
-              >
-                <Text style={styles.preferenceIcon}>{item.icon}</Text>
-                <Text
-                  style={[
-                    styles.preferenceTitle,
-                    active && styles.preferenceTitleActive,
-                  ]}
-                >
-                  {item.label}
-                </Text>
-                <Text
-                  style={[
-                    styles.preferenceMeta,
-                    active && styles.preferenceMetaActive,
-                  ]}
-                >
-                  {id === 'killtime'
-                    ? '30분 내'
-                    : id === 'exercise'
-                      ? '심박↑'
-                      : '조용함'}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
-        <View style={styles.metricRow}>
-          <StatTile label="총 산책" value="23" unit="회" />
-          <StatTile label="총 거리" value="84.2" unit="km" />
-          <StatTile label="저장" value="6" unit="코스" />
-        </View>
-        {[
-          ['저장한 코스', '6개'],
-          ['산책 기록', '23회'],
-          ['관심 태그', '#야경 #한강 +4'],
-          ['AI 학습 데이터', '관리'],
-        ].map(([label, meta]) => (
-          <Pressable
-            key={label}
-            onPress={() => label === '산책 기록' && go('record')}
-            style={styles.menuRow}
-          >
-            <Text style={styles.menuText}>{label}</Text>
-            <Text style={styles.menuMeta}>{meta} ›</Text>
-          </Pressable>
-        ))}
-        <View style={styles.menuRow}>
-          <Text style={styles.menuText}>설정</Text>
-          <Text style={styles.menuMeta}>›</Text>
-        </View>
-        <Pressable style={styles.menuRow} onPress={onLogout}>
-          <Text style={styles.logoutText}>로그아웃</Text>
-        </Pressable>
-      </ScrollView>
     </View>
   );
 }
@@ -449,26 +327,6 @@ function BottomNav({
   );
 }
 
-function StatTile({
-  label,
-  value,
-  unit,
-}: {
-  label: string;
-  value: string;
-  unit?: string;
-}) {
-  return (
-    <View style={styles.statTile}>
-      <Text style={styles.statLabel}>{label}</Text>
-      <Text style={styles.statValue}>
-        {value}
-        {unit ? <Text style={styles.statUnit}>{unit}</Text> : null}
-      </Text>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
@@ -480,11 +338,6 @@ const styles = StyleSheet.create({
   },
   fill: {
     flex: 1,
-  },
-  pageSoft: {
-    flex: 1,
-    backgroundColor: colors.bgSoft,
-    paddingBottom: 76,
   },
   homeMap: {
     flex: 1,
@@ -543,11 +396,6 @@ const styles = StyleSheet.create({
   },
   pillTextActive: {
     color: colors.card,
-  },
-  listContent: {
-    padding: spacing.lg,
-    paddingBottom: 100,
-    gap: spacing.md,
   },
   filterStrip: {
     gap: spacing.sm,
@@ -669,34 +517,6 @@ const styles = StyleSheet.create({
     color: colors.ink2,
     fontSize: 14,
     lineHeight: 21,
-  },
-  metricRow: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-  },
-  statTile: {
-    flex: 1,
-    borderRadius: 14,
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.line,
-    padding: spacing.md,
-  },
-  statLabel: {
-    color: colors.ink3,
-    fontSize: 11,
-    fontWeight: '800',
-  },
-  statValue: {
-    color: colors.ink,
-    fontSize: 21,
-    fontWeight: '900',
-    marginTop: spacing.xs,
-  },
-  statUnit: {
-    color: colors.ink3,
-    fontSize: 11,
-    fontWeight: '700',
   },
   blockTitle: {
     color: colors.ink,
@@ -1074,113 +894,6 @@ const styles = StyleSheet.create({
     color: colors.card,
     fontSize: 15,
     fontWeight: '900',
-  },
-  profileCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    borderRadius: radii.lg,
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.line,
-    padding: spacing.lg,
-  },
-  avatar: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: colors.mintDeep,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarText: {
-    color: colors.card,
-    fontSize: 22,
-    fontWeight: '900',
-  },
-  profileBody: {
-    flex: 1,
-  },
-  profileName: {
-    color: colors.ink,
-    fontSize: 17,
-    fontWeight: '900',
-  },
-  profileEmail: {
-    color: colors.ink3,
-    fontSize: 12,
-    marginTop: spacing.xs,
-  },
-  editText: {
-    color: colors.mintDeep,
-    fontSize: 12,
-    fontWeight: '900',
-  },
-  subhead: {
-    color: colors.ink3,
-    fontSize: 12,
-    fontWeight: '900',
-  },
-  preferenceGrid: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-  },
-  preferenceCard: {
-    flex: 1,
-    borderRadius: 14,
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.line,
-    padding: spacing.md,
-    minHeight: 98,
-    justifyContent: 'center',
-  },
-  preferenceIcon: {
-    fontSize: 22,
-  },
-  preferenceTitle: {
-    color: colors.ink,
-    fontSize: 13,
-    fontWeight: '900',
-    marginTop: spacing.xs,
-  },
-  preferenceTitleActive: {
-    color: colors.card,
-  },
-  preferenceMeta: {
-    color: colors.ink3,
-    fontSize: 10,
-    fontWeight: '800',
-    marginTop: spacing.xs,
-  },
-  preferenceMetaActive: {
-    color: 'rgba(255,255,255,0.84)',
-  },
-  menuRow: {
-    minHeight: 52,
-    borderRadius: 14,
-    backgroundColor: colors.card,
-    borderWidth: 1,
-    borderColor: colors.line,
-    paddingHorizontal: spacing.lg,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  menuText: {
-    color: colors.ink,
-    fontSize: 14,
-    fontWeight: '800',
-  },
-  menuMeta: {
-    color: colors.ink3,
-    fontSize: 12,
-    fontWeight: '800',
-  },
-  logoutText: {
-    color: '#d75b5b',
-    fontSize: 14,
-    fontWeight: '800',
   },
   bottomNav: {
     position: 'absolute',
