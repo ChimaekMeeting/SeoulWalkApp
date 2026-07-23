@@ -13,7 +13,6 @@ import {
   LocationInfo,
   WalkRouteResponse,
 } from '../../types/prewalk';
-import { PersonaId, personas } from '../../data/chimeakData';
 import { Navigate } from '../../navigation/types';
 import { ChatBubble } from './ChatBubble';
 import { MyBubble } from './MyBubble';
@@ -36,7 +35,6 @@ const STATUS_MESSAGES: Partial<Record<ChatStatus, string>> = {
 };
 
 type Props = {
-  persona: PersonaId;
   currentLocation: LocationInfo;
   onRouteReady: (route: WalkRouteResponse) => void;
   go: Navigate;
@@ -55,7 +53,6 @@ type Props = {
 // 백엔드가 계산한 실제 경로(state.route_result)를 onRouteReady로 상위에 전달한다.
 export const ChatConversation = forwardRef(function ChatConversation(
   {
-    persona,
     currentLocation,
     onRouteReady,
     go,
@@ -182,9 +179,7 @@ export const ChatConversation = forwardRef(function ChatConversation(
         style={styles.chatHeader}
         onLayout={e => setHeaderHeight(e.nativeEvent.layout.height)}
       >
-        <Text style={styles.chatHeaderTitle}>
-          Roudi ({personas[persona].label})
-        </Text>
+        <Text style={styles.chatHeaderTitle}>Roudi</Text>
       </View>
       <ScrollView
         ref={scrollRef}

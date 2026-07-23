@@ -25,6 +25,8 @@ export const colors = {
   mapWater: '#b8e4f2',
   mapBlock: '#e7f2ed',
   warning: '#f59e0b',
+  containerBackground: '#f4f3ef',
+  black: '#1a1a1a'
 };
 
 export const spacing = {
@@ -48,14 +50,14 @@ export const shadows = {
     shadowColor: '#0f172a',
     shadowOpacity: 0.08,
     shadowRadius: 18,
-    shadowOffset: {width: 0, height: 10},
+    shadowOffset: { width: 0, height: 10 },
     elevation: 5,
   },
   map: {
     shadowColor: '#0f172a',
     shadowOpacity: 0.16,
     shadowRadius: 22,
-    shadowOffset: {width: 0, height: 14},
+    shadowOffset: { width: 0, height: 14 },
     elevation: 8,
   },
 };
