@@ -1,9 +1,10 @@
 import React from 'react';
-import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { ScreenHeader } from '../components/ScreenHeader';
 import { MyPreferenceComponent } from '../components/my/MyPreferenceComponent';
 import { SettingComponent } from '../components/my/SettingComponent';
 import { colors, radii, spacing } from '../theme/tokens';
+import { authStorage } from '../auth/authStorage';
 
 interface MyScreenProps {
   onLogout?: () => void;
@@ -44,6 +45,18 @@ export function MyScreen({
         <Pressable style={styles.menuRow} onPress={onLogout}>
           <Text style={styles.logoutText}>로그아웃</Text>
         </Pressable>
+
+        {__DEV__ && (
+          <Pressable
+            style={styles.devButton}
+            onPress={async () => {
+              await authStorage.setAccessToken('invalid_token_for_test');
+              Alert.alert('[DEV]', 'access_token을 잘못된 값으로 덮어씀');
+            }}
+          >
+            <Text style={styles.devButtonText}>[DEV] 토큰 강제 만료</Text>
+          </Pressable>
+        )}
       </ScrollView>
     </View>
   );
@@ -114,5 +127,21 @@ const styles = StyleSheet.create({
     color: '#d75b5b',
     fontSize: 14,
     fontWeight: '800',
+  },
+  devButton: {
+    minHeight: 52,
+    borderRadius: 14,
+    backgroundColor: '#1a1a2e',
+    borderWidth: 1.5,
+    borderColor: '#ff6b35',
+    paddingHorizontal: spacing.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  devButtonText: {
+    color: '#ff6b35',
+    fontSize: 13,
+    fontWeight: '800',
+    letterSpacing: 0.3,
   },
 });

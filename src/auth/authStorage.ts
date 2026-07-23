@@ -19,6 +19,8 @@ export const authStorage = {
     ]),
   getAccessToken: () => SecureStore.getItemAsync(ACCESS_TOKEN_KEY),
   getRefreshToken: () => SecureStore.getItemAsync(REFRESH_TOKEN_KEY),
+  setAccessToken: (token: string) =>
+    SecureStore.setItemAsync(ACCESS_TOKEN_KEY, token),
   removeTokens: () =>
     Promise.all([
       SecureStore.deleteItemAsync(ACCESS_TOKEN_KEY),
