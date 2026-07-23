@@ -6,6 +6,9 @@ import { Pedometer } from 'expo-sensors';
 import Mapbox from '@rnmapbox/maps';
 import { env } from './src/config/env';
 import { useKakaoAuth } from './src/auth/useKakaoAuth';
+import { onboardingStorage } from './src/auth/onboardingStorage';
+import { BrandSplashScreen } from './src/screens/BrandSplashScreen';
+import { OnboardingScreen } from './src/screens/OnboardingScreen';
 import { LoginScreen } from './src/screens/LoginScreen';
 import { LocationPermissionScreen } from './src/screens/LocationPermissionScreen';
 import { ActivityPermissionScreen } from './src/screens/ActivityPermissionScreen';
@@ -23,7 +26,18 @@ function App() {
   const [activityStatus, setActivityStatus] =
     useState<PermissionStatus>('checking');
 
+  const [showBrandSplash, setShowBrandSplash] = useState(true);
+  const [onboardingStatus, setOnboardingStatus] = useState<'checking' | 'seen' | 'unseen'>('checking');
+
   const appState = useRef<AppStateStatus>(AppState.currentState);
+
+  useEffect(() => {
+    onboardingStorage.getHasSeen().then(value => {
+      setOnboardingStatus(value === 'true' ? 'seen' : 'unseen');
+    });
+    const timer = setTimeout(() => setShowBrandSplash(false), 2000);
+    return () => clearTimeout(timer);
+  }, []);
 
   const checkLocationPermission = async () => {
     const { status } = await Location.getForegroundPermissionsAsync();
@@ -83,6 +97,22 @@ function App() {
   const isCheckingPermissions =
     permissionStatus === 'checking' ||
     (permissionStatus === 'granted' && activityStatus === 'checking');
+
+  if (showBrandSplash) {
+    return <BrandSplashScreen />;
+  }
+
+  if (onboardingStatus === 'checking') {
+    return <SplashView />;
+  }
+
+  if (onboardingStatus === 'unseen') {
+    return (
+      <SafeAreaProvider>
+        <OnboardingScreen onDone={() => setOnboardingStatus('seen')} />
+      </SafeAreaProvider>
+    );
+  }
 
   if (authState === 'loading' || (authState === 'loggedIn' && isCheckingPermissions)) {
     return <SplashView />;
