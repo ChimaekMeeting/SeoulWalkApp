@@ -18,8 +18,6 @@ client.interceptors.request.use(async (config) => {
     config.headers.Authorization = `Bearer ${token}`;
     config.headers.Cookie = `access_token=${token}`;  // 쿠키 추가
   }
-  // TODO: 테스트 끝나면 아래 로그 제거
-  console.log('[Auth] Authorization header:', config.headers.Authorization ?? '(없음)');
   return config;
 });
 
@@ -46,7 +44,7 @@ client.interceptors.response.use(
         { headers: { Authorization: `Bearer ${refreshToken}` } },
       );
 
-      if (data.status !== 'SUCCESS') {
+      if (data.status.toLowerCase() !== 'success') {
         await clearAuthAndNotify();
         return Promise.reject(error);
       }
