@@ -2,7 +2,6 @@ import React from 'react';
 import { StatusBar, StyleSheet, Text, View } from 'react-native';
 
 const BG = '#0D0D0D';
-const PURPLE = '#7C5CBF';
 
 export function BrandSplashScreen() {
   return (

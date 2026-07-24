@@ -45,9 +45,6 @@ export function useKakaoAuth() {
         '/api/login/kakao/mobile-login',
         { access_token: kakaoToken.accessToken },
       );
-      // TODO: 테스트 끝나면 아래 로그 제거
-      console.log('[KakaoProfile] nickname:', profile.nickname, '/ email:', profile.email);
-
       const saves: Promise<unknown>[] = [
         authStorage.saveUserId(id),
         authStorage.saveTokens(data.access_token, data.refresh_token),
@@ -55,13 +52,6 @@ export function useKakaoAuth() {
       ];
       if (profile.email) saves.push(authStorage.saveEmail(profile.email));
       await Promise.all(saves);
-
-      // TODO: 테스트 끝나면 아래 로그 제거
-      const savedToken = await authStorage.getAccessToken();
-      console.log('[AuthStorage] 저장된 access_token:', savedToken);
-
-      // TODO: 테스트 끝나면 아래 호출 제거 — Authorization 헤더 확인용
-      client.get('/api/login/kakao/callback').catch(() => {});
 
       setUserId(id);
       setAuthState('loggedIn');
