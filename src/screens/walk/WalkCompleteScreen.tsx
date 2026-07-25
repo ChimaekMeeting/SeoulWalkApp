@@ -1,13 +1,14 @@
 import React, { useRef, useState } from 'react';
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import ViewShot, { ViewShotRef } from 'react-native-view-shot';
+import { ViewShotRef } from 'react-native-view-shot';
 import RNShare, { Social } from 'react-native-share';
 import { toggleFavoriteRoute } from '../../api/routes';
 import { estimateSteps } from '../../utils/walkEstimate';
-import { buildRouteThumbnailUrl } from '../../utils/geo';
+import { buildRouteThumbnailUrl } from '../../utils/routeThumbnail';
 import { colors, radii, spacing } from '../../theme/tokens';
 import { RouteMapView } from '../../components/map';
+import { ShareCard } from '../../components/walk/ShareCard';
 import { env } from '../../config/env';
 import { LocationInfo, WalkRouteResponse } from '../../types/prewalk';
 
@@ -117,38 +118,13 @@ export function WalkCompleteScreen({
         />
       </View>
 
-      {/* 화면엔 안 보이고 공유 이미지 캡처용으로만 쓰는 카드 — 실시간 지도 대신 라벨 없는 정적 지도를 써서 캡처 결과가 항상 일정하다. */}
-      <View style={styles.hiddenCaptureArea} pointerEvents="none">
-        <ViewShot
-          ref={shareCardRef}
-          style={styles.shareCard}
-          options={{ format: 'png', quality: 0.95 }}
-        >
-          <Text style={styles.shareBrandText}>🚶 ROUDIE</Text>
-
-          <View style={styles.shareCelebrate}>
-            <Text style={styles.shareCelebrateIcon}>🎉</Text>
-            <Text style={styles.shareCelebrateTitle}>축하합니다!</Text>
-          </View>
-
-          <View style={styles.shareHeroStat}>
-            <Text style={styles.shareHeroValue}>{traveledKm.toFixed(1)}</Text>
-            <Text style={styles.shareHeroUnit}>km 걸었어요</Text>
-          </View>
-
-          <View style={styles.shareStatRow}>
-            <ShareStat value={`${minutes}`} unit="분" />
-            <View style={styles.shareStatDivider} />
-            <ShareStat value={steps.toLocaleString()} unit="걸음" />
-          </View>
-
-          {thumbnailUrl ? (
-            <View style={styles.shareRoutePreview}>
-              <Image source={{ uri: thumbnailUrl }} style={styles.shareRoutePreviewImage} />
-            </View>
-          ) : null}
-        </ViewShot>
-      </View>
+      <ShareCard
+        ref={shareCardRef}
+        traveledKm={traveledKm}
+        minutes={minutes}
+        steps={steps}
+        thumbnailUrl={thumbnailUrl}
+      />
 
       <View style={styles.actionRow}>
         <Pressable
@@ -212,15 +188,6 @@ function Stat({ value, unit }: { value: string; unit: string }) {
   );
 }
 
-function ShareStat({ value, unit }: { value: string; unit: string }) {
-  return (
-    <View style={styles.shareStat}>
-      <Text style={styles.shareStatValue}>{value}</Text>
-      <Text style={styles.shareStatUnit}>{unit}</Text>
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
@@ -274,90 +241,6 @@ const styles = StyleSheet.create({
   },
   routePreviewMap: {
     flex: 1,
-  },
-  hiddenCaptureArea: {
-    position: 'absolute',
-    top: 0,
-    left: -9999,
-    width: 320 + spacing.xl * 2,
-  },
-  shareCard: {
-    backgroundColor: colors.bgSoft,
-    borderRadius: radii.xl,
-    borderWidth: 1,
-    borderColor: colors.line,
-    padding: spacing.xl,
-  },
-  shareBrandText: {
-    alignSelf: 'center',
-    fontSize: 11,
-    fontWeight: '900',
-    letterSpacing: 1.5,
-    color: colors.mintDeep,
-  },
-  shareCelebrate: {
-    alignItems: 'center',
-    marginTop: spacing.lg,
-    gap: spacing.xs,
-  },
-  shareCelebrateIcon: {
-    fontSize: 36,
-  },
-  shareCelebrateTitle: {
-    fontSize: 18,
-    fontWeight: '900',
-    color: '#111',
-  },
-  shareHeroStat: {
-    alignItems: 'center',
-    marginTop: spacing.lg,
-  },
-  shareHeroValue: {
-    fontSize: 52,
-    fontWeight: '900',
-    color: colors.mintDeep,
-    lineHeight: 58,
-  },
-  shareHeroUnit: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#6b7280',
-  },
-  shareStatRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.xl,
-    marginTop: spacing.lg,
-  },
-  shareStatDivider: {
-    width: 1,
-    height: 28,
-    backgroundColor: colors.line,
-  },
-  shareStat: {
-    alignItems: 'center',
-    gap: spacing.xs,
-  },
-  shareStatValue: {
-    fontSize: 20,
-    fontWeight: '900',
-    color: '#111',
-  },
-  shareStatUnit: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#9E9E9E',
-  },
-  shareRoutePreview: {
-    marginTop: spacing.xl,
-    borderRadius: radii.lg,
-    overflow: 'hidden',
-    backgroundColor: '#f4f4f4',
-  },
-  shareRoutePreviewImage: {
-    width: '100%',
-    aspectRatio: 1,
   },
   actionRow: {
     flexDirection: 'row',

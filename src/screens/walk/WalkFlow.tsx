@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { LocationInfo, WalkRouteResponse } from '../../types/prewalk';
+import { WalkEndSnapshot } from '../../types/walk';
 import { WalkPrepScreen } from './WalkPrepScreen';
-import { WalkInProgressScreen, WalkEndSnapshot } from './WalkInProgressScreen';
+import { WalkInProgressScreen } from './WalkInProgressScreen';
 import { WalkEndConfirmModal } from './WalkEndConfirmModal';
 import { WalkCompleteScreen } from './WalkCompleteScreen';
 

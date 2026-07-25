@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import * as Location from 'expo-location';
-import { Coordinates } from './useLocation';
+import { Coordinates } from '../types/location';
 
 /**
  * 산책 중(6b) 실시간 위치 추적용 훅. 1회성 조회만 하는 useLocation과 달리
