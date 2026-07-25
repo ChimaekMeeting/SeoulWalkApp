@@ -3,15 +3,10 @@ import { StyleSheet, View, Text } from "react-native"
 
 import { spacing, colors } from "../../theme/tokens"
 import { MyPreferenceItem } from "./MyPreferenceItem"
-
-const PREFERENCE_LABELS = ['A', 'B', 'C'] as const;
+import { PREFERENCE_TAGS } from "../../data/onboarding"
 
 export function MyPreferenceComponent() {
-  const [selected, setSelected] = useState<Record<string, boolean>>({
-    A: false,
-    B: false,
-    C: false,
-  });
+  const [selected, setSelected] = useState<Record<string, boolean>>({});
 
   const toggle = (label: string) => {
     setSelected(prev => ({ ...prev, [label]: !prev[label] }));
@@ -21,7 +16,7 @@ export function MyPreferenceComponent() {
     <View style={styles.background}>
       <Text style={styles.text}>내 산책 취향</Text>
       <View style={styles.row}>
-        {PREFERENCE_LABELS.map(label => (
+        {PREFERENCE_TAGS.map(label => (
           <MyPreferenceItem
             key={label}
             label={label}
@@ -50,7 +45,7 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
   },
   text: {
-    fontWeight: 900,
+    fontWeight: '900',
     fontSize: 16,
   }
 })
