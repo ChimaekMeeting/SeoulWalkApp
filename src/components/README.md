@@ -1,6 +1,6 @@
 # src/components
 
-여러 화면에서 재사용하는 컴포넌트를 모아두는 폴더입니다. 기능별로 하위 폴더(`chat/`, `map/`, `my/`)에 나눠 담고, 특정 기능에 묶이지 않는 것만 최상위에 둡니다.
+여러 화면에서 재사용하는 컴포넌트를 모아두는 폴더입니다. 기능별로 하위 폴더(`chat/`, `map/`, `my/`, `record/`, `walk/`)에 나눠 담고, 특정 기능에 묶이지 않는 것만 최상위에 둡니다.
 
 ```
 src/components/
@@ -19,10 +19,15 @@ src/components/
 │  ├─ DynamicPOILayer.tsx   # 미사용 — 어디서도 import 안 됨
 │  ├─ StaticPOILayer.tsx    # 미사용 — 어디서도 import 안 됨
 │  └─ index.ts
-└─ my/                   # '내 정보' 탭(MyScreen)에서만 쓰는 컴포넌트
-   ├─ MyPreferenceComponent.tsx # 산책 취향 태그 선택 섹션
-   ├─ MyPreferenceItem.tsx      # 취향 태그 버튼 1개
-   └─ SettingComponent.tsx      # 설정 메뉴 한 줄(라벨 + '>' 화살표)
+├─ my/                   # '내 정보' 탭(MyScreen)에서만 쓰는 컴포넌트
+│  ├─ MyPreferenceComponent.tsx # 산책 취향 태그 선택 섹션
+│  ├─ MyPreferenceItem.tsx      # 취향 태그 버튼 1개
+│  └─ SettingComponent.tsx      # 설정 메뉴 한 줄(라벨 + '>' 화살표)
+├─ record/               # '기록' 탭(RecordTab)에서만 쓰는 컴포넌트
+│  ├─ RouteHistoryList.tsx   # 저장된 경로 목록 조회/표시 (실API 연동)
+│  └─ HistoryPlaceLabel.tsx  # 경로 카드에 좌표를 역지오코딩한 장소명을 보여주는 라벨
+└─ walk/                 # 산책 완료(6d) 화면에서만 쓰는 컴포넌트
+   └─ ShareCard.tsx          # 화면엔 안 보이고 공유 이미지 캡처용으로만 쓰는 카드
 ```
 
 ---
@@ -119,3 +124,24 @@ const locationInfo: LocationInfo | null = coords
 ## 4. `my/` — 내 정보 탭 전용
 
 `MyScreen.tsx` 하나에서만 쓰는, 재사용 범위가 좁은 컴포넌트들입니다. `MyPreferenceComponent`가 `src/data/onboarding.ts`의 `PREFERENCE_TAGS`를 받아 `MyPreferenceItem`(태그 버튼)을 나열하고, `SettingComponent`는 설정 메뉴의 각 행(예: "알림 설정", "로그아웃")을 그리는 데 씁니다.
+
+## 5. `record/` — 기록 탭 전용
+
+`src/screens/record/RecordTab.tsx`가 303줄까지 커져서 분리한 것들입니다.
+
+- **`RouteHistoryList`**: `filter`("recent" | "favorite")를 props로 받아 `GET /api/user/routes`를 직접 호출하고, 카드 목록(지도 썸네일 + 모드 라벨 + 거리/시간 + 즐겨찾기 별)을 렌더링합니다. 카드를 누르면 `routeHistoryToWalkRoute`(`src/utils/routeHistory.ts`)로 변환한 뒤 `onSelectRoute` 콜백을 호출해 6a(산책 전)로 다시 들어갈 수 있게 합니다.
+- **`HistoryPlaceLabel`**: 카드 안에서 좌표(`origin_lat`/`origin_lon` 등)를 역지오코딩(`src/utils/reverseGeocode.ts`)해서 실제 장소명을 보여줍니다. 이름만으로 구분 안 되는 같은 모드(예: "순환 코스"끼리)를 구분하기 위한 용도입니다.
+
+## 6. `walk/` — 산책 완료(6d) 화면 전용
+
+`ShareCard`는 `WalkCompleteScreen.tsx`의 실제 화면 UI와 별개로, **화면엔 안 보이고 공유 이미지 캡처용으로만 쓰는 카드**입니다. `forwardRef`로 `ViewShotRef`를 그대로 노출해서, 부모가 `ref.current.capture()`를 호출해 PNG URI를 얻습니다.
+
+```tsx
+const shareCardRef = useRef<ViewShotRef>(null);
+// ...
+<ShareCard ref={shareCardRef} traveledKm={traveledKm} minutes={minutes} steps={steps} thumbnailUrl={thumbnailUrl} />
+// ...
+const uri = await shareCardRef.current?.capture?.();
+```
+
+실시간 지도 대신 라벨 없는 정적 지도 썸네일(`src/utils/routeThumbnail.ts`)을 써서, 캡처할 때마다 결과가 달라지지 않고 항상 일정합니다.
