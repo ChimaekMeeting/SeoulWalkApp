@@ -2,15 +2,10 @@ import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { RouteMapView } from '../../components/map';
-import { LocationInfo, WalkMode, WalkRouteResponse } from '../../types/prewalk';
+import { LocationInfo, WalkRouteResponse } from '../../types/prewalk';
 import { estimateDurationMinutes, estimateKcal } from '../../utils/walkEstimate';
+import { WALK_MODE_LABEL } from '../../utils/walkMode';
 import { radii, spacing } from '../../theme/tokens';
-
-const MODE_LABEL: Record<WalkMode, string> = {
-  [WalkMode.CIRCULAR_RANDOM]: '순환 코스',
-  [WalkMode.ONEWAY_SHORTEST]: '편도 코스',
-  [WalkMode.ONEWAY_RANDOM]: '편도 코스',
-};
 
 interface Props {
   routeResult: WalkRouteResponse;
@@ -44,7 +39,7 @@ export function WalkPrepScreen({ routeResult, currentLocation, onStart, onBack }
       </View>
 
       <View style={styles.infoCard}>
-        <Text style={styles.modeLabel}>{MODE_LABEL[routeResult.mode]}</Text>
+        <Text style={styles.modeLabel}>{WALK_MODE_LABEL[routeResult.mode]}</Text>
         <View style={styles.statRow}>
           <Stat label="거리" value={`${routeResult.total_km.toFixed(1)}`} unit="km" />
           <Stat label="예상 시간" value={`${durationMinutes}`} unit="분" />

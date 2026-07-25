@@ -4,16 +4,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Pedometer } from 'expo-sensors';
 import { RouteMapView } from '../../components/map';
 import { WalkRouteResponse } from '../../types/prewalk';
+import { WalkEndSnapshot } from '../../types/walk';
 import { useWatchLocation } from '../../hooks/useWatchLocation';
 import { calculateWalkProgress } from '../../utils/walkProgress';
 import { radii, spacing } from '../../theme/tokens';
-
-export interface WalkEndSnapshot {
-  traveledKm: number;
-  elapsedMs: number;
-  /** 만보계로 실시간 측정한 걸음 수. 기기에서 만보계를 못 쓰면 null(호출부에서 거리 기반 추정치로 대체). */
-  steps: number | null;
-}
 
 interface Props {
   routeResult: WalkRouteResponse;

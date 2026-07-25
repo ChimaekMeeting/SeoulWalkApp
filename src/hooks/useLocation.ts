@@ -1,11 +1,7 @@
 import { useState, useEffect } from 'react';
 import * as Location from 'expo-location';
 import { env } from '../config/env';
-
-export interface Coordinates {
-  latitude: number;
-  longitude: number;
-}
+import { Coordinates } from '../types/location';
 
 // 서울 서비스 구역 밖에서 개발할 때, 실제 GPS 대신 .env의 EXPO_PUBLIC_DEBUG_FIXED_LOCATION으로 고정(개발 시)
 const debugFixedCoords = ((): Coordinates | null => {
