@@ -928,6 +928,6 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   navActiveText: {
-    color: colors.mintDeep,
+    color: colors.black,
   },
 });
