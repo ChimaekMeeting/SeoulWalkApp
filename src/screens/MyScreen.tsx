@@ -5,7 +5,6 @@ import { MyPreferenceComponent } from '../components/my/MyPreferenceComponent';
 import { SettingComponent } from '../components/my/SettingComponent';
 import { colors, radii, spacing } from '../theme/tokens';
 import { authStorage } from '../auth/authStorage';
-import { SafeAreaView } from 'react-native-safe-area-context';
 
 interface MyScreenProps {
   onLogout?: () => void;
@@ -21,7 +20,7 @@ export function MyScreen({
   onResetSurvey,
 }: MyScreenProps) {
   return (
-    <SafeAreaView style={styles.pageSoft}>
+    <View style={styles.pageSoft}>
       <ScreenHeader title="마이페이지" />
       <ScrollView
         contentContainerStyle={styles.listContent}
@@ -69,7 +68,7 @@ export function MyScreen({
           </Pressable>
         )}
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
 
