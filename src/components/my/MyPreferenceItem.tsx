@@ -14,7 +14,7 @@ export function MyPreferenceItem({ label, value, onPress }: MyPreferenceItemProp
       onPress={onPress}
       style={[styles.item, value && styles.itemActive]}
     >
-      <Text style={styles.label}>{label}</Text>
+      <Text style={[styles.label, value && styles.labelActive]}>{label}</Text>
     </Pressable>
   )
 }
@@ -29,11 +29,14 @@ const styles = StyleSheet.create({
     backgroundColor: colors.card,
   },
   itemActive: {
-    backgroundColor: colors.accentSoft,
+    backgroundColor: colors.black,
   },
   label: {
     color: colors.ink,
     fontSize: 14,
     fontWeight: '800',
+  },
+  labelActive: {
+    color: colors.card,
   },
 })

@@ -4,7 +4,7 @@ import { StyleSheet, View, Text } from "react-native"
 import { spacing, colors } from "../../theme/tokens"
 import { MyPreferenceItem } from "./MyPreferenceItem"
 import { PREFERENCE_TAGS } from "../../data/onboarding"
-import { getSurvey } from "../../api/survey"
+import { getSurvey, postSurvey } from "../../api/survey"
 
 export function MyPreferenceComponent() {
   const [selected, setSelected] = useState<Record<string, boolean>>({});
@@ -21,7 +21,17 @@ export function MyPreferenceComponent() {
   }, []);
 
   const toggle = (label: string) => {
-    setSelected(prev => ({ ...prev, [label]: !prev[label] }));
+    setSelected(prev => {
+      const next = { ...prev, [label]: !prev[label] };
+
+      const tags = PREFERENCE_TAGS.filter(tag => next[tag]);
+      postSurvey({ tags }).catch(() => {
+        // 저장 실패 시 토글 이전 상태로 되돌림
+        setSelected(prev);
+      });
+
+      return next;
+    });
   };
 
   return (
