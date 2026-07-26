@@ -7,6 +7,8 @@
 src/api/
 ├─ client.ts     # 공용 axios 인스턴스 (baseURL, header, 토큰/에러 처리)
 ├─ prewalk.ts    # 프리워크 챗봇 관련 fetch 함수
+├─ routes.ts     # 산책 기록 API (getRouteHistories, toggleFavoriteRoute)
+├─ survey.ts     # 설문 API (getSurvey, postSurvey)
 └─ README.md
 ```
 
