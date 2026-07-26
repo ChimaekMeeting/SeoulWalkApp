@@ -47,9 +47,10 @@ interface HomeScreenProps {
   onLogout?: () => void;
   userId?: string | null;
   activityPermission?: 'granted' | 'denied';
+  onResetSurvey?: () => void;
 }
 
-export function HomeScreen({ onLogout, userId }: HomeScreenProps) {
+export function HomeScreen({ onLogout, userId, onResetSurvey }: HomeScreenProps) {
   const [route, setRoute] = useState<Route>({ name: 'home' });
   const [nickname, setNickname] = useState<string | null>(null);
   const [email, setEmail] = useState<string | null>(null);
@@ -129,6 +130,7 @@ export function HomeScreen({ onLogout, userId }: HomeScreenProps) {
             onLogout={onLogout}
             nickname={nickname}
             email={email}
+            onResetSurvey={onResetSurvey}
           />
         ) : null}
         {showNav ? <BottomNav active={activeTab} onChange={go} /> : null}

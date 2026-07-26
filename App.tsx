@@ -7,8 +7,10 @@ import Mapbox from '@rnmapbox/maps';
 import { env } from './src/config/env';
 import { useKakaoAuth } from './src/auth/useKakaoAuth';
 import { onboardingStorage } from './src/auth/onboardingStorage';
+import { getSurvey } from './src/api/survey';
 import { BrandSplashScreen } from './src/screens/BrandSplashScreen';
 import { OnboardingScreen } from './src/screens/OnboardingScreen';
+import { SurveyScreen } from './src/screens/SurveyScreen';
 import { LoginScreen } from './src/screens/LoginScreen';
 import { LocationPermissionScreen } from './src/screens/LocationPermissionScreen';
 import { ActivityPermissionScreen } from './src/screens/ActivityPermissionScreen';
@@ -28,6 +30,7 @@ function App() {
 
   const [showBrandSplash, setShowBrandSplash] = useState(true);
   const [onboardingStatus, setOnboardingStatus] = useState<'checking' | 'seen' | 'unseen'>('checking');
+  const [surveyStatus, setSurveyStatus] = useState<'checking' | 'completed' | 'pending'>('checking');
 
   const appState = useRef<AppStateStatus>(AppState.currentState);
 
@@ -38,6 +41,19 @@ function App() {
     const timer = setTimeout(() => setShowBrandSplash(false), 2000);
     return () => clearTimeout(timer);
   }, []);
+
+  useEffect(() => {
+    if (authState !== 'loggedIn') return;
+    getSurvey({ timeout: 8000 })
+      .then(({ data }) => {
+        console.log('[App] GET /api/user/survey 응답:', data);
+        setSurveyStatus(data.survey_completed ? 'completed' : 'pending');
+      })
+      .catch((e) => {
+        console.warn('[App] GET /api/user/survey 실패 → pending 폴백:', e?.message ?? e);
+        setSurveyStatus('pending');
+      });
+  }, [authState]);
 
   const checkLocationPermission = async () => {
     const { status } = await Location.getForegroundPermissionsAsync();
@@ -114,7 +130,19 @@ function App() {
     );
   }
 
-  if (authState === 'loading' || (authState === 'loggedIn' && isCheckingPermissions)) {
+  if (authState === 'loading' || (authState === 'loggedIn' && surveyStatus === 'checking')) {
+    return <SplashView />;
+  }
+
+  if (authState === 'loggedIn' && surveyStatus === 'pending') {
+    return (
+      <SafeAreaProvider>
+        <SurveyScreen onDone={() => setSurveyStatus('completed')} />
+      </SafeAreaProvider>
+    );
+  }
+
+  if (authState === 'loggedIn' && isCheckingPermissions) {
     return <SplashView />;
   }
 
@@ -156,6 +184,7 @@ function App() {
         onLogout={signOut}
         userId={userId}
         activityPermission={activityStatus === 'granted' ? 'granted' : 'denied'}
+        onResetSurvey={() => setSurveyStatus('pending')}
       />
     </SafeAreaProvider>
   );
