@@ -10,12 +10,14 @@ interface MyScreenProps {
   onLogout?: () => void;
   nickname: string | null;
   email: string | null;
+  onResetSurvey?: () => void;
 }
 
 export function MyScreen({
   onLogout,
   nickname,
   email,
+  onResetSurvey,
 }: MyScreenProps) {
   return (
     <View style={styles.pageSoft}>
@@ -55,6 +57,14 @@ export function MyScreen({
             }}
           >
             <Text style={styles.devButtonText}>[DEV] 토큰 강제 만료</Text>
+          </Pressable>
+        )}
+        {__DEV__ && (
+          <Pressable
+            style={styles.devButton}
+            onPress={onResetSurvey}
+          >
+            <Text style={styles.devButtonText}>[DEV] 설문 화면 다시 보기</Text>
           </Pressable>
         )}
       </ScrollView>
