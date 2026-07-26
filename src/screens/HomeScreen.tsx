@@ -40,7 +40,7 @@ const CHAT_INPUT_HEIGHT = 140;
 const navItems: { name: TabName; label: string; icon: string }[] = [
   { name: 'home', label: '홈', icon: '⌂' },
   { name: 'record', label: '기록', icon: '♧' },
-  { name: 'me', label: '내 정보', icon: '♙' },
+  { name: 'me', label: '마이페이지', icon: '♙' },
 ];
 
 interface HomeScreenProps {
