@@ -1,5 +1,3 @@
-import { EnvironmentInfo } from './weather';
-
 /* 챗봇 세션 생성을 위한 스키마 */
 export interface InitRequest {
   lat: number;
@@ -58,7 +56,6 @@ export enum WalkMode {
 export interface BasePreference {
   mode: WalkMode;
   origin: LocationInfo | null;
-  purpose: string | null;
 }
 
 /* 순환 경로 산책 관련 스키마 */
@@ -97,15 +94,14 @@ export interface State {
 
   mode: WalkMode | null;
   user_context:
-    | CircularPreference
-    | OnewayPreference
-    | OnewayShortestPreference
-    | null;
+  | CircularPreference
+  | OnewayPreference
+  | OnewayShortestPreference
+  | null;
 
   origin_candidate: LocationInfo[] | null;
   destination_candidate: LocationInfo[] | null;
 
-  weather_data: EnvironmentInfo | null;
   route_result: WalkRouteResponse | null;
   is_complete: boolean;
   awaiting_confirmation: boolean;
