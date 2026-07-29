@@ -327,8 +327,7 @@ src/types/
 ├── map.ts        # LatLng (lat/lng 키 기반 좌표)
 ├── prewalk.ts    # 챗봇·경로 관련 스키마 (InitRequest, WalkRouteResponse, WalkMode 등)
 ├── routes.ts     # 산책 기록 스키마 (RouteHistoryItem, RouteHistoryQuery 등)
-├── walk.ts       # WalkEndSnapshot (산책 종료 시 6b→6c로 넘기는 스냅샷)
-└── weather.ts    # WeatherInfo, EnvironmentInfo (날씨·대기질)
+└── walk.ts       # WalkEndSnapshot (산책 종료 시 6b→6c로 넘기는 스냅샷)
 ```
 
 > `src/api/` 폴더의 요청·응답 타입은 각 API 파일(`survey.ts` 등) 안에 인라인으로 정의합니다.
