@@ -72,7 +72,6 @@ export const ChatConversation = forwardRef(function ChatConversation(
   );
   const [done, setDone] = useState(false);
   const [sending, setSending] = useState(false);
-  const [awaitingConfirmation, setAwaitingConfirmation] = useState(false);
   const [headerHeight, setHeaderHeight] = useState(0);
   const [previewGroupHeight, setPreviewGroupHeight] = useState(0);
   const scrollRef = useRef<ScrollView>(null);
@@ -85,7 +84,6 @@ export const ChatConversation = forwardRef(function ChatConversation(
       const text =
         STATUS_MESSAGES[res.status] ?? STATUS_MESSAGES[ChatStatus.INTERNAL_ERROR]!;
       setMessages(prev => (options?.reset ? [] : prev).concat({ from: 'bot', text }));
-      setAwaitingConfirmation(false);
       return;
     }
 
@@ -99,7 +97,6 @@ export const ChatConversation = forwardRef(function ChatConversation(
     });
     setRouteResult(res.state?.route_result ?? null);
     setDone(res.state?.is_complete ?? false);
-    setAwaitingConfirmation(res.state?.awaiting_confirmation ?? false);
   };
 
   const startConversation = async () => {
@@ -233,13 +230,11 @@ export const ChatConversation = forwardRef(function ChatConversation(
               text={
                 !threadId
                   ? '오늘 날씨를 살펴보고 있어요.'
-                  : awaitingConfirmation
-                    ? '경로를 생성 중입니다. 조금만 기다려주세요.'
-                    : '좋은 답변을 생각 중입니다.'
+                  : '좋은 답변을 생각 중입니다.'
               }
             />
           ) : null}
-          {done && routeResult ? (
+          {routeResult ? (
             <RouteCandidate
               route={routeResult}
               onPress={() => onRouteReady(routeResult)}
