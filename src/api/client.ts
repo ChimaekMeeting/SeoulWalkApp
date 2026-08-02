@@ -10,6 +10,8 @@ interface RetryableConfig extends InternalAxiosRequestConfig {
 export const client = axios.create({
   baseURL: env.API_BASE_URL,
   headers: { 'Content-Type': 'application/json' },
+  // Cloud Run 유휴 상태에서 첫 요청(콜드스타트)이 8~10초 걸릴 수 있어 여유 있게 잡음.
+  timeout: 20000,
 });
 
 client.interceptors.request.use(async (config) => {
@@ -41,7 +43,7 @@ client.interceptors.response.use(
     try {
       const { data } = await axios.get<{ status: string; access_token: string }>(
         `${env.API_BASE_URL}/api/auth/check/refresh_token`,
-        { headers: { Authorization: `Bearer ${refreshToken}` } },
+        { headers: { Authorization: `Bearer ${refreshToken}` }, timeout: 20000 },
       );
 
       if (data.status.toLowerCase() !== 'success') {
