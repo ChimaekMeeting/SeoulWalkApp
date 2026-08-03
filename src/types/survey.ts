@@ -23,6 +23,7 @@ export interface SurveyResponse {
 };
 
 export interface SurveyStatusResponse {
+  status?: SurveyStatus;
   survey_completed: boolean;
   default_target_km: number | null;
   weights_safety: number | null;
