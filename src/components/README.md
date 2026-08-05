@@ -45,8 +45,8 @@ ChatConversation (컨테이너, src/api/prewalk.ts로 백엔드와 통신)
  ├─ MyBubble        # 사용자가 보낸 메시지
  ├─ ChatBubble       # 챗봇 텍스트 응답
  ├─ LoadingBubble    # 챗봇 응답 대기 중
- └─ RouteCandidate   # 챗봇이 경로를 찾아주면 이 카드가 뜸
-        │ onPress
+ └─ RouteCandidate   # state.route_result(배열)의 후보 1개를 카드로 보여줌 — 후보 개수만큼 렌더링됨
+        │ onPress (카드 자체가 버튼 — 누르면 바로 그 후보가 선택됨)
         ▼
    onRouteReady(route) 콜백으로 상위(HomeScreen)에 전달
         │
@@ -55,7 +55,8 @@ ChatConversation (컨테이너, src/api/prewalk.ts로 백엔드와 통신)
 ```
 
 - `ChatInput.tsx`는 `ChatConversation`과 별개로 `HomeScreen`이 직접 배치합니다(하단시트 고정 위치에 항상 떠 있어야 해서).
-- 경로 카드(`RouteCandidate`)를 누르면 `onRequestClose`가 아니라 `onRouteReady`만 호출됩니다 — 예전에 두 콜백을 같이 불러서 6a로 넘어간 화면이 곧바로 홈으로 되돌아가던 버그가 있었으니, 이 부분 건드릴 땐 주의하세요.
+- `state.route_result`는 배열(`WalkRouteResponse[] | null`)입니다. 후보가 여러 개면 `ChatConversation`이 `✳` 아이콘 하나에 `RouteCandidate` 카드 여러 개(순번대로 "코스 1", "코스 2" …)를 세로로 나열합니다. 빈 배열 케이스는 없다고 가정하며(백엔드가 못 찾으면 `null`), `null`일 때만 카드 영역을 아예 렌더링하지 않습니다.
+- 경로 카드(`RouteCandidate`)를 누르면 `onRequestClose`가 아니라 `onRouteReady`만 호출됩니다 — 예전에 두 콜백을 같이 불러서 6a로 넘어간 화면이 곧바로 홈으로 되돌아가던 버그가 있었으니, 이 부분 건드릴 땐 주의하세요. 카드에는 별도의 "산책하기"/"다시 묻기" 버튼이 없고, 카드를 누르는 것 자체가 곧 그 후보를 선택하는 동작입니다.
 
 ## 3. `map/` — 지도 컴포넌트
 
