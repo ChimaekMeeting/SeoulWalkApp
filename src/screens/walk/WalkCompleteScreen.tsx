@@ -93,7 +93,7 @@ export function WalkCompleteScreen({
   };
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top', 'left', 'right', 'bottom']}>
+    <SafeAreaView style={styles.safe} edges={['left', 'right', 'bottom']}>
       <Text style={styles.header}>산책 완료!</Text>
 
       <View style={styles.celebrate}>

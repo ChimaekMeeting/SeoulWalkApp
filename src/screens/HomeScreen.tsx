@@ -1,9 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
-  Animated,
   Dimensions,
   Keyboard,
-  PanResponder,
   Platform,
   Pressable,
   StatusBar,
@@ -11,9 +9,12 @@ import {
   Text,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocation } from '../hooks/useLocation';
+import { useAppStateChange } from '../hooks/useAppStateChange';
 import { AppMapView } from '../components/map/AppMapView';
+import { ChatBottomSheet, ChatBottomSheetHandle } from '../bottomsheets/ChatBottomSheet';
+import { computeChatSheetHalfHeight } from '../bottomsheets/chatSheetGeometry';
 import { LocationInfo, WalkRouteResponse } from '../types/prewalk';
 import { colors, shadows, spacing } from '../theme/tokens';
 import { authStorage } from '../auth/authStorage';
@@ -28,14 +29,12 @@ import { RecordTab } from './record/RecordTab';
 import { MyScreen } from './MyScreen';
 
 const { height: SCREEN_H } = Dimensions.get('window');
-// 바텀시트 스냅 위치 (fill 컨테이너 기준 top 좌표)
-const SHEET_TOP_UP = 40; // 위: 채팅 가득 (지도 거의 가려짐)
-const SHEET_TOP_DOWN_MAX = 550; // 아래 스냅의 기본(최대) 위치 — 대화가 짧을 때 기준
-
-// translateY 기준값 (= 각 top - SHEET_TOP_UP). 0 = 맨 위, 값이 클수록 아래로 내려감
-const SNAP_UP = 0;
 const BOTTOM_NAV_HEIGHT = 76;
 const CHAT_INPUT_HEIGHT = 140;
+
+// 챗봇 세션(대화 내역)을 자동으로 리셋하는 두 가지 기준.
+const WALK_RESET_THRESHOLD_MS = 10 * 60 * 1000; // 산책 시작 후 10분 넘게 지나서 홈으로 돌아오면
+const INACTIVITY_RESET_THRESHOLD_MS = 30 * 60 * 1000; // 앱이 30분 넘게 백그라운드/비활성 상태였다가 돌아오면
 
 const navItems: { name: TabName; label: string; icon: string }[] = [
   { name: 'home', label: '홈', icon: '⌂' },
@@ -74,6 +73,29 @@ export function HomeScreen({ onLogout, userId, onResetSurvey }: HomeScreenProps)
     null,
   );
 
+  // key가 바뀌면 ChatConversation이 통째로 리마운트되면서 대화 내역(메시지/threadId)이
+  // 초기화된다. ChatConversation 내부(팀원 코드)를 직접 건드리지 않는 안전한 리셋 방법.
+  const [chatSessionKey, setChatSessionKey] = useState(0);
+  const resetChatSession = () => setChatSessionKey(key => key + 1);
+  const realWalkEnteredAtRef = useRef<number | null>(null);
+
+  // 앱이 30분 넘게 백그라운드/비활성 상태였다가 다시 돌아오면 대화를 리셋한다.
+  const backgroundedAtRef = useRef<number | null>(null);
+  useAppStateChange({
+    onBackground: () => {
+      backgroundedAtRef.current = Date.now();
+    },
+    onForeground: () => {
+      if (
+        backgroundedAtRef.current != null &&
+        Date.now() - backgroundedAtRef.current >= INACTIVITY_RESET_THRESHOLD_MS
+      ) {
+        resetChatSession();
+      }
+      backgroundedAtRef.current = null;
+    },
+  });
+
   const go = (next: Route | TabName) => {
     if (typeof next === 'string') {
       if (next === 'home') {
@@ -95,23 +117,37 @@ export function HomeScreen({ onLogout, userId, onResetSurvey }: HomeScreenProps)
     <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.card} />
       <View style={styles.appShell}>
-        {route.name === 'home' || route.name === 'chat' ? (
+        {/* 다른 탭으로 이동했다 돌아와도 챗봇 대화 내역이 초기화되지 않도록, 언마운트하지 않고
+            숨기기만 한다(display:'none') — home/chat 라우트가 아닐 때만 화면에서 감춘다. */}
+        <View
+          style={[
+            styles.fill,
+            route.name !== 'home' && route.name !== 'chat' && styles.hidden,
+          ]}
+        >
           <HomeTab
             currentLocation={currentLocation}
             activeRoute={activeRoute}
+            chatSessionKey={chatSessionKey}
             onRouteReady={route => {
               setActiveRoute(route);
+              realWalkEnteredAtRef.current = Date.now();
               go({ name: 'realWalk' });
             }}
             chatOpen={route.name === 'chat'}
             go={go}
           />
-        ) : null}
+        </View>
         {route.name === 'realWalk' && activeRoute ? (
           <WalkFlow
             routeResult={activeRoute}
             currentLocation={currentLocation}
             onExitToHome={() => {
+              const enteredAt = realWalkEnteredAtRef.current;
+              if (enteredAt != null && Date.now() - enteredAt >= WALK_RESET_THRESHOLD_MS) {
+                resetChatSession();
+              }
+              realWalkEnteredAtRef.current = null;
               setActiveRoute(null);
               go('home');
             }}
@@ -121,6 +157,7 @@ export function HomeScreen({ onLogout, userId, onResetSurvey }: HomeScreenProps)
           <RecordTab
             onSelectRoute={selected => {
               setActiveRoute(selected);
+              realWalkEnteredAtRef.current = Date.now();
               go({ name: 'realWalk' });
             }}
           />
@@ -149,62 +186,71 @@ function getTab(route: Route): TabName {
 function HomeTab({
   currentLocation,
   activeRoute,
+  chatSessionKey,
   onRouteReady,
   chatOpen,
   go,
 }: {
   currentLocation: LocationInfo;
   activeRoute: WalkRouteResponse | null;
+  chatSessionKey: number;
   onRouteReady: (route: WalkRouteResponse) => void;
   chatOpen: boolean;
   go: Navigate;
 }) {
   const chatRef = useRef<ChatConversationHandle>(null);
+  const sheetRef = useRef<ChatBottomSheetHandle>(null);
+  const insets = useSafeAreaInsets();
   const [chatDone, setChatDone] = useState(false);
   const [chatSending, setChatSending] = useState(false);
   const [previewHeight, setPreviewHeight] = useState(50);
+
+  // chatSessionKey가 바뀌면(대화 리셋) ChatConversation은 key로 리마운트되지만, 시트 자체는
+  // 리마운트 대상이 아니라서 리셋 직전 스냅 위치(꽉 펼친 상태 등)가 그대로 남는다. 리셋될 때마다
+  // 시트도 기본(절반) 위치로 되돌린다. chatSessionKey는 0에서 시작해 리셋될 때만 증가하므로,
+  // 0일 때(최초 마운트)는 이미 절반에서 시작하니 건너뛴다.
+  useEffect(() => {
+    if (chatSessionKey === 0) return;
+    sheetRef.current?.snapToHalf();
+  }, [chatSessionKey]);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
 
   // 화면 하단에 떠 있는 ChatInput의 위치/높이. 바텀내비게이션 바로 위에 여백 없이 붙이고,
-  // 키보드가 열려있으면 그 높이만큼 더 띄운다.
+  // 키보드가 열려있으면 키보드 바로 위에 딱 붙인다 — 이때는 바텀내비게이션 자리(BOTTOM_NAV_HEIGHT)를
+  // 더 안 띄운다. 키보드가 이미 그 영역을 덮고 있어서, 같이 더하면 키보드와 입력창 사이에
+  // 불필요한 빈 간격이 생긴다. 키보드가 닫혀있을 땐 폰 자체 제스처 바에 안 가리도록 하단
+  // 안전영역(insets.bottom)만큼 띄운다 — 키보드가 열려있을 땐 키보드가 이미 그 영역을 덮으므로 안 더한다.
+  // position:'absolute'인 바라 KeyboardAvoidingView가 제대로 안 먹어서(바텀 오프셋이 안 밀림) 직접 계산한다.
   // ChatConversation에도 같은 값을 여백(bottomInset)으로 전달해 대화 목록이 가리지 않게 한다.
-  const chatInputBottom = (chatOpen ? 0 : BOTTOM_NAV_HEIGHT) + keyboardHeight;
+  //
+  // 안드로이드에서 keyboardDidShow의 endCoordinates.height는 하단 안전영역(제스처 바)만큼
+  // 덜 측정된다(실측: height=254.9, insets.bottom=47.27일 때 실제 키보드 상단까지 거리는
+  // height+insets.bottom=302.18). 그래서 keyboardHeight에도 insets.bottom을 더해줘야
+  // 입력창이 키보드 속으로 파고들지 않는다. 여기에 더해 안드로이드가 텍스트 입력창 위에
+  // 띄우는 복사/붙여넣기 팝업 같은 시스템 오버레이와 안 겹치도록 약간의 여백(spacing.sm)도 둔다.
+  const chatInputBase =
+    keyboardHeight > 0 ? keyboardHeight + spacing.sm : chatOpen ? 0 : BOTTOM_NAV_HEIGHT;
+  const chatInputBottom = chatInputBase + insets.bottom;
   const chatBottomInset = chatInputBottom + CHAT_INPUT_HEIGHT;
 
-  // "아래로 완전히 접기"는 대화 길이와 무관하게 항상 같은 고정 위치.
-  const downTop = SHEET_TOP_DOWN_MAX;
-  // "중간"은 말풍선 미리보기(2~3개)가 ChatInput 위에 딱 맞게 다 보이는 위치로 계산한다.
-  // 말풍선 묶음 단위로 측정한 값이라, 중간에 잘려 보이는 일이 없다.
-  const halfTop = Math.max(
-    SHEET_TOP_UP,
-    Math.min(downTop, SCREEN_H - chatBottomInset - previewHeight),
-  );
-  const snapDown = downTop - SHEET_TOP_UP;
-  const snapHalf = halfTop - SHEET_TOP_UP;
+  // 채팅 시트가 "절반" 스냅으로 떠 있을 때 지도 하단이 가려지는 만큼, 카메라 중심을 위로 밀어서
+  // 가려지지 않은 윗부분 안에서 현재 위치(GPS 점)가 보이게 한다. ChatBottomSheet의 절반 높이
+  // 계산과 정확히 같은 값을 써야 해서 같은 공용 함수를 쓴다.
+  const mapBottomPadding = computeChatSheetHalfHeight({
+    screenHeight: SCREEN_H,
+    bottomReservedHeight: chatBottomInset,
+    previewHeight,
+  });
 
-  // 바텀시트 위치 애니메이션: 0 = 맨 위, 값이 클수록 아래. 시작은 계산된 중간 스냅 위치.
-  const translateY = useRef(new Animated.Value(snapHalf)).current;
-  const restingY = useRef(snapHalf); // 손을 뗐을 때의 현재 스냅 위치
-
-  const snapTo = (target: number) => {
-    restingY.current = target;
-    Animated.spring(translateY, {
-      toValue: target,
-      useNativeDriver: true,
-      bounciness: 3,
-      speed: 14,
-    }).start();
-  };
-
-  // 키보드가 열리면 그 높이를 chatInputBottom에 반영해 입력창/시트가 가려지지 않게 하고,
-  // 채팅에 집중하는 상황이니 시트도 맨 위(SNAP_UP)로 펼친다.
+  // 키보드가 열리면 그 높이를 chatInputBottom에 반영해 입력창이 가려지지 않게 하고,
+  // 채팅에 집중하는 상황이니 시트도 맨 위로 펼친다.
   useEffect(() => {
     const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
     const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
 
     const showSub = Keyboard.addListener(showEvent, e => {
       setKeyboardHeight(e.endCoordinates.height);
-      snapTo(SNAP_UP);
+      sheetRef.current?.expand();
     });
     const hideSub = Keyboard.addListener(hideEvent, () => {
       setKeyboardHeight(0);
@@ -214,46 +260,7 @@ function HomeTab({
       showSub.remove();
       hideSub.remove();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  // PanResponder의 클로저는 최초 생성 시점의 값을 캡처하므로, 매 렌더 최신값을 ref에 담아 읽는다.
-  const snapDownRef = useRef(snapDown);
-  const snapHalfRef = useRef(snapHalf);
-  const prevSnapHalfRef = useRef(snapHalf);
-  useEffect(() => {
-    snapDownRef.current = snapDown;
-    snapHalfRef.current = snapHalf;
-    // 말풍선 실측치가 (추정값에서) 갱신되면서 half 위치가 바뀌었는데, 마침 시트가
-    // 이전 half 위치에 머물러 있었다면 새 half 위치로 다시 맞춰준다.
-    if (Math.abs(restingY.current - prevSnapHalfRef.current) < 1) {
-      snapTo(snapHalf);
-    }
-    prevSnapHalfRef.current = snapHalf;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [snapDown, snapHalf]);
-
-  const panResponder = useRef(
-    PanResponder.create({
-      // 세로로 4px 이상 움직일 때만 드래그로 인식 (탭/가로스크롤과 구분)
-      onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dy) > 4,
-      onPanResponderMove: (_, g) => {
-        let next = restingY.current + g.dy;
-        if (next < SNAP_UP) next = SNAP_UP; // 위 한계
-        if (next > snapDownRef.current) next = snapDownRef.current; // 아래 한계
-        translateY.setValue(next);
-      },
-      onPanResponderRelease: (_, g) => {
-        // 놓는 순간 위치에 속도를 살짝 반영해, 가장 가까운 스냅 포인트로 이동
-        const projected = restingY.current + g.dy + g.vy * 100;
-        const points = [SNAP_UP, snapHalfRef.current, snapDownRef.current];
-        const target = points.reduce((best, p) =>
-          Math.abs(projected - p) < Math.abs(projected - best) ? p : best,
-        );
-        snapTo(target);
-      },
-    }),
-  ).current;
 
   return (
     <View style={styles.fill}>
@@ -262,16 +269,17 @@ function HomeTab({
           mode="overview"
           currentLocation={currentLocation}
           previewRoute={activeRoute?.coordinates ?? undefined}
+          bottomPadding={mapBottomPadding}
         />
       </View>
 
-      <Animated.View
-        style={[styles.homeSheet, { transform: [{ translateY }] }]}
+      <ChatBottomSheet
+        ref={sheetRef}
+        previewHeight={previewHeight}
+        bottomReservedHeight={chatBottomInset}
       >
-        <View style={styles.sheetGrabZone} {...panResponder.panHandlers}>
-          <View style={styles.dragHandle} />
-        </View>
         <ChatConversation
+          key={chatSessionKey}
           ref={chatRef}
           currentLocation={currentLocation}
           go={go}
@@ -281,18 +289,18 @@ function HomeTab({
           onPreviewHeightChange={setPreviewHeight}
           bottomInset={chatBottomInset}
           onRequestClose={() => {
-            snapTo(snapDown);
+            sheetRef.current?.collapse();
             go('home');
           }}
         />
-      </Animated.View>
+      </ChatBottomSheet>
 
       <View style={[styles.chatInputBar, { bottom: chatInputBottom }]}>
         <ChatInput
           onSend={text => {
             chatRef.current?.submitAnswer(text);
             // 메시지를 보내는 순간, 3단계 스와이프 중 가장 위(꽉 찬) 상태로 올려준다.
-            snapTo(SNAP_UP);
+            sheetRef.current?.expand();
           }}
           disabled={chatDone || chatSending}
         />
@@ -308,8 +316,15 @@ function BottomNav({
   active: TabName;
   onChange: (tab: TabName) => void;
 }) {
+  // 폰 자체 뒤로가기/홈 제스처 바 영역에 탭바가 가려지지 않도록 하단 안전영역만큼 더 띄운다.
+  const insets = useSafeAreaInsets();
   return (
-    <View style={styles.bottomNav}>
+    <View
+      style={[
+        styles.bottomNav,
+        { height: BOTTOM_NAV_HEIGHT + insets.bottom, paddingBottom: insets.bottom },
+      ]}
+    >
       {navItems.map(item => {
         const isActive = active === item.name;
         return (
@@ -336,6 +351,9 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.card,
   },
+  hidden: {
+    display: 'none',
+  },
   appShell: {
     flex: 1,
     backgroundColor: colors.bgSoft,
@@ -348,18 +366,6 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     backgroundColor: colors.bgSoft,
   },
-  homeSheet: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    top: SHEET_TOP_UP,
-    height: SCREEN_H, // 접혔을 때도 화면 아래를 항상 덮도록 넉넉하게
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    backgroundColor: 'rgba(255,255,255,0.98)',
-    paddingBottom: spacing.lg,
-    ...shadows.soft,
-  },
   chatInputBar: {
     position: 'absolute',
     left: 0,
@@ -367,19 +373,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.card,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
-  },
-  sheetGrabZone: {
-    paddingTop: spacing.sm,
-    paddingBottom: spacing.sm,
-    alignItems: 'center',
-  },
-  dragHandle: {
-    width: 38,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: colors.line2,
-    alignSelf: 'center',
-    marginBottom: spacing.md,
   },
   pill: {
     paddingHorizontal: spacing.md,

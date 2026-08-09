@@ -5,7 +5,8 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { ScrollView, Text, View, StyleSheet } from 'react-native';
+import { Pressable, Text, View, StyleSheet } from 'react-native';
+import { BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import { getInitMessage, getMessage } from '../../api/prewalk';
 import {
   ChatResponse,
@@ -72,9 +73,11 @@ export const ChatConversation = forwardRef(function ChatConversation(
   );
   const [done, setDone] = useState(false);
   const [sending, setSending] = useState(false);
+  // getInitMessage 실패 시 true — hasStartedRef가 재시도를 막아버리지 않도록 별도로 추적한다.
+  const [initFailed, setInitFailed] = useState(false);
   const [headerHeight, setHeaderHeight] = useState(0);
   const [previewGroupHeight, setPreviewGroupHeight] = useState(0);
-  const scrollRef = useRef<ScrollView>(null);
+  const scrollRef = useRef<React.ElementRef<typeof BottomSheetScrollView>>(null);
   const hasStartedRef = useRef(false);
 
   const applyResponse = (res: ChatResponse, options?: { reset?: boolean }) => {
@@ -106,6 +109,7 @@ export const ChatConversation = forwardRef(function ChatConversation(
   const startConversation = async () => {
     if (currentLocation.lat == null || currentLocation.lon == null) return;
     setSending(true);
+    setInitFailed(false);
     try {
       const res = await getInitMessage({
         lat: currentLocation.lat,
@@ -119,6 +123,10 @@ export const ChatConversation = forwardRef(function ChatConversation(
         (err as any)?.response?.status,
         (err as any)?.response?.data ?? err,
       );
+      // hasStartedRef를 다시 풀어줘야 재시도 버튼을 누르지 않고도(예: 위치가 뒤늦게 잡혀서
+      // effect가 재실행되는 경우) 다음 시도가 막히지 않는다.
+      hasStartedRef.current = false;
+      setInitFailed(true);
       setMessages([
         { from: 'bot', text: '대화를 시작하지 못했어요. 다시 시도해주세요.' },
       ]);
@@ -188,7 +196,7 @@ export const ChatConversation = forwardRef(function ChatConversation(
       >
         <Text style={styles.chatHeaderTitle}>Roudi</Text>
       </View>
-      <ScrollView
+      <BottomSheetScrollView
         ref={scrollRef}
         style={styles.chatScroll}
         contentContainerStyle={[
@@ -255,8 +263,19 @@ export const ChatConversation = forwardRef(function ChatConversation(
               </View>
             </View>
           ) : null}
+          {initFailed && !sending ? (
+            <Pressable
+              onPress={() => startConversation()}
+              style={({ pressed }) => [
+                styles.retryButton,
+                pressed && styles.retryButtonPressed,
+              ]}
+            >
+              <Text style={styles.retryButtonText}>다시 시도</Text>
+            </Pressable>
+          ) : null}
         </View>
-      </ScrollView>
+      </BottomSheetScrollView>
     </View>
   );
 });
@@ -294,6 +313,22 @@ const styles = StyleSheet.create({
   },
   previewGroup: {
     gap: spacing.md,
+  },
+  retryButton: {
+    alignSelf: 'flex-start',
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: colors.mintDeep,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+  },
+  retryButtonPressed: {
+    opacity: 0.6,
+  },
+  retryButtonText: {
+    color: colors.mintDeep,
+    fontSize: 13,
+    fontWeight: '800',
   },
   chatLine: {
     width: '100%',

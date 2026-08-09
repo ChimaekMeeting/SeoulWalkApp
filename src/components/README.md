@@ -5,6 +5,7 @@
 ```
 src/components/
 ├─ ScreenHeader.tsx    # 뒤로가기 화살표 + 제목/부제 + 우측 버튼 헤더 (여러 화면 공통)
+├─ AppBottomSheet.tsx  # gorhom BottomSheet를 감싼 범용 래퍼 (src/bottomsheets/의 화면별 시트가 이걸 씀)
 ├─ chat/                # 홈 화면 하단시트에 들어가는 AI 챗봇 대화 UI
 │  ├─ ChatConversation.tsx  # 대화 흐름 전체를 관리하는 컨테이너 (이걸 import해서 쓰면 됨)
 │  ├─ ChatInput.tsx         # 하단 입력창
@@ -15,7 +16,9 @@ src/components/
 ├─ map/                  # 지도 컴포넌트
 │  ├─ AppMapView.tsx        # mode="overview" | "walk" 공용 지도 (기본)
 │  ├─ RouteMapView.tsx      # AppMapView + 줌 버튼 + "경로 전체 보기"
-│  ├─ RouteLayer.tsx        # 경로 라인 레이어 (내부용)
+│  ├─ RouteLayer.tsx        # 경로 라인 레이어 (내부용, id prop으로 같은 지도에 중복 렌더 가능)
+│  ├─ RouteDirectionArrows.tsx # 경로 선 위에 방향 화살표(▶)를 일정 간격으로 표시 (내부용)
+│  ├─ RouteEndpointMarkers.tsx # 출발·도착 마커 — 순환 코스면 하나로 합쳐서 표시 (내부용)
 │  ├─ DynamicPOILayer.tsx   # 미사용 — 어디서도 import 안 됨
 │  ├─ StaticPOILayer.tsx    # 미사용 — 어디서도 import 안 됨
 │  └─ index.ts
@@ -35,6 +38,10 @@ src/components/
 ## 1. `ScreenHeader.tsx`
 
 `title`/`subtitle`/`onBack`/`right` props만 받는 순수 헤더. `onBack`이 있을 때만 뒤로가기 화살표가 뜹니다. 지금은 `MyScreen.tsx`, `record/RecordTab.tsx`에서 쓰고 있고, 새 화면을 추가할 때도 이 컴포넌트로 헤더를 통일하면 됩니다.
+
+## 1-1. `AppBottomSheet.tsx`
+
+`@gorhom/bottom-sheet`의 `BottomSheet`(비-모달, 항상 화면에 떠 있는 시트)를 감싼 범용 래퍼입니다. `snapToIndex`만 노출하는 얇은 컴포넌트라 화면별 스냅포인트 계산 같은 로직은 담지 않습니다 — 그건 `src/bottomsheets/`(예: `ChatBottomSheet.tsx`)에 화면별로 따로 둡니다. 완전히 닫히는(dismiss) 모달형 시트가 필요해지면 `BottomSheetModal` 기반의 별도 컴포넌트를 추가하세요(지금은 쓰는 곳이 없어 만들지 않았습니다).
 
 ## 2. `chat/` — 챗봇 대화 UI
 
@@ -74,7 +81,7 @@ import { AppMapView } from '../components/map';
 />;
 ```
 
-**산책중 화면(경로안내)**: 전체 경로 라인 + 실시간 GPS 위치를 따라가는 카메라(줌인·기울임)를 보여줍니다.
+**산책중 화면(경로안내)**: 전체 경로 라인 + 실시간 GPS 위치를 따라가는 카메라(줌인·기울임)를 보여줍니다. `traveledKm`을 같이 넘기면 지나온 구간(원래 경로색)/남은 구간(옅은 회색)을 다른 색으로 나눠 그리고, 방향 화살표(`RouteDirectionArrows`)와 출발·도착 마커(`RouteEndpointMarkers`)도 자동으로 함께 표시됩니다 — 순환 코스에서 시작·끝·진행 방향이 헷갈리지 않도록 하기 위함입니다(순환 코스는 시작점≈끝점이라 마커 두 개 대신 "출발·도착" 하나로 합쳐서 보여줍니다).
 
 ```tsx
 import { AppMapView } from '../components/map';
@@ -84,6 +91,7 @@ import { AppMapView } from '../components/map';
   currentLocation={locationInfo}
   route={state.route_result.coordinates} // 필수
   routeColor={course.color} // 선택, 기본값 파란색
+  traveledKm={progress.traveledKm} // 선택 — 생략하면 경로 전체를 단일 색으로만 그림(마커/화살표는 항상 표시됨)
 />;
 ```
 
@@ -117,7 +125,8 @@ const locationInfo: LocationInfo | null = coords
 |---|---|---|
 | 지도 스타일 | streets (밝은 기본 지도) | dark (야간용) |
 | 카메라 | 최초 1회만 현재 위치로 이동, 이후 자유 팬/줌 | `followUserLocation`으로 계속 사용자 위치를 따라가며 근접·기울임 |
-| 경로 라인 | `previewRoute` 있을 때만, 점선 | `route` 항상, 실선 |
+| 경로 라인 | `previewRoute` 있을 때만, 점선 | `route` 항상, 실선 (`traveledKm` 넘기면 지나온/남은 구간 이색) |
+| 방향 화살표·출발도착 마커 | 없음 | `route` 있으면 항상 표시 |
 | 커스텀 POI 마커 | 없음 (지도 스타일 자체에 건물/상호 정보 포함) | 없음 |
 
 `DynamicPOILayer.tsx`/`StaticPOILayer.tsx`는 현재 앱 어디에서도 import되지 않는 미사용 컴포넌트입니다.
