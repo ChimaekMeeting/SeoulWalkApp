@@ -19,7 +19,7 @@ export function WalkPrepScreen({ routeResult, currentLocation, onStart, onBack }
   const kcal = estimateKcal(routeResult.total_km);
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top', 'left', 'right', 'bottom']}>
+    <SafeAreaView style={styles.safe} edges={['left', 'right', 'bottom']}>
       <View style={styles.header}>
         <Pressable onPress={onBack} hitSlop={12}>
           <Text style={styles.backIcon}>←</Text>

@@ -1,12 +1,12 @@
 import React, { useEffect, useMemo, useRef } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Pedometer } from 'expo-sensors';
 import { RouteMapView } from '../../components/map';
 import { WalkRouteResponse } from '../../types/prewalk';
 import { WalkEndSnapshot } from '../../types/walk';
 import { useWatchLocation } from '../../hooks/useWatchLocation';
-import { calculateWalkProgress } from '../../utils/walkProgress';
+import { WalkProgressTracker, deriveProgress } from '../../utils/walkProgress';
 import { radii, spacing } from '../../theme/tokens';
 
 interface Props {
@@ -16,8 +16,13 @@ interface Props {
 
 export function WalkInProgressScreen({ routeResult, onRequestEnd }: Props) {
   const { coords } = useWatchLocation();
+  // 폰 자체 뒤로가기/홈 제스처 바에 줌 버튼이 가려지지 않도록 하단 안전영역만큼 더 띄운다.
+  const insets = useSafeAreaInsets();
   const startedAtRef = useRef(Date.now());
   const stepsRef = useRef<number | null>(null);
+  // GPS 튐 필터링·연속 이탈 확인·직전 매칭 지점 기억을 위해 산책 한 번 동안 상태를 유지하는
+  // 트래커. 화면이 마운트된 동안(=산책 한 번) 하나의 인스턴스를 그대로 재사용한다.
+  const trackerRef = useRef(new WalkProgressTracker());
 
   useEffect(() => {
     let subscription: { remove: () => void } | undefined;
@@ -37,8 +42,11 @@ export function WalkInProgressScreen({ routeResult, onRequestEnd }: Props) {
   }, []);
 
   const progress = useMemo(() => {
-    if (!coords) return { traveledKm: 0, remainingKm: routeResult.total_km, progressRatio: 0 };
-    return calculateWalkProgress(
+    // coords가 아직 없는 경우는 첫 GPS fix 전뿐이라, 트래커도 아직 0에서 시작한 상태다.
+    if (!coords) {
+      return deriveProgress(0, routeResult.total_km);
+    }
+    return trackerRef.current.update(
       [coords.latitude, coords.longitude],
       routeResult.coordinates,
       routeResult.total_km,
@@ -78,8 +86,9 @@ export function WalkInProgressScreen({ routeResult, onRequestEnd }: Props) {
           mode="walk"
           currentLocation={currentLocation}
           route={routeResult.coordinates}
+          traveledKm={progress.traveledKm}
           style={StyleSheet.absoluteFill}
-          zoomControlBottomOffset={96}
+          zoomControlBottomOffset={96 + insets.bottom}
         />
 
         <SafeAreaView style={styles.bottomOverlay} edges={['bottom']} pointerEvents="box-none">

@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { Animated, Dimensions, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { radii, spacing } from '../../theme/tokens';
 
 const SCREEN_HEIGHT = Dimensions.get('window').height;
@@ -12,6 +13,8 @@ interface Props {
 
 export function WalkEndConfirmModal({ visible, onCancel, onConfirm }: Props) {
   const translateY = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
+  // 폰 자체 뒤로가기/홈 제스처 바에 버튼이 가려지지 않도록 하단 안전영역만큼 더 띄운다.
+  const insets = useSafeAreaInsets();
 
   useEffect(() => {
     if (visible) {
@@ -29,7 +32,12 @@ export function WalkEndConfirmModal({ visible, onCancel, onConfirm }: Props) {
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
       <View style={styles.backdrop}>
         <Pressable style={StyleSheet.absoluteFill} onPress={onCancel} />
-        <Animated.View style={[styles.sheet, { transform: [{ translateY }] }]}>
+        <Animated.View
+          style={[
+            styles.sheet,
+            { paddingBottom: spacing.xxl + insets.bottom, transform: [{ translateY }] },
+          ]}
+        >
           <View style={styles.dragHandle} />
           <Text style={styles.icon}>🚶</Text>
           <Text style={styles.title}>산책을 정말로{'\n'}종료하시겠습니까?</Text>

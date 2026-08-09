@@ -1,13 +1,15 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, AppState, AppStateStatus, StyleSheet, View } from 'react-native';
+import 'react-native-gesture-handler';
+import React from 'react';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import * as Location from 'expo-location';
-import { Pedometer } from 'expo-sensors';
+import { NavigationContainer } from '@react-navigation/native';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 import Mapbox from '@rnmapbox/maps';
 import { env } from './src/config/env';
-import { useKakaoAuth } from './src/auth/useKakaoAuth';
-import { onboardingStorage } from './src/auth/onboardingStorage';
-import { getSurvey } from './src/api/survey';
+import { AppBootstrapProvider, useAppBootstrap } from './src/auth/AppBootstrap';
+import { navigationRef } from './src/navigation/navigationRef';
 import { BrandSplashScreen } from './src/screens/BrandSplashScreen';
 import { OnboardingScreen } from './src/screens/OnboardingScreen';
 import { SurveyScreen } from './src/screens/SurveyScreen';
@@ -16,181 +18,15 @@ import { LocationPermissionScreen } from './src/screens/LocationPermissionScreen
 import { ActivityPermissionScreen } from './src/screens/ActivityPermissionScreen';
 import { HomeScreen } from './src/screens/HomeScreen';
 import { colors } from './src/theme/tokens';
+import type { RootStackParamList } from './src/types/navigation';
 
 Mapbox.setAccessToken(env.MAPBOX_PUBLIC_ACCESS_TOKEN);
 
-type PermissionStatus = 'checking' | 'granted' | 'denied' | 'undetermined';
+const Stack = createNativeStackNavigator<RootStackParamList>();
 
-function App() {
-  const { authState, userId, error, signIn, signOut } = useKakaoAuth();
-  const [permissionStatus, setPermissionStatus] =
-    useState<PermissionStatus>('checking');
-  const [activityStatus, setActivityStatus] =
-    useState<PermissionStatus>('checking');
-
-  const [showBrandSplash, setShowBrandSplash] = useState(true);
-  const [onboardingStatus, setOnboardingStatus] = useState<'checking' | 'seen' | 'unseen'>('checking');
-  const [surveyStatus, setSurveyStatus] = useState<'checking' | 'completed' | 'pending'>('checking');
-
-  const appState = useRef<AppStateStatus>(AppState.currentState);
-
-  useEffect(() => {
-    onboardingStorage.getHasSeen().then(value => {
-      setOnboardingStatus(value === 'true' ? 'seen' : 'unseen');
-    });
-    const timer = setTimeout(() => setShowBrandSplash(false), 2000);
-    return () => clearTimeout(timer);
-  }, []);
-
-  useEffect(() => {
-    if (authState !== 'loggedIn') return;
-    getSurvey({ timeout: 8000 })
-      .then(({ data }) => {
-        console.log('[App] GET /api/user/survey 응답:', data);
-        setSurveyStatus(data.survey_completed ? 'completed' : 'pending');
-      })
-      .catch((e) => {
-        console.warn('[App] GET /api/user/survey 실패 → pending 폴백:', e?.message ?? e);
-        setSurveyStatus('pending');
-      });
-  }, [authState]);
-
-  const checkLocationPermission = async () => {
-    const { status } = await Location.getForegroundPermissionsAsync();
-    if (status === 'granted') {
-      setPermissionStatus('granted');
-    } else if (status === 'denied') {
-      setPermissionStatus('denied');
-    } else {
-      setPermissionStatus('undetermined');
-    }
-  };
-
-  useEffect(() => {
-    if (authState !== 'loggedIn') return;
-    checkLocationPermission();
-  }, [authState]);
-
-  // 설정 앱에서 돌아왔을 때 권한 상태 재확인
-  useEffect(() => {
-    if (authState !== 'loggedIn') return;
-    const subscription = AppState.addEventListener(
-      'change',
-      (nextState: AppStateStatus) => {
-        if (
-          appState.current !== 'active' &&
-          nextState === 'active' &&
-          permissionStatus === 'denied'
-        ) {
-          checkLocationPermission();
-        }
-        appState.current = nextState;
-      },
-    );
-    return () => subscription.remove();
-  }, [authState, permissionStatus]);
-
-  const requestLocationPermission = async () => {
-    const { status } = await Location.requestForegroundPermissionsAsync();
-    setPermissionStatus(status === 'granted' ? 'granted' : 'denied');
-  };
-
-  // 위치 권한이 확정된 뒤 신체 활동 권한을 확인합니다.
-  useEffect(() => {
-    if (authState !== 'loggedIn' || permissionStatus !== 'granted') return;
-    Pedometer.getPermissionsAsync().then(({ status }) => {
-      if (status === 'granted') {
-        setActivityStatus('granted');
-      } else if (status === 'denied') {
-        // 이미 거부한 적 있으면 화면 없이 HomeScreen으로
-        setActivityStatus('denied');
-      } else {
-        setActivityStatus('undetermined');
-      }
-    });
-  }, [authState, permissionStatus]);
-
-  const isCheckingPermissions =
-    permissionStatus === 'checking' ||
-    (permissionStatus === 'granted' && activityStatus === 'checking');
-
-  if (showBrandSplash) {
-    return <BrandSplashScreen />;
-  }
-
-  if (onboardingStatus === 'checking') {
-    return <SplashView />;
-  }
-
-  if (onboardingStatus === 'unseen') {
-    return (
-      <SafeAreaProvider>
-        <OnboardingScreen onDone={() => setOnboardingStatus('seen')} />
-      </SafeAreaProvider>
-    );
-  }
-
-  if (authState === 'loading' || (authState === 'loggedIn' && surveyStatus === 'checking')) {
-    return <SplashView />;
-  }
-
-  if (authState === 'loggedIn' && surveyStatus === 'pending') {
-    return (
-      <SafeAreaProvider>
-        <SurveyScreen onDone={() => setSurveyStatus('completed')} />
-      </SafeAreaProvider>
-    );
-  }
-
-  if (authState === 'loggedIn' && isCheckingPermissions) {
-    return <SplashView />;
-  }
-
-  if (authState === 'loggedOut') {
-    return (
-      <SafeAreaProvider>
-        <LoginScreen onLogin={signIn} error={error} />
-      </SafeAreaProvider>
-    );
-  }
-
-  if (permissionStatus === 'undetermined' || permissionStatus === 'denied') {
-    return (
-      <SafeAreaProvider>
-        <LocationPermissionScreen
-          status={permissionStatus}
-          onRequest={requestLocationPermission}
-          onSkip={() => setPermissionStatus('granted')}
-        />
-      </SafeAreaProvider>
-    );
-  }
-
-  if (activityStatus === 'undetermined') {
-    return (
-      <SafeAreaProvider>
-        <ActivityPermissionScreen
-          status="undetermined"
-          onGranted={() => setActivityStatus('granted')}
-          onSkip={() => setActivityStatus('denied')}
-        />
-      </SafeAreaProvider>
-    );
-  }
-
-  return (
-    <SafeAreaProvider>
-      <HomeScreen
-        onLogout={signOut}
-        userId={userId}
-        activityPermission={activityStatus === 'granted' ? 'granted' : 'denied'}
-        onResetSurvey={() => setSurveyStatus('pending')}
-      />
-    </SafeAreaProvider>
-  );
-}
-
-function SplashView() {
+// 온보딩/설문/권한 확인 중 공통으로 쓰는 로딩 화면. AppBootstrapProvider가 상태를 보고
+// navigation.replace()로 다음 화면을 결정하는 동안 잠깐 보여준다.
+function LoadingScreen() {
   return (
     <View style={styles.splash}>
       <ActivityIndicator size="large" color={colors.mintDeep} />
@@ -198,7 +34,92 @@ function SplashView() {
   );
 }
 
+function OnboardingScreenContainer() {
+  const { onboardingDone } = useAppBootstrap();
+  return <OnboardingScreen onDone={onboardingDone} />;
+}
+
+function LoginScreenContainer() {
+  const { signIn, loginError } = useAppBootstrap();
+  return <LoginScreen onLogin={signIn} error={loginError} />;
+}
+
+function SurveyScreenContainer() {
+  const { surveyDone } = useAppBootstrap();
+  return <SurveyScreen onDone={surveyDone} />;
+}
+
+function LocationPermissionScreenContainer() {
+  const { permissionStatus, requestLocationPermission, skipLocationPermission } =
+    useAppBootstrap();
+  // 이 화면은 permissionStatus가 'undetermined' | 'denied'일 때만 라우팅되므로 단언 안전.
+  return (
+    <LocationPermissionScreen
+      status={permissionStatus as 'undetermined' | 'denied'}
+      onRequest={requestLocationPermission}
+      onSkip={skipLocationPermission}
+    />
+  );
+}
+
+function ActivityPermissionScreenContainer() {
+  const { grantActivityPermission, skipActivityPermission } = useAppBootstrap();
+  return (
+    <ActivityPermissionScreen
+      status="undetermined"
+      onGranted={grantActivityPermission}
+      onSkip={skipActivityPermission}
+    />
+  );
+}
+
+function HomeScreenContainer() {
+  const { signOut, userId, activityStatus, resetSurvey } = useAppBootstrap();
+  return (
+    <HomeScreen
+      onLogout={signOut}
+      userId={userId}
+      activityPermission={activityStatus === 'granted' ? 'granted' : 'denied'}
+      onResetSurvey={resetSurvey}
+    />
+  );
+}
+
+function RootNavigator() {
+  return (
+    <Stack.Navigator initialRouteName="BrandSplash" screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="BrandSplash" component={BrandSplashScreen} />
+      <Stack.Screen name="Loading" component={LoadingScreen} />
+      <Stack.Screen name="Onboarding" component={OnboardingScreenContainer} />
+      <Stack.Screen name="Login" component={LoginScreenContainer} />
+      <Stack.Screen name="Survey" component={SurveyScreenContainer} />
+      <Stack.Screen name="LocationPermission" component={LocationPermissionScreenContainer} />
+      <Stack.Screen name="ActivityPermission" component={ActivityPermissionScreenContainer} />
+      <Stack.Screen name="Home" component={HomeScreenContainer} />
+    </Stack.Navigator>
+  );
+}
+
+export default function App() {
+  return (
+    <GestureHandlerRootView style={styles.root}>
+      <SafeAreaProvider>
+        <NavigationContainer ref={navigationRef}>
+          <BottomSheetModalProvider>
+            <AppBootstrapProvider>
+              <RootNavigator />
+            </AppBootstrapProvider>
+          </BottomSheetModalProvider>
+        </NavigationContainer>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
+  );
+}
+
 const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+  },
   splash: {
     flex: 1,
     backgroundColor: colors.bgSoft,
@@ -206,5 +127,3 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
 });
-
-export default App;

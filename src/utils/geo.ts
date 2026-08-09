@@ -1,6 +1,121 @@
 import { LocationInfo, WalkRouteResponse } from '../types/prewalk';
 import { mapConfig } from '../config/mapConfig';
 
+const EARTH_RADIUS_KM = 6371;
+
+/** [lat, lon] 두 점 사이의 대권거리(km). */
+export function haversineDistanceKm(a: [number, number], b: [number, number]): number {
+  const [lat1, lon1] = a;
+  const [lat2, lon2] = b;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const rLat1 = (lat1 * Math.PI) / 180;
+  const rLat2 = (lat2 * Math.PI) / 180;
+
+  const sinDLat = Math.sin(dLat / 2);
+  const sinDLon = Math.sin(dLon / 2);
+  const h = sinDLat * sinDLat + Math.cos(rLat1) * Math.cos(rLat2) * sinDLon * sinDLon;
+  return 2 * EARTH_RADIUS_KM * Math.asin(Math.sqrt(h));
+}
+
+/**
+ * current를 route 폴리라인의 각 구간에 투영해 가장 가까운 지점을 찾고,
+ * 경로 시작점부터 그 지점까지의 누적 거리를 반환한다.
+ * 두 점짜리 구간은 등속 보간(선형)으로 투영 지점을 근사한다.
+ *
+ * @param window 지정하면 route 위 [centerKm - windowKm, centerKm + windowKm] 범위의 구간만 후보로
+ *   본다. 순환 코스처럼 경로가 자기 자신과 가까이 지나가는 구간(출발점≈도착점 등)에서, 실제로는
+ *   경로 뒤쪽을 걷고 있는데 지리적으로만 가까운 앞쪽 구간에 잘못 매칭되는 걸 막기 위한 것 —
+ *   "직전에 있던 지점 근처에서 우선 찾는다"는 제약.
+ */
+export function projectOntoRoute(
+  current: [number, number],
+  route: WalkRouteResponse['coordinates'],
+  window?: { centerKm: number; windowKm: number },
+): { distanceAlongRouteKm: number; distanceToRouteKm: number } {
+  if (route.length === 0) return { distanceAlongRouteKm: 0, distanceToRouteKm: 0 };
+  if (route.length === 1) {
+    return { distanceAlongRouteKm: 0, distanceToRouteKm: haversineDistanceKm(current, route[0]) };
+  }
+
+  let cumulativeKm = 0;
+  let bestDistanceAlongRouteKm = 0;
+  let bestDistanceToRouteKm = Infinity;
+
+  for (let i = 0; i < route.length - 1; i++) {
+    const segStart = route[i];
+    const segEnd = route[i + 1];
+    const segLengthKm = haversineDistanceKm(segStart, segEnd);
+
+    // 세그먼트 위 투영 비율 t(0~1)를 위도/경도 평면상의 벡터 투영으로 근사.
+    const [lat1, lon1] = segStart;
+    const [lat2, lon2] = segEnd;
+    const [latC, lonC] = current;
+
+    const dx = lon2 - lon1;
+    const dy = lat2 - lat1;
+    const lenSq = dx * dx + dy * dy;
+    let t = lenSq === 0 ? 0 : ((lonC - lon1) * dx + (latC - lat1) * dy) / lenSq;
+    t = Math.max(0, Math.min(1, t));
+
+    const projected: [number, number] = [lat1 + t * dy, lon1 + t * dx];
+    const distanceToRouteKm = haversineDistanceKm(current, projected);
+    const distanceAlongRouteKm = cumulativeKm + t * segLengthKm;
+
+    const withinWindow =
+      !window || Math.abs(distanceAlongRouteKm - window.centerKm) <= window.windowKm;
+
+    if (withinWindow && distanceToRouteKm < bestDistanceToRouteKm) {
+      bestDistanceToRouteKm = distanceToRouteKm;
+      bestDistanceAlongRouteKm = distanceAlongRouteKm;
+    }
+
+    cumulativeKm += segLengthKm;
+  }
+
+  return { distanceAlongRouteKm: bestDistanceAlongRouteKm, distanceToRouteKm: bestDistanceToRouteKm };
+}
+
+/**
+ * route 폴리라인을 시작점부터 distanceKm 지점에서 둘로 자른다(보간된 분할점을 양쪽에 포함해
+ * 선이 끊겨 보이지 않게 함). 지도에 "이미 걸은 구간/남은 구간"을 다른 색으로 그릴 때 쓴다.
+ */
+export function sliceRouteAtDistanceKm(
+  route: WalkRouteResponse['coordinates'],
+  distanceKm: number,
+): { before: WalkRouteResponse['coordinates']; after: WalkRouteResponse['coordinates'] } {
+  if (route.length === 0) return { before: [], after: [] };
+  if (route.length === 1) return { before: [route[0]], after: [route[0]] };
+
+  const clamped = Math.max(0, distanceKm);
+  let cumulativeKm = 0;
+  const before: WalkRouteResponse['coordinates'] = [route[0]];
+
+  for (let i = 0; i < route.length - 1; i++) {
+    const segStart = route[i];
+    const segEnd = route[i + 1];
+    const segLengthKm = haversineDistanceKm(segStart, segEnd);
+
+    if (cumulativeKm + segLengthKm < clamped) {
+      before.push(segEnd);
+      cumulativeKm += segLengthKm;
+      continue;
+    }
+
+    // 분할점이 이 구간 안에 있다 — 보간해서 정확한 위치를 구하고, 그 지점부터 나머지를 after로.
+    const t = segLengthKm === 0 ? 0 : (clamped - cumulativeKm) / segLengthKm;
+    const splitPoint: [number, number] = [
+      segStart[0] + (segEnd[0] - segStart[0]) * t,
+      segStart[1] + (segEnd[1] - segStart[1]) * t,
+    ];
+    before.push(splitPoint);
+    return { before, after: [splitPoint, segEnd, ...route.slice(i + 2)] };
+  }
+
+  // clamped가 전체 길이 이상 — 전부 지나온 구간. after는 선이 끊기지 않게 마지막 점만 남긴다.
+  return { before, after: [route[route.length - 1]] };
+}
+
 /**
  * backend LocationInfo(lat/lon)를 Mapbox가 요구하는 [lng, lat] 순서로 변환한다.
  * lat/lon 중 하나라도 없으면 null을 반환한다.
