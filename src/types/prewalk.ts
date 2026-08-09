@@ -102,7 +102,7 @@ export interface State {
   origin_candidate: LocationInfo[] | null;
   destination_candidate: LocationInfo[] | null;
 
-  route_result: WalkRouteResponse | null;
+  route_result: WalkRouteResponse[] | null;
   is_complete: boolean;
   awaiting_confirmation: boolean;
   user_prompt: string;

@@ -68,7 +68,7 @@ export const ChatConversation = forwardRef(function ChatConversation(
 ) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [threadId, setThreadId] = useState<string | null>(null);
-  const [routeResult, setRouteResult] = useState<WalkRouteResponse | null>(
+  const [routeResults, setRouteResults] = useState<WalkRouteResponse[] | null>(
     null,
   );
   const [done, setDone] = useState(false);
@@ -92,13 +92,17 @@ export const ChatConversation = forwardRef(function ChatConversation(
 
     // 경로가 완성된 응답은 ChatBubble로 따로 보여주지 않는다 — 로딩 표시가 그 자리에서
     // 바로 RouteCandidate로 바뀌어 보이도록 한다.
-    const routeReady = !!(res.state?.is_complete && res.state?.route_result);
+    const routeReady = !!(
+      res.state?.is_complete &&
+      res.state?.route_result &&
+      res.state.route_result.length > 0
+    );
     const botText = res.state?.response;
     setMessages(prev => {
       const base = options?.reset ? [] : prev;
       return botText && !routeReady ? base.concat({ from: 'bot', text: botText }) : base;
     });
-    setRouteResult(res.state?.route_result ?? null);
+    setRouteResults(res.state?.route_result ?? null);
     setDone(res.state?.is_complete ?? false);
   };
 
@@ -242,12 +246,22 @@ export const ChatConversation = forwardRef(function ChatConversation(
               }
             />
           ) : null}
-          {routeResult ? (
-            <RouteCandidate
-              route={routeResult}
-              onPress={() => onRouteReady(routeResult)}
-              onRetry={() => startConversation()}
-            />
+          {routeResults && routeResults.length > 0 ? (
+            <View style={styles.chatLine}>
+              <View style={styles.chatIcon}>
+                <Text style={styles.chatIconText}>✳</Text>
+              </View>
+              <View style={styles.cardColumn}>
+                {routeResults.map((route, index) => (
+                  <RouteCandidate
+                    key={route.id ?? index}
+                    route={route}
+                    index={index}
+                    onPress={() => onRouteReady(route)}
+                  />
+                ))}
+              </View>
+            </View>
           ) : null}
           {initFailed && !sending ? (
             <Pressable
@@ -315,5 +329,29 @@ const styles = StyleSheet.create({
     color: colors.mintDeep,
     fontSize: 13,
     fontWeight: '800',
+  },
+  chatLine: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+  },
+  chatIcon: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: colors.black,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  chatIconText: {
+    color: colors.card,
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  cardColumn: {
+    flexShrink: 1,
+    width: '82%',
+    gap: spacing.sm,
   },
 });
