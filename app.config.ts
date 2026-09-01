@@ -62,7 +62,6 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
           '내 주변 산책 경로를 추천하기 위해 위치 정보를 사용합니다.',
       },
     ],
-    ['react-native-share', {}],
     [
       'expo-sensors',
       {

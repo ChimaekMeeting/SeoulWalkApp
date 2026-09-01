@@ -2,13 +2,11 @@
 // 출처: src/types/survey.ts (SurveyStatus), src/types/prewalk.ts (ChatStatus, WalkRouteStatus)
 // 백엔드 인증 코드가 바뀌면 이 파일만 수정한다.
 
-export const AUTH_STATUS = {
+const AUTH_STATUS = {
   ACCESS_EXPIRED_TOKEN: 'access_expired_token',
   INVALID_TOKEN: 'invalid_token',
   USER_NOT_FOUND: 'user_not_found',
 } as const;
-
-export type AuthStatus = typeof AUTH_STATUS[keyof typeof AUTH_STATUS];
 
 // access_expired_token, invalid_token: 재발급 시도 후 원래 요청을 재시도한다.
 export const REFRESH_THEN_RETRY_STATUSES: ReadonlySet<string> = new Set([

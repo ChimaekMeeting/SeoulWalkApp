@@ -1,0 +1,16 @@
+{
+  "$schema": "https://unpkg.com/knip@5/schema.json",
+  // Expo config plugin — app.config.ts의 plugins 배열에서 문자열 경로로 참조되어
+  // knip이 사용처를 못 잡는다. 진입점으로 명시한다.
+  "entry": ["plugins/*.js"],
+  // src/types/prewalk.ts는 백엔드 챗봇 API의 요청/응답 스키마를 1:1로 옮겨 적은 참조 파일이다.
+  // 일부 하위 타입(BasePreference/*Preference/State)과 WalkRouteStatus enum 멤버는 앱 코드에서
+  // 아직 직접 참조하지 않지만(조건 확인 UI·경로 실패별 메시지 미구현) 프로토콜 문서로서 의도된 것이므로
+  // 죽은 코드 스캔에서 제외한다. 이 파일의 스키마는 백엔드와 함께 손으로 관리한다.
+  // src/types/survey.ts도 같은 성격(설문 API 스키마 미러)이라 함께 제외한다.
+  "ignore": ["src/types/prewalk.ts", "src/types/survey.ts"],
+  // knip의 expo 플러그인이 SDK 기본 템플릿을 가정해 "참조됨"으로 잡지만 실제로는
+  // 코드·config 어디에도 쓰이지 않는 패키지들. expo-updates는 EAS Update 미사용,
+  // expo-system-ui는 expo-doctor도 요구하지 않음(제거 완료).
+  "ignoreDependencies": ["expo-updates", "expo-system-ui"]
+}

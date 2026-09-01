@@ -2,7 +2,7 @@
 // "절반" 높이를 그대로 써야(지도 위 GPS 점이 시트에 안 가리게) 해서, 두 곳이 서로 다른 값을
 // 계산하지 않도록 공용 함수로 뽑았다 — ChatBottomSheet도 이 파일의 상수/함수를 그대로 쓴다.
 export const SHEET_TOP_UP = 40; // 위: 채팅 가득 (지도 거의 가려짐) — 화면 top 기준 오프셋
-export const SHEET_TOP_DOWN_MAX = 550; // 아래로 접었을 때의 기본(최대) top 오프셋
+const SHEET_TOP_DOWN_MAX = 550; // 아래로 접었을 때의 기본(최대) top 오프셋
 
 /** "아래로 완전히 접기" 스냅에서 시트가 화면 하단부터 차지하는 높이(px). 대화 길이와 무관하게 고정. */
 export function computeChatSheetDownHeight(screenHeight: number): number {

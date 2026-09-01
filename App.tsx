@@ -16,7 +16,7 @@ import { SurveyScreen } from './src/screens/SurveyScreen';
 import { LoginScreen } from './src/screens/LoginScreen';
 import { LocationPermissionScreen } from './src/screens/LocationPermissionScreen';
 import { ActivityPermissionScreen } from './src/screens/ActivityPermissionScreen';
-import { HomeScreen } from './src/screens/HomeScreen';
+import { MainRouter } from './src/screens/MainRouter';
 import { colors } from './src/theme/tokens';
 import type { RootStackParamList } from './src/types/navigation';
 
@@ -73,13 +73,12 @@ function ActivityPermissionScreenContainer() {
   );
 }
 
-function HomeScreenContainer() {
-  const { signOut, userId, activityStatus, resetSurvey } = useAppBootstrap();
+function MainRouterContainer() {
+  const { signOut, userId, resetSurvey } = useAppBootstrap();
   return (
-    <HomeScreen
+    <MainRouter
       onLogout={signOut}
       userId={userId}
-      activityPermission={activityStatus === 'granted' ? 'granted' : 'denied'}
       onResetSurvey={resetSurvey}
     />
   );
@@ -95,7 +94,7 @@ function RootNavigator() {
       <Stack.Screen name="Survey" component={SurveyScreenContainer} />
       <Stack.Screen name="LocationPermission" component={LocationPermissionScreenContainer} />
       <Stack.Screen name="ActivityPermission" component={ActivityPermissionScreenContainer} />
-      <Stack.Screen name="Home" component={HomeScreenContainer} />
+      <Stack.Screen name="Home" component={MainRouterContainer} />
     </Stack.Navigator>
   );
 }

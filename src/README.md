@@ -16,7 +16,7 @@ src/
 ├── config/       # 환경 변수·지도 설정·설문 질문 config
 ├── data/         # 정적 데이터 (태그 목록, 목업 JSON)
 ├── hooks/        # 위치·앱 상태(포그라운드/백그라운드) 관련 커스텀 훅
-├── navigation/   # HomeScreen 내부 탭 전환 타입 + react-navigation 컨테이너 ref
+├── navigation/   # MainRouter 내부 탭 전환 타입 + react-navigation 컨테이너 ref
 ├── screens/      # 앱의 각 화면 컴포넌트
 ├── theme/        # 디자인 토큰 (색상·여백·반경·그림자)
 ├── types/        # 백엔드 스키마 및 공유 타입 (react-navigation의 RootStackParamList 포함)
@@ -76,7 +76,7 @@ Home (메인 화면)
 
 ## 3. screens/
 
-앱의 각 화면 컴포넌트를 담습니다. 화면 **전환 자체**는 위에서 설명한 `Stack.Navigator`가 담당하지만, **`HomeScreen.tsx` 내부**(하단 탭 home/record/me, 그리고 산책 플로우 realWalk)는 여전히 자체 `Route` 타입(`src/navigation/types.ts`)과 로컬 `useState`로 전환합니다 — 여기엔 React Navigation을 쓰지 않는 게 의도된 설계입니다(자세한 이유는 `src/screens/README.md` 참고).
+앱의 각 화면 컴포넌트를 담습니다. 화면 **전환 자체**는 위에서 설명한 `Stack.Navigator`가 담당하지만, **`MainRouter.tsx` 내부**(하단 탭 home/record/me, 그리고 산책 플로우 realWalk)는 여전히 자체 `Route` 타입(`src/navigation/types.ts`)과 로컬 `useState`로 전환합니다 — 여기엔 React Navigation을 쓰지 않는 게 의도된 설계입니다(자세한 이유는 `src/screens/README.md` 참고).
 
 → **상세 문서:** [`src/screens/README.md`](./screens/README.md)
 
@@ -84,7 +84,7 @@ Home (메인 화면)
 
 ## 4. components/
 
-여러 화면에서 재사용하는 UI 컴포넌트를 기능별 하위 폴더(`chat/` `map/` `my/` `record/` `walk/`)로 나눠 담습니다. 특정 화면에만 쓰이는 컴포넌트도 화면 파일이 커지면 이 폴더로 분리합니다. 최상위엔 `ScreenHeader.tsx` 외에 `AppBottomSheet.tsx`(gorhom `BottomSheet`를 감싼 범용 래퍼, 아래 5번 참고)도 있습니다.
+여러 화면에서 재사용하는 UI 컴포넌트를 기능별 하위 폴더(`chat/` `map/` `my/` `record/`)로 나눠 담습니다. 특정 화면에만 쓰이는 컴포넌트도 화면 파일이 커지면 이 폴더로 분리합니다. 최상위엔 `ScreenHeader.tsx` 외에 `AppBottomSheet.tsx`(gorhom `BottomSheet`를 감싼 범용 래퍼, 아래 5번 참고)도 있습니다.
 
 → **상세 문서:** [`src/components/README.md`](./components/README.md)
 
@@ -183,12 +183,12 @@ GET /api/auth/check/refresh_token
 
 ### 6-2. [DEV] 전용 테스트 버튼
 
-마이페이지(`src/screens/MyScreen.tsx`) 하단에 `__DEV__` 블록으로 감싼 두 개의 버튼이 있습니다. **프로덕션 빌드에는 포함되지 않습니다.**
+마이페이지(`src/screens/MyPageScreen.tsx`) 하단에 `__DEV__` 블록으로 감싼 두 개의 버튼이 있습니다. **프로덕션 빌드에는 포함되지 않습니다.**
 
 #### [DEV] 토큰 강제 만료
 
 ```ts
-// MyScreen.tsx
+// MyPageScreen.tsx
 await authStorage.setAccessToken('invalid_token_for_test');
 ```
 
@@ -202,13 +202,13 @@ SecureStore의 `accessToken`을 유효하지 않은 값으로 덮어씁니다. �
 #### [DEV] 설문 화면 다시 보기
 
 ```ts
-// AppBootstrap.tsx가 HomeScreen으로 전달한 콜백
+// AppBootstrap.tsx가 MainRouter로 전달한 콜백
 resetSurvey: () => setSurveyStatus('pending')
 ```
 
 서버 DB(`user_preferences.survey_completed`)를 건드리지 않고 `AppBootstrap`의 `surveyStatus`만 `'pending'`으로 강제 전환합니다. `computeTargetScreen()`이 곧바로 Survey 화면을 가리키게 되어 즉시 전환됩니다. 재로그인·DB 수정 없이 설문 UI를 반복 테스트할 수 있습니다.
 
-콜백 전달 경로: `AppBootstrap` → `App.tsx`(`HomeScreenContainer`) → `HomeScreen` (prop) → `MyScreen` (prop) → 버튼 `onPress`
+콜백 전달 경로: `AppBootstrap` → `App.tsx`(`MainRouterContainer`) → `MainRouter` (prop) → `MyPageScreen` (prop) → 버튼 `onPress`
 
 **재테스트 순서:**
 1. 마이페이지 → `[DEV] 설문 화면 다시 보기` 버튼 클릭
@@ -270,9 +270,7 @@ const allTags = surveyQuestions.flatMap(q => q.options);
 
 ```
 src/data/
-├── onboarding.ts    # PREFERENCE_TAGS — 취향 태그 문자열 배열 (as const)
-├── mockRoute.json   # 목업 경로 좌표 데이터
-└── mockPois.json    # 목업 POI(관심 장소) 데이터
+└── onboarding.ts    # PREFERENCE_TAGS — 취향 태그 문자열 배열 (as const)
 ```
 
 **`PREFERENCE_TAGS`** 는 백엔드 `TAG_WEIGHT_MAP`의 키와 1:1 대응하는 문자열 목록입니다. `as const`로 선언되어 있어 `typeof PREFERENCE_TAGS[number]`로 리터럴 유니온 타입을 파생할 수 있습니다. 이 배열이 태그 문자열의 **Single Source of Truth**입니다.
@@ -313,16 +311,16 @@ EXPO_PUBLIC_DEBUG_FIXED_LOCATION=37.5665,126.9780
 ```
 src/navigation/
 ├── navigationRef.ts # react-navigation의 NavigationContainer ref (화면 밖에서 imperative 전환용)
-└── types.ts          # Route · TabName · Navigate 타입 정의 (HomeScreen 내부 전용)
+└── types.ts          # Route · TabName 타입 정의 (MainRouter 내부 탭 전환 전용)
 ```
 
 이 폴더엔 서로 다른 두 계층의 네비게이션 관련 코드가 같이 있습니다 — 헷갈리지 않도록 구분:
 
 - **`navigationRef.ts`**: 앱 전체 화면(스플래시/온보딩/로그인/…/홈) 전환용. `createNavigationContainerRef<RootStackParamList>()`로 만든 ref이고, `App.tsx`의 `NavigationContainer`에 물려 `AppBootstrap.tsx`가 화면 컴포넌트 밖(Provider)에서 `navigationRef.reset(...)`을 호출할 수 있게 해줍니다. `RootStackParamList` 타입 자체는 `src/types/navigation.ts`에 있습니다.
-- **`types.ts`**: `HomeScreen.tsx` **내부** 탭(home/record/me)과 산책 플로우(realWalk) 전환 전용 타입입니다. `HomeScreen`이 React Navigation을 쓰지 않고 이 타입 + 로컬 `useState`로 직접 화면을 분기하는 건 의도된 설계입니다(이유는 `src/screens/README.md` 참고).
+- **`types.ts`**: `MainRouter.tsx` **내부** 탭(home/record/me)과 산책 플로우(realWalk) 전환 전용 타입입니다. `MainRouter`가 React Navigation을 쓰지 않고 이 타입 + 로컬 `useState`로 직접 화면을 분기하는 건 의도된 설계입니다(이유는 `src/screens/README.md` 참고).
 
 ```ts
-// navigation/types.ts — HomeScreen 내부용
+// navigation/types.ts — MainRouter 내부용
 type Route =
   | { name: 'home' }
   | { name: 'chat' }
@@ -332,7 +330,7 @@ type Route =
   | { name: 'record' }
   | { name: 'me' };
 
-type Navigate = (route: Route | TabName) => void;
+type TabName = 'home' | 'record' | 'me';
 ```
 
 ---
@@ -386,16 +384,13 @@ src/types/
 src/utils/
 ├── geo.ts              # 좌표 변환·bounding box 계산 + 경로 위 투영/거리 계산 (haversineDistanceKm,
 │                        # projectOntoRoute, sliceRouteAtDistanceKm — walkProgress.ts와 지도 레이어가 공유)
-├── geoProjection.ts    # 목업 경로에서 진행률(0~1)에 해당하는 GPS 좌표 계산
 ├── reverseGeocode.ts   # 좌표 → 장소명 역지오코딩 (Mapbox Geocoding API, 메모리 캐시)
 ├── routeHistory.ts     # RouteHistoryItem → WalkRouteResponse 변환 (기록 → 재산책)
-├── routeThumbnail.ts   # 경로 좌표 → Mapbox Static Images URL 생성 (공유 카드용)
+├── routeThumbnail.ts   # 경로 좌표 → Mapbox Static Images URL 생성 (기록 탭 경로 썸네일용)
 ├── walkEstimate.ts     # km → 소요시간·칼로리·걸음수 추정 (평균 보행 속도 기준)
 ├── walkMode.ts         # WalkMode enum → 한글 라벨 (순환 코스, 편도 코스)
 └── walkProgress.ts     # WalkProgressTracker — 실시간 GPS + 경로 좌표로 진행률(traveledKm)을 계산
 ```
-
-`geoProjection.ts`는 `mockRoute.json` 목업 데이터를 직접 import합니다. 실제 경로 데이터로 전환하면 이 파일을 교체해야 합니다.
 
 **`walkProgress.ts`의 `WalkProgressTracker`** 는 산책 한 번(화면 마운트~종료) 동안 상태(누적 거리·직전 GPS 지점/시각)를 들고 있는 클래스입니다. GPS 업데이트마다 세 가지를 확인합니다: ① 직전 지점 대비 도보로 불가능한 속도(15km/h 초과)면 무시, ② 경로에서 50m 넘게 벗어나 있으면 그 측정치는 진행률에 반영하지 않고 보류(엉뚱한 구간에 잘못 매칭될 수 있어서), ③ 진행률은 지금까지의 최댓값 아래로 내려가지 않음(역행 방지). 순환 코스 자기교차 대응을 위해 직전 매칭 지점 근처(±150m)를 우선 탐색하는 윈도우 매칭도 `geo.ts`의 `projectOntoRoute`에 함께 구현되어 있습니다.
 
@@ -403,14 +398,10 @@ src/utils/
 
 ## 15. 주의할 점
 
-**미사용 파일**
-- `src/components/map/DynamicPOILayer.tsx` — 앱 어디서도 import되지 않음
-- `src/components/map/StaticPOILayer.tsx` — 동일
-
 **건드리기 전에 확인이 필요한 영역**
 
 - **`src/api/client.ts`** — 인터셉터 로직을 수정하면 모든 API 호출의 인증 흐름이 바뀝니다. refresh token 요청 방식(현재 Authorization 헤더)은 쿼리 파라미터로 되돌리지 마세요 (서버가 인식 불가).
 - **`src/auth/AppBootstrap.tsx`의 `computeTargetScreen()`** — 화면 우선순위 판단 함수입니다. 조건 순서를 바꾸면 화면 흐름 자체가 바뀝니다(예: `showBrandSplash`는 항상 최우선이어야 함).
 - **`src/data/onboarding.ts`** — `PREFERENCE_TAGS` 문자열은 백엔드 `TAG_WEIGHT_MAP` 키와 정확히 일치해야 합니다. 이름을 바꾸거나 추가하려면 백엔드와 반드시 동기화하세요.
 - **`src/config/surveyQuestions.ts`** — `tagValue`는 `PreferenceTag` 타입으로 강제되므로 `PREFERENCE_TAGS`에 없는 문자열을 넣으면 `tsc`에서 에러가 납니다. 의도된 동작입니다.
-- **`__DEV__` 버튼 (`MyScreen.tsx`)** — 프로덕션 빌드에는 포함되지 않습니다. 버튼을 추가할 때는 반드시 `{__DEV__ && ( ... )}` 블록 안에 넣으세요.
+- **`__DEV__` 버튼 (`MyPageScreen.tsx`)** — 프로덕션 빌드에는 포함되지 않습니다. 버튼을 추가할 때는 반드시 `{__DEV__ && ( ... )}` 블록 안에 넣으세요.

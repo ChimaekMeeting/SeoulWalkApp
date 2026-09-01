@@ -1,6 +1,6 @@
 import { Pressable, StyleSheet, Text } from "react-native"
 
-import { colors, radii, spacing } from "../../theme/tokens"
+import { colors } from "../../theme/tokens"
 
 interface MyPreferenceItemProps {
   label: string;

@@ -6,19 +6,19 @@ import { SettingComponent } from '../components/my/SettingComponent';
 import { colors, radii, spacing } from '../theme/tokens';
 import { authStorage } from '../auth/authStorage';
 
-interface MyScreenProps {
+interface MyPageScreenProps {
   onLogout?: () => void;
   nickname: string | null;
   email: string | null;
   onResetSurvey?: () => void;
 }
 
-export function MyScreen({
+export function MyPageScreen({
   onLogout,
   nickname,
   email,
   onResetSurvey,
-}: MyScreenProps) {
+}: MyPageScreenProps) {
   return (
     <View style={styles.pageSoft}>
       <ScreenHeader title="마이페이지" />
@@ -127,11 +127,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-  },
-  menuText: {
-    color: colors.ink,
-    fontSize: 14,
-    fontWeight: '800',
   },
   logoutText: {
     color: '#d75b5b',
