@@ -61,14 +61,16 @@ Login ── 카카오 로그인
         └─ GET 실패                ──▶ Survey (pending 폴백)
         │
         ▼
-LocationPermission ── onRequest / onSkip
-        │
+LocationPermission ── onRequest (위치는 필수 — 건너뛰기 없음)
+        │  · granted가 아니면 항상 이 화면. 설정에서 켜고 돌아오면 자동 통과.
         ▼
-ActivityPermission ── onGranted / onSkip
-        │
+ActivityPermission ── onGranted / onDenied / onSkip (걸음 수는 선택)
+        │  · 건너뛰면(activitySkipped) 통과. 설정에서 나중에 꺼도 다시 이 화면.
         ▼
 Home (메인 화면)
 ```
+
+`AppBootstrap`은 로그인 직후 1회, 그리고 앱이 포그라운드로 돌아올 때마다 `refreshPermissions()`로 **위치·걸음 수 권한을 OS에 다시 확인**합니다(설정 앱에서 켜거나 끈 상황 대응). OS 조회 로직은 `src/auth/permissions.ts`에 모여 있고, 산책 진입 직전에도 `ensureWalkable()`로 위치 권한을 최종 확인합니다.
 
 각 화면은 `App.tsx`에 `XxxScreenContainer` 함수로 정의되어 `useAppBootstrap()`으로 Provider 값을 꺼내 실제 화면 컴포넌트(`src/screens/*`)에 props로 꽂아줍니다. `RootStackParamList`(8개 화면 이름)는 `src/types/navigation.ts`에, `NavigationContainer`에 물리는 `navigationRef`는 `src/navigation/navigationRef.ts`에 있습니다.
 
@@ -222,12 +224,15 @@ resetSurvey: () => setSurveyStatus('pending')
 ```
 src/auth/
 ├── AppBootstrap.tsx     # 앱 전체 부트스트랩 상태(Context) + 다음 화면 계산 + navigation.reset() 호출
+├── permissions.ts       # 위치·걸음 수 권한을 OS에 직접 조회/요청하는 함수 모음
 ├── authStorage.ts       # SecureStore 기반 토큰·사용자 정보 저장소
 ├── onboardingStorage.ts # SecureStore 기반 온보딩 열람 기록 저장소
 └── useKakaoAuth.ts      # 카카오 로그인/로그아웃 + authState 관리 훅
 ```
 
 **`AppBootstrap.tsx`** 는 예전에 `App.tsx`가 직접 들고 있던 상태 분기 로직(스플래시 타이머·온보딩·로그인·설문·위치/활동 권한)을 전부 Context Provider로 옮긴 것입니다. `useAppBootstrap()` 훅으로 각 화면 컨테이너에 필요한 값·콜백만 꺼내 씁니다. 자세한 흐름은 위 "2. 앱 전체 화면 흐름" 참고.
+
+**`permissions.ts`** 는 위치(`expo-location`)·걸음 수(`expo-sensors` `Pedometer`) 권한을 OS에 물어보는 로직을 한 곳에 모은 모듈입니다. `readPermissionSnapshot()`(3-state + boolean 스냅샷), `requestLocationPermission()` / `requestPedometerPermission()`(이미 허용됐으면 다이얼로그 없이 즉시 반환)을 노출합니다. 위치는 필수(`EXPO_PUBLIC_DEBUG_FIXED_LOCATION` 설정 시 granted 취급), 걸음 수는 선택(센서 없는 기기는 denied 취급, 거부돼도 거리 기반 추정치로 대체). `AppBootstrap`이 로그인 직후·포그라운드 복귀·산책 진입 직전에 이걸 호출해 캐시가 아닌 실제 권한을 확인합니다.
 
 **`authStorage`** 는 다섯 가지 키(`kakao_user_id`, `app_access_token`, `app_refresh_token`, `user_nickname`, `user_email`)를 `expo-secure-store`에 저장합니다. 앱을 삭제하기 전까지는 기기에 남아 있어 재실행 시 자동 로그인이 가능합니다.
 
@@ -323,10 +328,7 @@ src/navigation/
 // navigation/types.ts — MainRouter 내부용
 type Route =
   | { name: 'home' }
-  | { name: 'chat' }
-  | { name: 'walk'; id: string }
   | { name: 'realWalk' }
-  | { name: 'postwalk'; id: string }
   | { name: 'record' }
   | { name: 'me' };
 
@@ -364,7 +366,6 @@ import { colors, spacing, radii } from '../theme/tokens';
 ```
 src/types/
 ├── location.ts   # Coordinates (기기 GPS 좌표 — useLocation/useWatchLocation 공용)
-├── map.ts        # LatLng (lat/lng 키 기반 좌표)
 ├── navigation.ts # RootStackParamList · RootScreenName (App.tsx의 react-navigation 화면 타입)
 ├── prewalk.ts    # 챗봇·경로 관련 스키마 (InitRequest, WalkRouteResponse, WalkMode 등 — route_result는 배열)
 ├── routes.ts     # 산책 기록 스키마 (RouteHistoryItem, RouteHistoryQuery 등)

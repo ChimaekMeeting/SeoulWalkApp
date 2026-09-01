@@ -18,7 +18,6 @@ interface HomeScreenProps {
   activeRoute: WalkRouteResponse | null;
   chatSessionKey: number;
   onRouteReady: (route: WalkRouteResponse) => void;
-  chatOpen: boolean;
 }
 
 /**
@@ -30,7 +29,6 @@ export function HomeScreen({
   activeRoute,
   chatSessionKey,
   onRouteReady,
-  chatOpen,
 }: HomeScreenProps) {
   const chatRef = useRef<ChatConversationHandle>(null);
   const sheetRef = useRef<ChatBottomSheetHandle>(null);
@@ -63,7 +61,7 @@ export function HomeScreen({
   // 입력창이 키보드 속으로 파고들지 않는다. 여기에 더해 안드로이드가 텍스트 입력창 위에
   // 띄우는 복사/붙여넣기 팝업 같은 시스템 오버레이와 안 겹치도록 약간의 여백(spacing.sm)도 둔다.
   const chatInputBase =
-    keyboardHeight > 0 ? keyboardHeight + spacing.sm : chatOpen ? 0 : BOTTOM_NAV_HEIGHT;
+    keyboardHeight > 0 ? keyboardHeight + spacing.sm : BOTTOM_NAV_HEIGHT;
   const chatInputBottom = chatInputBase + insets.bottom;
   const chatBottomInset = chatInputBottom + CHAT_INPUT_HEIGHT;
 

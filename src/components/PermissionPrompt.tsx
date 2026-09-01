@@ -13,14 +13,15 @@ interface Props {
   badgeText: string;
   primaryLabel: string;
   onPrimary: () => void;
-  secondaryLabel: string;
-  onSecondary: () => void;
+  /** 보조 버튼은 선택 — 없으면(예: 위치 권한처럼 필수) primary 버튼만 렌더한다. */
+  secondaryLabel?: string;
+  onSecondary?: () => void;
 }
 
 /**
  * 위치·신체활동 등 권한 요청 화면의 공통 레이아웃.
  * 권한 상태 확인/요청 로직은 각 화면(ActivityPermissionScreen 등)이 갖고,
- * 여기서는 화면 뼈대와 두 버튼만 그린다.
+ * 여기서는 화면 뼈대와 버튼만 그린다.
  */
 export function PermissionPrompt({
   icon,
@@ -46,7 +47,9 @@ export function PermissionPrompt({
 
         <View style={styles.actions}>
           <Button label={primaryLabel} onPress={onPrimary} />
-          <Button label={secondaryLabel} onPress={onSecondary} variant="secondary" />
+          {secondaryLabel && onSecondary ? (
+            <Button label={secondaryLabel} onPress={onSecondary} variant="secondary" />
+          ) : null}
         </View>
       </View>
     </SafeAreaView>
