@@ -3,7 +3,7 @@ import { AppState, AppStateStatus } from 'react-native';
 
 /**
  * 앱이 포그라운드로 돌아올 때/백그라운드로 갈 때를 감지하는 공용 훅. AppBootstrap의 권한
- * 재확인, HomeScreen의 비활성 타임아웃 리셋 등 여러 곳에서 "AppState 전환 감지" 로직을
+ * 재확인, MainRouter의 비활성 타임아웃 리셋 등 여러 곳에서 "AppState 전환 감지" 로직을
  * 각자 새로 구현하던 걸 하나로 모았다.
  */
 export function useAppStateChange({

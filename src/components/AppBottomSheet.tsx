@@ -11,7 +11,7 @@ type Props = BottomSheetProps;
 
 // 화면 하단에 항상 떠 있는 시트(=닫히지 않고 접혔다 펼쳐지기만 함) 용 범용 래퍼.
 // 완전히 dismiss되는 모달성 시트가 필요해지면 BottomSheetModal 기반의 별도 컴포넌트로 추가할 것 —
-// 지금은 쓰는 곳이 하나(HomeTab의 채팅 시트)뿐이라 여기서 미리 만들지 않는다.
+// 지금은 쓰는 곳이 하나(HomeScreen 홈 탭의 채팅 시트)뿐이라 여기서 미리 만들지 않는다.
 export const AppBottomSheet = forwardRef<AppBottomSheetHandle, Props>(
   function AppBottomSheet(
     { children, style, backgroundStyle, handleIndicatorStyle, ...rest },

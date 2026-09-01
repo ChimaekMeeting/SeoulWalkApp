@@ -14,7 +14,6 @@ import {
   LocationInfo,
   WalkRouteResponse,
 } from '../../types/prewalk';
-import { Navigate } from '../../navigation/types';
 import { ChatBubble } from './ChatBubble';
 import { MyBubble } from './MyBubble';
 import { LoadingBubble } from './LoadingBubble';
@@ -38,8 +37,6 @@ const STATUS_MESSAGES: Partial<Record<ChatStatus, string>> = {
 type Props = {
   currentLocation: LocationInfo;
   onRouteReady: (route: WalkRouteResponse) => void;
-  go: Navigate;
-  onRequestClose: () => void; // ✕ 또는 코스 선택 시 시트를 접는 콜백
   onDoneChange: (done: boolean) => void; // 질문이 모두 끝났는지를 외부(입력창)에 알림
   onSendingChange: (sending: boolean) => void; // 챗봇 응답을 기다리는 중인지를 외부(입력창)에 알림
   bottomInset: number; // 바텀시트 바깥에 떠 있는 ChatInput에 가려지지 않도록 남겨둘 여백
@@ -57,8 +54,6 @@ export const ChatConversation = forwardRef(function ChatConversation(
   {
     currentLocation,
     onRouteReady,
-    go,
-    onRequestClose,
     onDoneChange,
     onSendingChange,
     bottomInset,
