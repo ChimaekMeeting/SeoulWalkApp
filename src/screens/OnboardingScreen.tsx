@@ -56,7 +56,12 @@ export function OnboardingScreen({ onDone }: Props) {
   };
 
   const finish = async () => {
-    await onboardingStorage.markSeen();
+    const saved = await onboardingStorage.markSeen();
+    if (!saved) {
+      // 저장 실패를 조용히 넘기지 않는다. 이번 실행은 그대로 진행하되(사용자를 온보딩에 가두지
+      // 않음), 저장이 안 됐으므로 다음 실행에서 온보딩이 다시 보일 수 있음을 로그로 남긴다.
+      console.warn('[Onboarding] has_seen_onboarding 저장 실패 — 다음 실행에서 온보딩이 다시 보일 수 있음');
+    }
     onDone();
   };
 

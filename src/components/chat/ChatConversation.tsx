@@ -5,7 +5,7 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { Pressable, Text, View, StyleSheet } from 'react-native';
+import { Linking, Pressable, Text, View, StyleSheet } from 'react-native';
 import { BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import { getInitMessage, getMessage } from '../../api/prewalk';
 import {
@@ -14,6 +14,7 @@ import {
   LocationInfo,
   WalkRouteResponse,
 } from '../../types/prewalk';
+import type { LocationErrorReason } from '../../hooks/useLocation';
 import { ChatBubble } from './ChatBubble';
 import { MyBubble } from './MyBubble';
 import { LoadingBubble } from './LoadingBubble';
@@ -39,6 +40,13 @@ type Props = {
   onRouteReady: (route: WalkRouteResponse) => void;
   onDoneChange: (done: boolean) => void; // 질문이 모두 끝났는지를 외부(입력창)에 알림
   onSendingChange: (sending: boolean) => void; // 챗봇 응답을 기다리는 중인지를 외부(입력창)에 알림
+  onStartedChange?: (started: boolean) => void; // 대화가 시작됐는지(threadId 확보)를 외부에 알림
+  /** 현재 위치 좌표를 아직 가져오는 중인지(정상 로딩). 위치 오류(locationError)와 구분된다. */
+  locationLoading?: boolean;
+  /** 위치 좌표 획득 실패 종류. null이면 정상. */
+  locationError?: LocationErrorReason;
+  /** 위치 좌표 재획득 시도(일시적 실패 시 "다시 시도" 버튼에서 호출) */
+  onRetryLocation?: () => void;
   bottomInset: number; // 바텀시트 바깥에 떠 있는 ChatInput에 가려지지 않도록 남겨둘 여백
   // 헤더 + 첫 봇 메시지의 실측 높이를 부모(중간 스냅 계산)에 전달.
   // 대화가 길어져도 이 미리보기 묶음 자체의 크기는 바뀌지 않아, 중간 스냅이 항상 같은
@@ -56,6 +64,10 @@ export const ChatConversation = forwardRef(function ChatConversation(
     onRouteReady,
     onDoneChange,
     onSendingChange,
+    onStartedChange,
+    locationLoading,
+    locationError,
+    onRetryLocation,
     bottomInset,
     onPreviewHeightChange,
   }: Props,
@@ -131,7 +143,23 @@ export const ChatConversation = forwardRef(function ChatConversation(
   };
 
   const submitAnswer = async (answer: string) => {
-    if (done || sending || !threadId) return;
+    if (done || sending) return;
+    // 대화가 아직 시작되지 않았으면(threadId 없음) 조용히 무시하지 않고, 왜 못 보냈는지 알려준다.
+    if (!threadId) {
+      setMessages(prev => [
+        ...prev,
+        { from: 'me', text: answer },
+        {
+          from: 'bot',
+          text: locationError
+            ? '현재 위치를 확인하지 못해 아직 대화를 시작하지 못했어요. 위 안내를 확인해 주세요.'
+            : initFailed
+            ? '대화 시작에 실패했어요. 위 "다시 시도"를 눌러 주세요.'
+            : '위치 정보를 확인하고 있어요. 잠시 후 다시 시도해 주세요.',
+        },
+      ]);
+      return;
+    }
     setMessages(prev => [...prev, { from: 'me', text: answer }]);
     setSending(true);
     try {
@@ -170,6 +198,10 @@ export const ChatConversation = forwardRef(function ChatConversation(
   }, [sending, onSendingChange]);
 
   useEffect(() => {
+    onStartedChange?.(threadId != null);
+  }, [threadId, onStartedChange]);
+
+  useEffect(() => {
     // previewGroupHeight는 스크롤 여백(padding)을 뺀 순수 콘텐츠 높이라,
     // 위쪽 padding(spacing.lg)만 더하면 "미리보기 영역이 실제로 차지하는 높이"가 된다.
     onPreviewHeightChange(headerHeight + previewGroupHeight + spacing.lg);
@@ -181,7 +213,31 @@ export const ChatConversation = forwardRef(function ChatConversation(
     },
   }));
 
-  const awaitingLocation = !threadId && messages.length === 0 && !sending;
+  // 대화 시작 전 위치 좌표를 "정상적으로 기다리는 중"일 때만 로딩 버블을 보여준다.
+  // 좌표 획득 실패(locationError)는 아래 locationNotice가 대신 안내한다.
+  const awaitingLocation =
+    !threadId &&
+    messages.length === 0 &&
+    !sending &&
+    !locationError &&
+    (locationLoading ?? true);
+
+  // 대화 시작 전(threadId 없음) 위치 좌표를 못 얻은 경우의 안내 + 행동 버튼.
+  // 대화가 시작된 뒤엔 후속 메시지에 좌표가 필요 없으므로 노출하지 않는다.
+  const locationNotice: { text: string; actionLabel: string; onPress: () => void } | null =
+    threadId || !locationError
+      ? null
+      : locationError === 'permission_denied'
+      ? {
+          text: '위치 권한이 꺼져 있어 경로를 만들 수 없어요.\n설정에서 위치 권한을 켜 주세요.',
+          actionLabel: '설정 열기',
+          onPress: () => Linking.openSettings(),
+        }
+      : {
+          text: '현재 위치를 확인할 수 없어 경로를 만들 수 없어요.\nGPS와 네트워크 상태를 확인한 뒤 다시 시도해 주세요.',
+          actionLabel: '다시 시도',
+          onPress: () => onRetryLocation?.(),
+        };
 
   return (
     <View style={styles.chatPanel}>
@@ -206,7 +262,20 @@ export const ChatConversation = forwardRef(function ChatConversation(
         }
       >
         <View style={styles.bubbleStack}>
-          {awaitingLocation ? (
+          {locationNotice ? (
+            <View style={styles.locationNotice}>
+              <ChatBubble text={locationNotice.text} />
+              <Pressable
+                onPress={locationNotice.onPress}
+                style={({ pressed }) => [
+                  styles.retryButton,
+                  pressed && styles.retryButtonPressed,
+                ]}
+              >
+                <Text style={styles.retryButtonText}>{locationNotice.actionLabel}</Text>
+              </Pressable>
+            </View>
+          ) : awaitingLocation ? (
             <ChatBubble text="위치 정보를 확인하는 중이에요…" />
           ) : null}
           {messages.map((message, index) => {
@@ -308,6 +377,9 @@ const styles = StyleSheet.create({
   },
   previewGroup: {
     gap: spacing.md,
+  },
+  locationNotice: {
+    gap: spacing.sm,
   },
   retryButton: {
     alignSelf: 'flex-start',

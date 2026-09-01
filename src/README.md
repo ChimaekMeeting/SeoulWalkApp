@@ -46,10 +46,10 @@ GestureHandlerRootView
 BrandSplash (2초 타이머)
         │
         ▼
-Loading ── 온보딩 열람 기록 확인 중
+Loading ── 온보딩 열람 기록 + 걸음 수 권한 안내 완료 여부 확인 중
         │
         ▼
-Onboarding ── 최초 1회만 (SecureStore에 열람 기록 저장)
+Onboarding ── 최초 1회만 (SecureStore `has_seen_onboarding`='true' 저장 성공 후 통과)
         │
         ▼
 Login ── 카카오 로그인
@@ -65,7 +65,9 @@ LocationPermission ── onRequest (위치는 필수 — 건너뛰기 없음)
         │  · granted가 아니면 항상 이 화면. 설정에서 켜고 돌아오면 자동 통과.
         ▼
 ActivityPermission ── onGranted / onDenied / onSkip (걸음 수는 선택)
-        │  · 건너뛰면(activitySkipped) 통과. 설정에서 나중에 꺼도 다시 이 화면.
+        │  · 허용 또는 건너뛰기 시 SecureStore `activity_prompt_done`='true' 저장 → 이후(앱 재실행 포함) 안 나옴.
+        │  · "거부"만 누르면 저장 안 함 → 화면에 남아 "설정에서 허용" 재시도 가능.
+        │  · 한 번 통과한 뒤엔 설정에서 나중에 꺼도 이 화면으로 강제 이동하지 않음(거리 추정으로 진행).
         ▼
 Home (메인 화면)
 ```
@@ -226,7 +228,7 @@ src/auth/
 ├── AppBootstrap.tsx     # 앱 전체 부트스트랩 상태(Context) + 다음 화면 계산 + navigation.reset() 호출
 ├── permissions.ts       # 위치·걸음 수 권한을 OS에 직접 조회/요청하는 함수 모음
 ├── authStorage.ts       # SecureStore 기반 토큰·사용자 정보 저장소
-├── onboardingStorage.ts # SecureStore 기반 온보딩 열람 기록 저장소
+├── onboardingStorage.ts # SecureStore 기반 1회성 플래그 저장소 (온보딩 열람 여부 · 걸음 수 권한 안내 완료 여부)
 └── useKakaoAuth.ts      # 카카오 로그인/로그아웃 + authState 관리 훅
 ```
 

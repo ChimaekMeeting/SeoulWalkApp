@@ -16,7 +16,7 @@ import { SurveyScreen } from './src/screens/SurveyScreen';
 import { LoginScreen } from './src/screens/LoginScreen';
 import { LocationPermissionScreen } from './src/screens/LocationPermissionScreen';
 import { ActivityPermissionScreen } from './src/screens/ActivityPermissionScreen';
-import { toPromptStatus } from './src/auth/permissions';
+import { toPromptStatus, toPedometerPromptStatus } from './src/auth/permissions';
 import { MainRouter } from './src/screens/MainRouter';
 import { colors } from './src/theme/tokens';
 import type { RootStackParamList } from './src/types/navigation';
@@ -65,7 +65,7 @@ function ActivityPermissionScreenContainer() {
     useAppBootstrap();
   return (
     <ActivityPermissionScreen
-      status={toPromptStatus(activityStatus)}
+      status={toPedometerPromptStatus(activityStatus)}
       onGranted={grantActivityPermission}
       onDenied={denyActivityPermission}
       onSkip={skipActivityPermission}
@@ -74,13 +74,14 @@ function ActivityPermissionScreenContainer() {
 }
 
 function MainRouterContainer() {
-  const { signOut, userId, resetSurvey, ensureWalkable } = useAppBootstrap();
+  const { signOut, userId, resetSurvey, ensureWalkable, locationGranted } = useAppBootstrap();
   return (
     <MainRouter
       onLogout={signOut}
       userId={userId}
       onResetSurvey={resetSurvey}
       ensureWalkable={ensureWalkable}
+      locationGranted={locationGranted}
     />
   );
 }
