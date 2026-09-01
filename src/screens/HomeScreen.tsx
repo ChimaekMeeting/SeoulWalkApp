@@ -1,14 +1,25 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, {
+  forwardRef,
+  useState,
+  useRef,
+  useEffect,
+  useImperativeHandle,
+} from 'react';
 import { Dimensions, Keyboard, Platform, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppMapView } from '../components/map/AppMapView';
 import { BOTTOM_NAV_HEIGHT } from '../components/BottomNav';
 import { ChatBottomSheet, ChatBottomSheetHandle } from '../bottomsheets/ChatBottomSheet';
 import { computeChatSheetHalfHeight } from '../bottomsheets/chatSheetGeometry';
-import { ChatConversation, ChatConversationHandle } from '../components/chat/ChatConversation';
+import {
+  ChatConversation,
+  ChatConversationHandle,
+  ChatPhase,
+} from '../components/chat/ChatConversation';
 import { ChatInput } from '../components/chat/ChatInput';
 import { LocationInfo, WalkRouteResponse } from '../types/prewalk';
 import type { LocationErrorReason } from '../hooks/useLocation';
+import type { Coordinates } from '../types/location';
 import { colors, spacing } from '../theme/tokens';
 
 const { height: SCREEN_H } = Dimensions.get('window');
@@ -25,25 +36,49 @@ interface HomeScreenProps {
   locationError: LocationErrorReason;
   /** 위치 좌표 재획득 시도 */
   onRetryLocation: () => void;
+  /** 대화/메시지 요청 직전 최신 좌표 확보용 (retryLocation 그대로) */
+  onRefreshLocation: () => Promise<Coordinates | null>;
 }
+
+export type HomeScreenHandle = {
+  /** 채팅 시트가 완전히 펼쳐진 상태면 절반으로 접고 true를 반환(안드로이드 뒤로가기 처리용). */
+  collapseSheetIfExpanded: () => boolean;
+};
+
+const SHEET_INDEX_UP = 2;
 
 /**
  * 하단 탭 '홈' 화면 — 지도 위에 채팅 바텀시트(prewalk 챗봇)가 떠 있는 형태. MainRouter가 탭 셸로
  * 감싸고, 다른 탭으로 이동해도 언마운트하지 않아 대화 내역이 유지된다.
  */
-export function HomeScreen({
-  currentLocation,
-  activeRoute,
-  chatSessionKey,
-  onRouteReady,
-  locationLoading,
-  locationError,
-  onRetryLocation,
-}: HomeScreenProps) {
+export const HomeScreen = forwardRef<HomeScreenHandle, HomeScreenProps>(function HomeScreen(
+  {
+    currentLocation,
+    activeRoute,
+    chatSessionKey,
+    onRouteReady,
+    locationLoading,
+    locationError,
+    onRetryLocation,
+    onRefreshLocation,
+  }: HomeScreenProps,
+  ref,
+) {
   const chatRef = useRef<ChatConversationHandle>(null);
   const sheetRef = useRef<ChatBottomSheetHandle>(null);
+  const sheetIndexRef = useRef(1);
+
+  useImperativeHandle(ref, () => ({
+    collapseSheetIfExpanded: () => {
+      if (sheetIndexRef.current >= SHEET_INDEX_UP) {
+        sheetRef.current?.snapToHalf();
+        return true;
+      }
+      return false;
+    },
+  }), []);
   const insets = useSafeAreaInsets();
-  const [chatDone, setChatDone] = useState(false);
+  const [chatPhase, setChatPhase] = useState<ChatPhase>('idle');
   const [chatSending, setChatSending] = useState(false);
   const [chatStarted, setChatStarted] = useState(false);
   const [previewHeight, setPreviewHeight] = useState(50);
@@ -125,13 +160,16 @@ export function HomeScreen({
         ref={sheetRef}
         previewHeight={previewHeight}
         bottomReservedHeight={chatBottomInset}
+        onChangeIndex={index => {
+          sheetIndexRef.current = index;
+        }}
       >
         <ChatConversation
           key={chatSessionKey}
           ref={chatRef}
           currentLocation={currentLocation}
           onRouteReady={onRouteReady}
-          onDoneChange={setChatDone}
+          onPhaseChange={setChatPhase}
           onSendingChange={setChatSending}
           onStartedChange={setChatStarted}
           onPreviewHeightChange={setPreviewHeight}
@@ -139,6 +177,7 @@ export function HomeScreen({
           locationLoading={locationLoading}
           locationError={locationError}
           onRetryLocation={onRetryLocation}
+          onRefreshLocation={onRefreshLocation}
         />
       </ChatBottomSheet>
 
@@ -149,7 +188,11 @@ export function HomeScreen({
             // 메시지를 보내는 순간, 3단계 스와이프 중 가장 위(꽉 찬) 상태로 올려준다.
             sheetRef.current?.expand();
           }}
-          disabled={chatDone || chatSending || inputBlockedByLocation}
+          disabled={
+            chatSending ||
+            inputBlockedByLocation ||
+            chatPhase === 'session_expired'
+          }
           placeholder={
             inputBlockedByLocation
               ? '위치 확인 후 대화를 시작할 수 있어요'
@@ -159,7 +202,7 @@ export function HomeScreen({
       </View>
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   fill: {

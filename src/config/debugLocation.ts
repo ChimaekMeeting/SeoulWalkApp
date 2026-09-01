@@ -3,9 +3,9 @@ import { Coordinates } from '../types/location';
 
 /**
  * 개발 중 실제 GPS 대신 쓸 고정 좌표(`EXPO_PUBLIC_DEBUG_FIXED_LOCATION`, "위도,경도" 형식).
- * 예전에는 permissions.ts(=`!!env.DEBUG_FIXED_LOCATION`)와 useLocation.ts(문자열 파싱)가
- * 각자 판정해서, 값이 잘못 들어가면(파싱 실패) 한쪽은 "granted 취급", 다른 쪽은 "좌표 없음"으로
- * 갈렸다. 이제 파싱까지 성공해야 "디버그 고정 좌표 사용"으로 인정하고 모든 곳이 이 값을 공유한다.
+ * 좌표 조회부(useLocation·useWatchLocation)만 이 값으로 대체하고, 위치 권한 판정에는
+ * 관여하지 않는다 — 값이 설정돼 있어도 권한 안내 화면은 실제 OS 상태 기준으로 노출된다.
+ * 파싱까지 성공해야 유효한 고정 좌표로 인정하고, 파싱 실패 시엔 null(실제 GPS 사용)이다.
  */
 export const DEBUG_FIXED_COORDS: Coordinates | null = (() => {
   const raw = env.DEBUG_FIXED_LOCATION;
@@ -17,6 +17,3 @@ export const DEBUG_FIXED_COORDS: Coordinates | null = (() => {
   if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
   return { latitude, longitude };
 })();
-
-/** 디버그 고정 좌표가 유효하게 설정돼 있는지. 위치 권한을 항상 granted로 취급할지 판단에 쓴다. */
-export const HAS_DEBUG_FIXED_LOCATION = DEBUG_FIXED_COORDS != null;

@@ -1,8 +1,9 @@
-import React, { useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { StyleProp, View, ViewStyle } from 'react-native';
 import Mapbox from '@rnmapbox/maps';
 import { LocationInfo, WalkRouteResponse } from '../../types/prewalk';
 import { mapConfig } from '../../config/mapConfig';
+import { debugLog } from '../../utils/logger';
 import {
   locationInfoToMapboxPosition,
   routeCoordinatesToLineString,
@@ -17,6 +18,11 @@ import { RouteDirectionArrows } from './RouteDirectionArrows';
 // 지나온 구간은 원래 경로색(routeColor, 기본 파랑)을 그대로 쓰고, 남은 구간만 옅게 — 이 화면의
 // 진행률 바(걸은 만큼 진하게 채워지고 track은 회색인 것)와 같은 방향으로 맞춘 것.
 const UPCOMING_ROUTE_COLOR = '#B0B7C3';
+
+// walk 모드에서 사용자가 지도를 팬/줌한 뒤, 이 시간(ms) 동안 추가 조작이 없으면 현재 위치
+// 자동 추적을 다시 켠다. (@rnmapbox는 제스처 후 네이티브 추적이 풀리므로 followUserLocation을
+// false→true로 다시 토글해줘야 재개된다.)
+const WALK_RECENTER_DELAY_MS = 5000;
 
 interface AppMapViewCommonProps {
   /** backend LocationInfo 그대로. lat/lon이 없으면 mapConfig.defaultCenter로 폴백된다. */
@@ -60,25 +66,56 @@ export type AppMapViewProps = OverviewMapViewProps | WalkMapViewProps;
 export function AppMapView(props: AppMapViewProps) {
   const isWalk = props.mode === 'walk';
   const { lat, lon } = props.currentLocation ?? {};
-  const [overrideLon, overrideLat] = props.centerOverride ?? [];
-  // 원시값에만 의존해 메모이즈: currentLocation/centerOverride 객체가 매 렌더 새로 생성되어도
-  // 실제 좌표가 그대로면 같은 배열 참조를 유지해 overview 모드에서 사용자가 팬한 지도가
-  // 다시 원위치로 스냅되지 않게 한다.
-  const initialCenter = useMemo(
-    () => props.centerOverride ?? locationInfoToMapboxPosition(props.currentLocation) ?? mapConfig.defaultCenter,
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [lat, lon, overrideLon, overrideLat],
-  );
-
   const walkZoomLevel = props.zoomLevel ?? mapConfig.walkCamera.zoomLevel;
   const overviewZoomLevel = props.zoomLevel ?? mapConfig.overviewCamera.zoomLevel;
-  // initialCenter와 마찬가지로 메모이즈 — 매 렌더 새 객체를 넘기면 flyTo 카메라가 불필요하게
-  // 다시 애니메이션을 탈 위험이 있다(바로 위 initialCenter 메모이즈와 같은 이유).
   const bottomPadding = props.bottomPadding ?? 0;
   const cameraPadding = useMemo(
     () => ({ paddingLeft: 0, paddingRight: 0, paddingTop: 0, paddingBottom: bottomPadding }),
     [bottomPadding],
   );
+
+  // walk 모드 카메라의 최초 중심(followUserLocation이 잡기 전 1프레임용).
+  const walkInitialCenter = useMemo<number[]>(
+    () => locationInfoToMapboxPosition(props.currentLocation) ?? mapConfig.defaultCenter,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [lat, lon],
+  );
+
+  // overview: 사용자가 지도를 직접 만지기 전까지는 followUserLocation으로 현재 위치를 따라간다.
+  // 이건 파란 점(Mapbox.UserLocation)·walk 모드와 완전히 같은 네이티브 메커니즘이라, 선언적
+  // centerCoordinate/명령형 setCamera가 씹히던 것과 달리 현재 위치로의 이동이 확실히 동작한다.
+  // 사용자가 팬/줌하면(onCameraChanged의 isGestureActive) 추적을 끄고 그 시점을 존중한다.
+  // centerOverride(경로 전체 보기)가 있으면 추적하지 않고 그 좌표를 선언적으로 쓴다.
+  const [userInteracted, setUserInteracted] = useState(false);
+  // walk 모드: 제스처마다 +1 (effect를 재실행시켜 재추적 타이머를 리셋). walkFollowSuspended가
+  // true인 동안만 추적이 꺼진다 — 마지막 조작 후 WALK_RECENTER_DELAY_MS가 지나면 다시 켜진다.
+  const [walkInteractionNonce, setWalkInteractionNonce] = useState(0);
+  const [walkFollowSuspended, setWalkFollowSuspended] = useState(false);
+  const handleCameraChanged = useCallback(
+    (state: { gestures?: { isGestureActive?: boolean } }) => {
+      if (!state?.gestures?.isGestureActive) return;
+      if (isWalk) {
+        setWalkInteractionNonce(n => n + 1);
+        debugLog('Map', 'walk: user gesture → pause follow (auto-resume scheduled)');
+      } else {
+        setUserInteracted(true);
+        debugLog('Map', 'user gesture → stop following user location');
+      }
+    },
+    [isWalk],
+  );
+
+  useEffect(() => {
+    if (!isWalk || walkInteractionNonce === 0) return;
+    setWalkFollowSuspended(true);
+    const timer = setTimeout(() => setWalkFollowSuspended(false), WALK_RECENTER_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [isWalk, walkInteractionNonce]);
+  // 경로 미리보기(previewRoute)나 지정 중심(centerOverride)이 있으면 그게 우선이라 추적하지 않는다.
+  const hasPreviewRoute =
+    props.mode === 'overview' && !!props.previewRoute && props.previewRoute.length > 0;
+  const overviewFollowsUser =
+    !isWalk && !props.centerOverride && !hasPreviewRoute && !userInteracted;
 
   return (
     <View style={[{ flex: 1 }, props.style]}>
@@ -88,11 +125,12 @@ export function AppMapView(props: AppMapViewProps) {
         logoEnabled={false}
         attributionEnabled={false}
         localizeLabels={{ locale: 'ko' }}
+        onCameraChanged={handleCameraChanged}
       >
         {isWalk ? (
           <Mapbox.Camera
-            defaultSettings={{ centerCoordinate: initialCenter, zoomLevel: walkZoomLevel }}
-            followUserLocation
+            defaultSettings={{ centerCoordinate: walkInitialCenter, zoomLevel: walkZoomLevel }}
+            followUserLocation={!walkFollowSuspended}
             followUserMode={Mapbox.UserTrackingMode.FollowWithHeading}
             followZoomLevel={walkZoomLevel}
             followPitch={mapConfig.walkCamera.pitch}
@@ -100,8 +138,17 @@ export function AppMapView(props: AppMapViewProps) {
           />
         ) : (
           <Mapbox.Camera
-            centerCoordinate={initialCenter}
-            zoomLevel={overviewZoomLevel}
+            defaultSettings={{ centerCoordinate: mapConfig.defaultCenter, zoomLevel: overviewZoomLevel }}
+            followUserLocation={overviewFollowsUser}
+            followUserMode={Mapbox.UserTrackingMode.Follow}
+            followZoomLevel={overviewZoomLevel}
+            followPadding={cameraPadding}
+            // centerOverride(경로 전체 보기 등)일 때만 중심·줌을 선언적으로 제어한다.
+            // 그 외(자동 현재 위치 모드)엔 줌/중심을 강제하지 않는다 — 추적 중엔 followZoomLevel이,
+            // 사용자가 팬/줌한 뒤엔 사용자가 맞춘 값이 유지돼야 하므로. padding만 항상 적용해
+            // 바텀시트가 가리는 만큼 화면을 위로 민다.
+            centerCoordinate={props.centerOverride}
+            zoomLevel={props.centerOverride ? overviewZoomLevel : undefined}
             pitch={mapConfig.overviewCamera.pitch}
             padding={cameraPadding}
             animationMode="flyTo"

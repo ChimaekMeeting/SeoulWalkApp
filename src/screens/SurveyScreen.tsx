@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { postSurvey } from '../api/survey';
+import { surveyCompletedStorage } from '../auth/onboardingStorage';
 import { surveyQuestions } from '../config/surveyQuestions';
 import { Button } from '../components/Button';
 import { ErrorBanner } from '../components/ErrorBanner';
@@ -49,10 +50,16 @@ export function SurveyScreen({ onDone }: Props) {
   const handleComplete = async () => {
     setLoading(true);
     setErrorMsg(null);
+    const payload = { tags: Array.from(selectedTags), distance };
+    console.log('[SurveyScreen] POST /api/user/survey 요청:', payload);
     try {
-      const res = await postSurvey({ tags: Array.from(selectedTags), distance });
+      const res = await postSurvey(payload);
       console.log('[SurveyScreen] POST /api/user/survey 응답:', res.data);
       if (res.data.status?.toLowerCase() === 'success') {
+        // 서버 저장이 확인됐을 때만 로컬 보조 캐시를 남긴다 — 다음 실행에서 설문 조회가
+        // 네트워크 오류로 실패해도 이 캐시가 있으면 설문 화면으로 되돌아가지 않는다.
+        // (서버 데이터의 대체가 아니라 재온보딩 방지용 캐시일 뿐이다.)
+        await surveyCompletedStorage.markCompleted();
         onDone();
       } else {
         console.warn('[SurveyScreen] 예상치 못한 응답:', res.data);

@@ -1,13 +1,14 @@
 import * as Location from 'expo-location';
 import { Pedometer } from 'expo-sensors';
-import { HAS_DEBUG_FIXED_LOCATION } from '../config/debugLocation';
 
 /**
  * 위치·걸음 수 권한을 OS에 직접 물어보는 로직을 한 곳으로 모은 모듈.
  * 캐시된 상태를 믿지 않고 실제 기능(경로 생성·센서 사용) 직전에 여기서 다시 확인한다.
  *
- * - 위치: 앱 사용에 필수. `EXPO_PUBLIC_DEBUG_FIXED_LOCATION`이 설정된 개발 환경에서는
- *   실제 GPS 대신 고정 좌표를 쓰므로 항상 granted로 취급한다(config/debugLocation.ts 공유).
+ * - 위치: 앱 사용에 필수. 권한은 항상 실제 OS 상태로 판정한다 —
+ *   `EXPO_PUBLIC_DEBUG_FIXED_LOCATION`(서울 밖 개발용 고정 좌표)이 설정돼 있어도
+ *   권한 안내 화면은 정상적으로 노출된다. 고정 좌표는 좌표 조회부(useLocation)만 대체하고
+ *   권한 판정에는 관여하지 않는다 — "서울 지역에서만 이용 가능"을 개발 중에도 검증하기 위함.
  * - 걸음 수: 선택. 센서 자체가 없는 기기(isAvailableAsync=false)는 'unavailable'로 구분한다
  *   ('denied'와 달리 "설정에서 켜세요" 안내가 무의미하므로). 어느 쪽이든 산책은 가능하고
  *   거리 기반 추정치(estimateSteps)로 대체된다.
@@ -33,7 +34,6 @@ export interface PermissionSnapshot {
 type Mode = 'read' | 'request';
 
 async function locationPermission(mode: Mode): Promise<LocationPermissionState> {
-  if (HAS_DEBUG_FIXED_LOCATION) return 'granted';
   const { status } =
     mode === 'read'
       ? await Location.getForegroundPermissionsAsync()

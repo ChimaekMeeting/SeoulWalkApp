@@ -10,12 +10,18 @@ import { useWatchLocation } from '../../hooks/useWatchLocation';
 import { WalkProgressTracker, deriveProgress } from '../../utils/walkProgress';
 import { colors, spacing } from '../../theme/tokens';
 
+// 진행률이 이 값 이상이면 완주로 보고 완료를 제안한다. 경로 좌표열의 누적 길이와 total_km,
+// GPS 투영 오차 때문에 정확히 1.0에는 안 닿을 수 있어 살짝 낮춘다.
+const GOAL_REACHED_RATIO = 0.99;
+
 interface Props {
   routeResult: WalkRouteResponse;
   onRequestEnd: (snapshot: WalkEndSnapshot) => void;
+  /** 진행률이 목표(≈100%)에 도달했을 때 1회 호출 — 상위(WalkFlow)가 완주 확인 모달을 띄운다. */
+  onGoalReached: (snapshot: WalkEndSnapshot) => void;
 }
 
-export function WalkInProgressScreen({ routeResult, onRequestEnd }: Props) {
+export function WalkInProgressScreen({ routeResult, onRequestEnd, onGoalReached }: Props) {
   const { coords } = useWatchLocation();
   // 폰 자체 뒤로가기/홈 제스처 바에 줌 버튼이 가려지지 않도록 하단 안전영역만큼 더 띄운다.
   const insets = useSafeAreaInsets();
@@ -24,6 +30,8 @@ export function WalkInProgressScreen({ routeResult, onRequestEnd }: Props) {
   // GPS 튐 필터링·연속 이탈 확인·직전 매칭 지점 기억을 위해 산책 한 번 동안 상태를 유지하는
   // 트래커. 화면이 마운트된 동안(=산책 한 번) 하나의 인스턴스를 그대로 재사용한다.
   const trackerRef = useRef(new WalkProgressTracker());
+  // 완주 제안(onGoalReached)은 한 번만 — "더 걷기"를 눌러도 다시 뜨지 않게.
+  const goalFiredRef = useRef(false);
 
   useEffect(() => {
     let subscription: { remove: () => void } | undefined;
@@ -58,13 +66,24 @@ export function WalkInProgressScreen({ routeResult, onRequestEnd }: Props) {
     ? { lat: coords.latitude, lon: coords.longitude, address: null, place_name: null }
     : null;
 
+  const buildSnapshot = (): WalkEndSnapshot => ({
+    traveledKm: progress.traveledKm,
+    elapsedMs: Date.now() - startedAtRef.current,
+    steps: stepsRef.current,
+  });
+
   const handleEnd = () => {
-    onRequestEnd({
-      traveledKm: progress.traveledKm,
-      elapsedMs: Date.now() - startedAtRef.current,
-      steps: stepsRef.current,
-    });
+    onRequestEnd(buildSnapshot());
   };
+
+  // 목표 거리에 도달하면 완주 확인을 1회 제안한다.
+  useEffect(() => {
+    if (goalFiredRef.current) return;
+    if (progress.progressRatio < GOAL_REACHED_RATIO) return;
+    goalFiredRef.current = true;
+    onGoalReached(buildSnapshot());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [progress.progressRatio]);
 
   return (
     <View style={styles.container}>

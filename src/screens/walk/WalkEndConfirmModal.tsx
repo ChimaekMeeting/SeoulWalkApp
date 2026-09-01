@@ -10,9 +10,24 @@ interface Props {
   visible: boolean;
   onCancel: () => void;
   onConfirm: () => void;
+  /** 문구/버튼 커스터마이즈 — 기본값은 "조기 종료 확인". 완주 확인 등 다른 맥락에서 재사용한다. */
+  icon?: string;
+  title?: string;
+  subtitle?: string;
+  confirmLabel?: string;
+  cancelLabel?: string;
 }
 
-export function WalkEndConfirmModal({ visible, onCancel, onConfirm }: Props) {
+export function WalkEndConfirmModal({
+  visible,
+  onCancel,
+  onConfirm,
+  icon = '🚶',
+  title = '산책을 정말로\n종료하시겠습니까?',
+  subtitle = '기록은 자동으로 저장돼요',
+  confirmLabel = '종료',
+  cancelLabel = '아니요',
+}: Props) {
   const translateY = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
   // 폰 자체 뒤로가기/홈 제스처 바에 버튼이 가려지지 않도록 하단 안전영역만큼 더 띄운다.
   const insets = useSafeAreaInsets();
@@ -40,12 +55,12 @@ export function WalkEndConfirmModal({ visible, onCancel, onConfirm }: Props) {
           ]}
         >
           <View style={styles.dragHandle} />
-          <Text style={styles.icon}>🚶</Text>
-          <Text style={styles.title}>산책을 정말로{'\n'}종료하시겠습니까?</Text>
-          <Text style={styles.subtitle}>기록은 자동으로 저장돼요</Text>
+          <Text style={styles.icon}>{icon}</Text>
+          <Text style={styles.title}>{title}</Text>
+          <Text style={styles.subtitle}>{subtitle}</Text>
           <View style={styles.actionRow}>
-            <Button label="아니요" onPress={onCancel} variant="secondary" style={styles.flexButton} />
-            <Button label="종료" onPress={onConfirm} style={styles.flexButton} />
+            <Button label={cancelLabel} onPress={onCancel} variant="secondary" style={styles.flexButton} />
+            <Button label={confirmLabel} onPress={onConfirm} style={styles.flexButton} />
           </View>
         </Animated.View>
       </View>
