@@ -47,14 +47,18 @@ Login ── 카카오 로그인 → authState 'loggedIn'
         └─ survey_completed: true  ──▶ (스킵)
         │
         ▼
-LocationPermission ── onRequest / onSkip
+LocationPermission ── onRequest (위치 필수 — 건너뛰기 없음)
         │
         ▼
-ActivityPermission ── onGranted / onSkip
+ActivityPermission ── onGranted / onDenied / onSkip (걸음 수 선택)
         │
         ▼
 Home (앱 셸 — MainRouter.tsx)
 ```
+
+> 권한 확인(위치·걸음 수)은 `AppBootstrap`이 로그인 직후·포그라운드 복귀 시·산책 진입 직전에
+> `src/auth/permissions.ts`로 OS에 다시 물어봅니다. 설정 앱에서 권한을 끄면 다음 포그라운드
+> 복귀 때 해당 안내 화면으로 되돌아갑니다.
 
 각 화면 이름의 타입(`RootStackParamList`)은 `src/types/navigation.ts`에, 계산 로직과 상세 흐름은 `src/README.md`의 "2. 앱 전체 화면 흐름"에 정리돼 있습니다. 이 문서는 그 아래 단계, 즉 `Home` 라우트 안쪽(`MainRouter.tsx`와 산책 플로우)에 집중합니다.
 
@@ -96,7 +100,7 @@ onExitToHome (MainRouter가 activeRoute를 비우고 'home' 탭으로 복귀)
 ```
 
 - **`WalkPrepScreen` (6a)**: 받은 경로를 지도에 미리 보여주고 거리/예상 시간/칼로리를 계산해 표시. "산책 시작" → `stage: 'walking'`. 뒤로가기(`onBack`)는 `WalkFlow` 밖으로 나가 바로 `onExitToHome` 호출.
-- **`WalkInProgressScreen` (6b)**: `useWatchLocation`으로 실시간 위치를 추적해 `WalkProgressTracker`(`src/utils/walkProgress.ts`)로 진행률을 계산하고, 만보계(`Pedometer.watchStepCount`)로 걸음 수를 측정. 지도(`RouteMapView`)엔 진행률(`traveledKm`)을 넘겨 지나온 구간/남은 구간을 다른 색으로, 방향 화살표와 출발·도착 마커도 함께 표시합니다(순환 코스에서 방향을 알기 쉽게). 종료 버튼을 누르면 지금까지의 거리/시간/걸음 수를 스냅샷으로 만들어 `onRequestEnd`로 올려보냄(화면 전환은 아직 안 함).
+- **`WalkInProgressScreen` (6b)**: `useWatchLocation`으로 실시간 위치를 추적해 `WalkProgressTracker`(`src/utils/walkProgress.ts`)로 진행률을 계산하고, 만보계(`Pedometer.watchStepCount`)로 걸음 수를 측정. 지도(`RouteMapView`)엔 진행률(`traveledKm`)을 넘겨 지나온 구간/남은 구간을 다른 색으로, 방향 화살표와 출발·도착 마커도 함께 표시합니다(순환 코스에서 방향을 알기 쉽게). 종료 버튼을 누르면 지금까지의 거리/시간/걸음 수를 스냅샷으로 만들어 `onRequestEnd`로 올려보냄 → `WalkFlow`가 6c 모달을 띄운다.
 - **`WalkEndConfirmModal` (6c)**: "정말 종료할까요?" 확인 모달. `onConfirm`을 눌러야만 `stage: 'complete'`로 넘어가고, `onCancel`이면 모달만 닫히고 6b가 계속 진행됨.
 - **`WalkCompleteScreen` (6d)**: 최종 거리/시간/걸음 수 요약, 즐겨찾기 토글(`toggleFavoriteRoute`). "홈으로" → `onHome` → `WalkFlow`의 `onExitToHome` → `MainRouter`가 `home` 탭으로 복귀.
 

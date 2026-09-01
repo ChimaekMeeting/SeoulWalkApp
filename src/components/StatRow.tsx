@@ -2,7 +2,7 @@ import React from 'react';
 import { StyleProp, StyleSheet, Text, View, ViewStyle } from 'react-native';
 import { colors, spacing } from '../theme/tokens';
 
-export interface StatItem {
+interface StatItem {
   value: string;
   unit?: string;
   /** detail variant에서만 값 아래에 표시된다 */

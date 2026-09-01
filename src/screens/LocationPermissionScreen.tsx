@@ -5,10 +5,15 @@ import { PermissionPrompt } from '../components/PermissionPrompt';
 interface Props {
   status: 'undetermined' | 'denied';
   onRequest: () => void;
-  onSkip: () => void;
 }
 
-export function LocationPermissionScreen({ status, onRequest, onSkip }: Props) {
+/**
+ * 위치 권한은 앱 사용에 필수라 "건너뛰기"가 없다.
+ * - undetermined: OS 권한 요청
+ * - denied: OS 다이얼로그를 다시 못 띄우므로 설정 화면으로 안내
+ * 설정에서 켜고 돌아오면 AppBootstrap의 포그라운드 재확인이 자동으로 다음 단계로 넘긴다.
+ */
+export function LocationPermissionScreen({ status, onRequest }: Props) {
   const isDenied = status === 'denied';
 
   return (
@@ -21,8 +26,6 @@ export function LocationPermissionScreen({ status, onRequest, onSkip }: Props) {
       badgeText="위치 권한은 필수입니다"
       primaryLabel={isDenied ? '설정에서 위치 권한 허용하기' : '위치 권한 허용'}
       onPrimary={isDenied ? () => Linking.openSettings() : onRequest}
-      secondaryLabel="직접 검색으로 위치 설정"
-      onSecondary={onSkip}
     />
   );
 }

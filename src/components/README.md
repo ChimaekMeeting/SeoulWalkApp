@@ -41,7 +41,7 @@ src/components/
 
 ## 1. `ScreenHeader.tsx`
 
-`title`/`subtitle`/`onBack`/`right` props를 받는 순수 헤더. `onBack`이 있을 때만 뒤로가기 화살표가 뜹니다. `plain`이면 배경/하단 보더가 없는 투명 헤더(전체화면 플로우용, `WalkPrepScreen`), `align="center"`면 제목을 가운데 정렬합니다. `MyPageScreen`·`RecordTab`은 `TabScreen`을 통해 간접적으로 씁니다.
+`title`/`onBack` props를 받는 순수 헤더. `onBack`이 있을 때만 뒤로가기 화살표가 뜹니다. `plain`이면 배경/하단 보더가 없는 투명 헤더(전체화면 플로우용, `WalkPrepScreen`), `align="center"`면 제목을 가운데 정렬합니다. `MyPageScreen`·`RecordTab`은 `TabScreen`을 통해 간접적으로 씁니다.
 
 ## 1-2. `Button.tsx` / `ErrorBanner.tsx` / `PermissionPrompt.tsx` / `StatRow.tsx` / `TabScreen.tsx`
 
@@ -49,7 +49,7 @@ src/components/
 
 - **`Button`**: 높이 52 · `radii.lg` 고정. `variant="primary"`(검정 채움, 기본) / `"secondary"`(흰 배경 + `colors.lineStrong` 아웃라인). `loading`이면 스피너를 보여주고 눌리지 않으며, `disabled`면 흐려집니다(opacity 0.4). 바깥 여백이나 `flex: 1`은 `style` prop으로, 글자 크기 조정은 `textStyle`로 넘깁니다. 카카오 로그인 버튼처럼 색/레이아웃이 완전히 다른 건 각 화면이 직접 그립니다.
 - **`ErrorBanner`**: `message`가 falsy면 `null`을 반환하므로 `{cond ? ... : null}` 없이 `<ErrorBanner message={errorMsg} />`만 두면 됩니다.
-- **`PermissionPrompt`**: `LocationPermissionScreen`·`ActivityPermissionScreen`이 공유하는 레이아웃(중앙 아이콘/제목/본문/뱃지 + 하단 primary·secondary 버튼). 권한 상태 확인·요청 로직은 각 화면에 남아 있고, 여기서는 UI만 그립니다. `body`는 여러 줄이면 `'\n'`을 포함한 문자열로 넘깁니다.
+- **`PermissionPrompt`**: `LocationPermissionScreen`·`ActivityPermissionScreen`이 공유하는 레이아웃(중앙 아이콘/제목/본문/뱃지 + 하단 버튼). `secondaryLabel`/`onSecondary`는 선택 — 위치 권한처럼 필수라 "건너뛰기"가 없으면 primary 버튼만 렌더됩니다. 권한 상태 확인·요청 로직은 각 화면(또는 `src/auth/permissions.ts`)에 있고 여기서는 UI만 그립니다. `body`는 여러 줄이면 `'\n'` 포함 문자열로 넘깁니다.
 - **`StatRow`**: `items`(값/단위/라벨 배열)를 가로로 나열. `variant="summary"`는 큰 값 + 아래 단위(완료 화면), `"detail"`은 값+단위 한 줄 + 아래 라벨(준비 화면).
 - **`TabScreen`**: `title` + `children`만 받아 `ScreenHeader` + 하단 탭바 여백이 잡힌 `ScrollView`를 그립니다. `RecordTab`·`MyPageScreen`이 사용.
 

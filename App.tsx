@@ -50,36 +50,37 @@ function SurveyScreenContainer() {
 }
 
 function LocationPermissionScreenContainer() {
-  const { permissionStatus, requestLocationPermission, skipLocationPermission } =
-    useAppBootstrap();
-  // 이 화면은 permissionStatus가 'undetermined' | 'denied'일 때만 라우팅되므로 단언 안전.
+  const { permissionStatus, requestLocationPermission } = useAppBootstrap();
+  // 이 화면은 permissionStatus가 'granted'가 아닐 때만 라우팅된다('checking'은 Loading 화면이 먼저 잡음).
   return (
     <LocationPermissionScreen
-      status={permissionStatus as 'undetermined' | 'denied'}
+      status={permissionStatus === 'denied' ? 'denied' : 'undetermined'}
       onRequest={requestLocationPermission}
-      onSkip={skipLocationPermission}
     />
   );
 }
 
 function ActivityPermissionScreenContainer() {
-  const { grantActivityPermission, skipActivityPermission } = useAppBootstrap();
+  const { activityStatus, grantActivityPermission, denyActivityPermission, skipActivityPermission } =
+    useAppBootstrap();
   return (
     <ActivityPermissionScreen
-      status="undetermined"
+      status={activityStatus === 'denied' ? 'denied' : 'undetermined'}
       onGranted={grantActivityPermission}
+      onDenied={denyActivityPermission}
       onSkip={skipActivityPermission}
     />
   );
 }
 
 function MainRouterContainer() {
-  const { signOut, userId, resetSurvey } = useAppBootstrap();
+  const { signOut, userId, resetSurvey, ensureWalkable } = useAppBootstrap();
   return (
     <MainRouter
       onLogout={signOut}
       userId={userId}
       onResetSurvey={resetSurvey}
+      ensureWalkable={ensureWalkable}
     />
   );
 }
