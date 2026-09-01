@@ -25,30 +25,36 @@ export interface PermissionSnapshot {
 
 const hasDebugFixedLocation = !!env.DEBUG_FIXED_LOCATION;
 
-async function readLocationStatus(): Promise<PermissionState> {
+/** 'read'는 조회, 'request'는 (미결정 시) OS 다이얼로그. 이미 허용됐으면 둘 다 다이얼로그 없이 granted. */
+type Mode = 'read' | 'request';
+
+async function locationPermission(mode: Mode): Promise<PermissionState> {
   if (hasDebugFixedLocation) return 'granted';
-  const { status } = await Location.getForegroundPermissionsAsync();
+  const { status } =
+    mode === 'read'
+      ? await Location.getForegroundPermissionsAsync()
+      : await Location.requestForegroundPermissionsAsync();
   return status;
 }
 
-async function isPedometerUsable(): Promise<boolean> {
+async function pedometerPermission(mode: Mode): Promise<PermissionState> {
+  // 센서 자체가 없는 기기는 권한을 물어도 소용 없으므로 denied로 취급한다.
   try {
-    return await Pedometer.isAvailableAsync();
+    if (!(await Pedometer.isAvailableAsync())) return 'denied';
   } catch {
-    return false;
+    return 'denied';
   }
-}
-
-async function readPedometerStatus(): Promise<PermissionState> {
-  if (!(await isPedometerUsable())) return 'denied';
-  const { status } = await Pedometer.getPermissionsAsync();
+  const { status } =
+    mode === 'read'
+      ? await Pedometer.getPermissionsAsync()
+      : await Pedometer.requestPermissionsAsync();
   return status;
 }
 
 export async function readPermissionSnapshot(): Promise<PermissionSnapshot> {
   const [location, pedometer] = await Promise.all([
-    readLocationStatus(),
-    readPedometerStatus(),
+    locationPermission('read'),
+    pedometerPermission('read'),
   ]);
   const locationGranted = location === 'granted';
   const pedometerGranted = pedometer === 'granted';
@@ -61,15 +67,10 @@ export async function readPermissionSnapshot(): Promise<PermissionSnapshot> {
   };
 }
 
-/** 이미 허용돼 있으면 OS가 다이얼로그 없이 즉시 granted를 돌려준다(중복 요청 아님). */
-export async function requestLocationPermission(): Promise<PermissionState> {
-  if (hasDebugFixedLocation) return 'granted';
-  const { status } = await Location.requestForegroundPermissionsAsync();
-  return status;
-}
+export const requestLocationPermission = () => locationPermission('request');
+export const requestPedometerPermission = () => pedometerPermission('request');
 
-export async function requestPedometerPermission(): Promise<PermissionState> {
-  if (!(await isPedometerUsable())) return 'denied';
-  const { status } = await Pedometer.requestPermissionsAsync();
-  return status;
-}
+/** AppBootstrap의 4-state(PermissionState | 'checking')를 권한 화면 prop(2-state)으로 좁힌다. */
+export const toPromptStatus = (
+  s: PermissionState | 'checking',
+): 'undetermined' | 'denied' => (s === 'denied' ? 'denied' : 'undetermined');

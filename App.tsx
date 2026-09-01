@@ -16,6 +16,7 @@ import { SurveyScreen } from './src/screens/SurveyScreen';
 import { LoginScreen } from './src/screens/LoginScreen';
 import { LocationPermissionScreen } from './src/screens/LocationPermissionScreen';
 import { ActivityPermissionScreen } from './src/screens/ActivityPermissionScreen';
+import { toPromptStatus } from './src/auth/permissions';
 import { MainRouter } from './src/screens/MainRouter';
 import { colors } from './src/theme/tokens';
 import type { RootStackParamList } from './src/types/navigation';
@@ -51,10 +52,9 @@ function SurveyScreenContainer() {
 
 function LocationPermissionScreenContainer() {
   const { permissionStatus, requestLocationPermission } = useAppBootstrap();
-  // 이 화면은 permissionStatus가 'granted'가 아닐 때만 라우팅된다('checking'은 Loading 화면이 먼저 잡음).
   return (
     <LocationPermissionScreen
-      status={permissionStatus === 'denied' ? 'denied' : 'undetermined'}
+      status={toPromptStatus(permissionStatus)}
       onRequest={requestLocationPermission}
     />
   );
@@ -65,7 +65,7 @@ function ActivityPermissionScreenContainer() {
     useAppBootstrap();
   return (
     <ActivityPermissionScreen
-      status={activityStatus === 'denied' ? 'denied' : 'undetermined'}
+      status={toPromptStatus(activityStatus)}
       onGranted={grantActivityPermission}
       onDenied={denyActivityPermission}
       onSkip={skipActivityPermission}
