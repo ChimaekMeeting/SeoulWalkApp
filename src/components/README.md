@@ -1,11 +1,12 @@
 # src/components
 
-여러 화면에서 재사용하는 컴포넌트를 모아두는 폴더입니다. 기능별로 하위 폴더(`chat/`, `map/`, `my/`, `record/`, `walk/`)에 나눠 담고, 특정 기능에 묶이지 않는 것만 최상위에 둡니다.
+여러 화면에서 재사용하는 컴포넌트를 모아두는 폴더입니다. 기능별로 하위 폴더(`chat/`, `map/`, `my/`, `record/`)에 나눠 담고, 특정 기능에 묶이지 않는 것만 최상위에 둡니다.
 
 ```
 src/components/
 ├─ ScreenHeader.tsx    # 뒤로가기 화살표 + 제목/부제 + 우측 버튼 헤더 (여러 화면 공통)
 ├─ AppBottomSheet.tsx  # gorhom BottomSheet를 감싼 범용 래퍼 (src/bottomsheets/의 화면별 시트가 이걸 씀)
+├─ BottomNav.tsx       # 하단 탭 바(홈/기록/마이페이지) — MainRouter가 렌더링
 ├─ chat/                # 홈 화면 하단시트에 들어가는 AI 챗봇 대화 UI
 │  ├─ ChatConversation.tsx  # 대화 흐름 전체를 관리하는 컨테이너 (이걸 import해서 쓰면 됨)
 │  ├─ ChatInput.tsx         # 하단 입력창
@@ -19,25 +20,21 @@ src/components/
 │  ├─ RouteLayer.tsx        # 경로 라인 레이어 (내부용, id prop으로 같은 지도에 중복 렌더 가능)
 │  ├─ RouteDirectionArrows.tsx # 경로 선 위에 방향 화살표(▶)를 일정 간격으로 표시 (내부용)
 │  ├─ RouteEndpointMarkers.tsx # 출발·도착 마커 — 순환 코스면 하나로 합쳐서 표시 (내부용)
-│  ├─ DynamicPOILayer.tsx   # 미사용 — 어디서도 import 안 됨
-│  ├─ StaticPOILayer.tsx    # 미사용 — 어디서도 import 안 됨
 │  └─ index.ts
-├─ my/                   # '내 정보' 탭(MyScreen)에서만 쓰는 컴포넌트
+├─ my/                   # '마이페이지' 탭(MyPageScreen)에서만 쓰는 컴포넌트
 │  ├─ MyPreferenceComponent.tsx # 산책 취향 태그 선택 섹션
 │  ├─ MyPreferenceItem.tsx      # 취향 태그 버튼 1개
 │  └─ SettingComponent.tsx      # 설정 메뉴 한 줄(라벨 + '>' 화살표)
-├─ record/               # '기록' 탭(RecordTab)에서만 쓰는 컴포넌트
-│  ├─ RouteHistoryList.tsx   # 저장된 경로 목록 조회/표시 (실API 연동)
-│  └─ HistoryPlaceLabel.tsx  # 경로 카드에 좌표를 역지오코딩한 장소명을 보여주는 라벨
-└─ walk/                 # 산책 완료(6d) 화면에서만 쓰는 컴포넌트
-   └─ ShareCard.tsx          # 화면엔 안 보이고 공유 이미지 캡처용으로만 쓰는 카드
+└─ record/               # '기록' 탭(RecordTab)에서만 쓰는 컴포넌트
+   ├─ RouteHistoryList.tsx   # 저장된 경로 목록 조회/표시 (실API 연동)
+   └─ HistoryPlaceLabel.tsx  # 경로 카드에 좌표를 역지오코딩한 장소명을 보여주는 라벨
 ```
 
 ---
 
 ## 1. `ScreenHeader.tsx`
 
-`title`/`subtitle`/`onBack`/`right` props만 받는 순수 헤더. `onBack`이 있을 때만 뒤로가기 화살표가 뜹니다. 지금은 `MyScreen.tsx`, `record/RecordTab.tsx`에서 쓰고 있고, 새 화면을 추가할 때도 이 컴포넌트로 헤더를 통일하면 됩니다.
+`title`/`subtitle`/`onBack`/`right` props만 받는 순수 헤더. `onBack`이 있을 때만 뒤로가기 화살표가 뜹니다. 지금은 `MyPageScreen.tsx`, `record/RecordTab.tsx`에서 쓰고 있고, 새 화면을 추가할 때도 이 컴포넌트로 헤더를 통일하면 됩니다.
 
 ## 1-1. `AppBottomSheet.tsx`
 
@@ -45,7 +42,7 @@ src/components/
 
 ## 2. `chat/` — 챗봇 대화 UI
 
-`HomeScreen.tsx`의 홈 탭 하단시트 안에 임베드되는 형태입니다(독립된 화면이 아님). `ChatConversation`이 `forwardRef`로 `ChatConversationHandle`을 노출해서, 부모(`HomeScreen`)가 메시지 전송 등을 직접 트리거할 수 있습니다.
+홈 탭(`HomeScreen.tsx`)의 하단시트 안에 임베드되는 형태입니다(독립된 화면이 아님). `ChatConversation`이 `forwardRef`로 `ChatConversationHandle`을 노출해서, 부모(`HomeScreen`)가 메시지 전송 등을 직접 트리거할 수 있습니다.
 
 ```
 ChatConversation (컨테이너, src/api/prewalk.ts로 백엔드와 통신)
@@ -55,10 +52,10 @@ ChatConversation (컨테이너, src/api/prewalk.ts로 백엔드와 통신)
  └─ RouteCandidate   # state.route_result(배열)의 후보 1개를 카드로 보여줌 — 후보 개수만큼 렌더링됨
         │ onPress (카드 자체가 버튼 — 누르면 바로 그 후보가 선택됨)
         ▼
-   onRouteReady(route) 콜백으로 상위(HomeScreen)에 전달
+   onRouteReady(route) 콜백으로 상위(HomeScreen→MainRouter)에 전달
         │
         ▼
-   HomeScreen이 activeRoute로 저장하고 realWalk(WalkFlow, 6a)로 전환
+   MainRouter가 activeRoute로 저장하고 realWalk(WalkFlow, 6a)로 전환
 ```
 
 - `ChatInput.tsx`는 `ChatConversation`과 별개로 `HomeScreen`이 직접 배치합니다(하단시트 고정 위치에 항상 떠 있어야 해서).
@@ -129,11 +126,9 @@ const locationInfo: LocationInfo | null = coords
 | 방향 화살표·출발도착 마커 | 없음 | `route` 있으면 항상 표시 |
 | 커스텀 POI 마커 | 없음 (지도 스타일 자체에 건물/상호 정보 포함) | 없음 |
 
-`DynamicPOILayer.tsx`/`StaticPOILayer.tsx`는 현재 앱 어디에서도 import되지 않는 미사용 컴포넌트입니다.
-
 ## 4. `my/` — 내 정보 탭 전용
 
-`MyScreen.tsx` 하나에서만 쓰는, 재사용 범위가 좁은 컴포넌트들입니다. `MyPreferenceComponent`가 `src/data/onboarding.ts`의 `PREFERENCE_TAGS`를 받아 `MyPreferenceItem`(태그 버튼)을 나열하고, `SettingComponent`는 설정 메뉴의 각 행(예: "알림 설정", "로그아웃")을 그리는 데 씁니다.
+`MyPageScreen.tsx` 하나에서만 쓰는, 재사용 범위가 좁은 컴포넌트들입니다. `MyPreferenceComponent`가 `src/data/onboarding.ts`의 `PREFERENCE_TAGS`를 받아 `MyPreferenceItem`(태그 버튼)을 나열하고, `SettingComponent`는 설정 메뉴의 각 행(예: "알림 설정", "로그아웃")을 그리는 데 씁니다.
 
 ## 5. `record/` — 기록 탭 전용
 
@@ -141,17 +136,3 @@ const locationInfo: LocationInfo | null = coords
 
 - **`RouteHistoryList`**: `filter`("recent" | "favorite")를 props로 받아 `GET /api/user/routes`를 직접 호출하고, 카드 목록(지도 썸네일 + 모드 라벨 + 거리/시간 + 즐겨찾기 별)을 렌더링합니다. 카드를 누르면 `routeHistoryToWalkRoute`(`src/utils/routeHistory.ts`)로 변환한 뒤 `onSelectRoute` 콜백을 호출해 6a(산책 전)로 다시 들어갈 수 있게 합니다.
 - **`HistoryPlaceLabel`**: 카드 안에서 좌표(`origin_lat`/`origin_lon` 등)를 역지오코딩(`src/utils/reverseGeocode.ts`)해서 실제 장소명을 보여줍니다. 이름만으로 구분 안 되는 같은 모드(예: "순환 코스"끼리)를 구분하기 위한 용도입니다.
-
-## 6. `walk/` — 산책 완료(6d) 화면 전용
-
-`ShareCard`는 `WalkCompleteScreen.tsx`의 실제 화면 UI와 별개로, **화면엔 안 보이고 공유 이미지 캡처용으로만 쓰는 카드**입니다. `forwardRef`로 `ViewShotRef`를 그대로 노출해서, 부모가 `ref.current.capture()`를 호출해 PNG URI를 얻습니다.
-
-```tsx
-const shareCardRef = useRef<ViewShotRef>(null);
-// ...
-<ShareCard ref={shareCardRef} traveledKm={traveledKm} minutes={minutes} steps={steps} thumbnailUrl={thumbnailUrl} />
-// ...
-const uri = await shareCardRef.current?.capture?.();
-```
-
-실시간 지도 대신 라벨 없는 정적 지도 썸네일(`src/utils/routeThumbnail.ts`)을 써서, 캡처할 때마다 결과가 달라지지 않고 항상 일정합니다.
