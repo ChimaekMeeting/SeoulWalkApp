@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import * as Location from 'expo-location';
 import { env } from '../config/env';
+import { requestLocationPermission } from '../auth/permissions';
 import { Coordinates } from '../types/location';
 
 // 서울 서비스 구역 밖에서 개발할 때, 실제 GPS 대신 .env의 EXPO_PUBLIC_DEBUG_FIXED_LOCATION으로 고정(개발 시)
@@ -22,8 +23,8 @@ export const useLocation = () => {
       return;
     }
 
-    const requestLocationPermission = async () => {
-      const { status } = await Location.requestForegroundPermissionsAsync();
+    const fetchLocation = async () => {
+      const status = await requestLocationPermission();
       if (status !== 'granted') {
         console.log('Location permission denied');
         setHasPermission(false);
@@ -41,7 +42,7 @@ export const useLocation = () => {
       });
     };
 
-    requestLocationPermission();
+    fetchLocation();
   }, []);
 
   return { hasPermission, coords };
