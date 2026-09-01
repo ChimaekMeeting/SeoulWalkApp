@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import {
-  ActivityIndicator,
   Dimensions,
   Pressable,
   ScrollView,
@@ -11,7 +10,9 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { postSurvey } from '../api/survey';
 import { surveyQuestions } from '../config/surveyQuestions';
-import { radii, spacing } from '../theme/tokens';
+import { Button } from '../components/Button';
+import { ErrorBanner } from '../components/ErrorBanner';
+import { colors, radii, spacing } from '../theme/tokens';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 const CHIP_GAP = spacing.sm;
@@ -120,23 +121,11 @@ export function SurveyScreen({ onDone }: Props) {
           })}
         </View>
 
-        {errorMsg ? (
-          <View style={styles.errorBox}>
-            <Text style={styles.errorText}>{errorMsg}</Text>
-          </View>
-        ) : null}
+        <ErrorBanner message={errorMsg} />
       </ScrollView>
 
       <View style={styles.footer}>
-        <Pressable
-          onPress={handleComplete}
-          disabled={loading}
-          style={({ pressed }) => [styles.completeBtn, (pressed || loading) && styles.pressed]}
-        >
-          {loading
-            ? <ActivityIndicator color="#fff" />
-            : <Text style={styles.completeBtnText}>완료</Text>}
-        </Pressable>
+        <Button label="완료" onPress={handleComplete} loading={loading} />
       </View>
     </SafeAreaView>
   );
@@ -145,7 +134,7 @@ export function SurveyScreen({ onDone }: Props) {
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: colors.card,
   },
   scroll: {
     paddingHorizontal: spacing.xxl,
@@ -159,13 +148,13 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xxl,
   },
   title: {
-    color: '#111',
+    color: colors.ink,
     fontSize: 26,
     fontWeight: '900',
     lineHeight: 36,
   },
   pageIndicator: {
-    color: '#9E9E9E',
+    color: colors.inkMuted,
     fontSize: 14,
     fontWeight: '600',
     marginTop: 4,
@@ -183,26 +172,26 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xs,
     borderRadius: radii.lg,
     borderWidth: 1.5,
-    borderColor: '#E0E0E0',
+    borderColor: colors.line,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#fff',
+    backgroundColor: colors.card,
   },
   chipSelected: {
-    backgroundColor: '#111',
-    borderColor: '#111',
+    backgroundColor: colors.ink,
+    borderColor: colors.ink,
   },
   chipText: {
-    color: '#111',
+    color: colors.ink,
     fontSize: 13,
     fontWeight: '600',
     textAlign: 'center',
   },
   chipTextSelected: {
-    color: '#fff',
+    color: colors.card,
   },
   sectionLabel: {
-    color: '#111',
+    color: colors.ink,
     fontSize: 16,
     fontWeight: '800',
     marginBottom: spacing.md,
@@ -217,25 +206,25 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
     borderRadius: radii.lg,
     borderWidth: 1.5,
-    borderColor: '#E0E0E0',
+    borderColor: colors.line,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#fff',
+    backgroundColor: colors.card,
   },
   distanceBtnSelected: {
-    backgroundColor: '#111',
-    borderColor: '#111',
+    backgroundColor: colors.ink,
+    borderColor: colors.ink,
   },
   distanceLabel: {
-    color: '#111',
+    color: colors.ink,
     fontSize: 15,
     fontWeight: '800',
   },
   distanceLabelSelected: {
-    color: '#fff',
+    color: colors.card,
   },
   distanceSub: {
-    color: '#9E9E9E',
+    color: colors.inkMuted,
     fontSize: 12,
     fontWeight: '500',
     marginTop: 2,
@@ -243,38 +232,10 @@ const styles = StyleSheet.create({
   distanceSubSelected: {
     color: 'rgba(255,255,255,0.7)',
   },
-  errorBox: {
-    borderRadius: radii.md,
-    backgroundColor: '#fde8e8',
-    borderWidth: 1,
-    borderColor: '#f5c6c6',
-    padding: spacing.md,
-  },
-  errorText: {
-    color: '#c0392b',
-    fontSize: 13,
-    fontWeight: '700',
-    textAlign: 'center',
-  },
   footer: {
     paddingHorizontal: spacing.xxl,
     paddingTop: spacing.md,
     paddingBottom: spacing.xxl,
-    backgroundColor: '#fff',
-  },
-  completeBtn: {
-    height: 52,
-    borderRadius: radii.lg,
-    backgroundColor: '#111',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  completeBtnText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '900',
-  },
-  pressed: {
-    opacity: 0.75,
+    backgroundColor: colors.card,
   },
 });

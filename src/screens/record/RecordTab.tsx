@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { ScreenHeader } from '../../components/ScreenHeader';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { TabScreen } from '../../components/TabScreen';
 import { HistoryFilter, RouteHistoryList } from '../../components/record/RouteHistoryList';
 import { WalkRouteResponse } from '../../types/prewalk';
 import { colors, spacing } from '../../theme/tokens';
@@ -10,56 +10,38 @@ interface RecordTabProps {
   onSelectRoute: (route: WalkRouteResponse) => void;
 }
 
+const FILTERS: [HistoryFilter, string][] = [
+  ['recent', '최근 경로'],
+  ['favorite', '즐겨찾기'],
+];
+
 export function RecordTab({ onSelectRoute }: RecordTabProps) {
   const [historyFilter, setHistoryFilter] = useState<HistoryFilter>('recent');
 
   return (
-    <View style={styles.recordPage}>
-      <ScreenHeader title="기록" />
-      <ScrollView contentContainerStyle={styles.listContent} showsVerticalScrollIndicator={false}>
-        <View style={styles.historyTabRow}>
-          {(
-            [
-              ['recent', '최근 경로'],
-              ['favorite', '즐겨찾기'],
-            ] as [HistoryFilter, string][]
-          ).map(([value, label]) => (
+    <TabScreen title="기록">
+      <View style={styles.historyTabRow}>
+        {FILTERS.map(([value, label]) => {
+          const active = historyFilter === value;
+          return (
             <Pressable
               key={value}
               onPress={() => setHistoryFilter(value)}
-              style={[
-                styles.historyTabPill,
-                historyFilter === value && styles.historyTabPillActive,
-              ]}
+              style={[styles.historyTabPill, active && styles.historyTabPillActive]}
             >
-              <Text
-                style={[
-                  styles.historyTabText,
-                  historyFilter === value && styles.historyTabTextActive,
-                ]}
-              >
+              <Text style={[styles.historyTabText, active && styles.historyTabTextActive]}>
                 {label}
               </Text>
             </Pressable>
-          ))}
-        </View>
-        <RouteHistoryList filter={historyFilter} onSelectRoute={onSelectRoute} />
-      </ScrollView>
-    </View>
+          );
+        })}
+      </View>
+      <RouteHistoryList filter={historyFilter} onSelectRoute={onSelectRoute} />
+    </TabScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  recordPage: {
-    flex: 1,
-    backgroundColor: '#ffffff',
-    paddingBottom: 76,
-  },
-  listContent: {
-    padding: spacing.lg,
-    paddingBottom: 100,
-    gap: spacing.md,
-  },
   historyTabRow: {
     flexDirection: 'row',
     gap: spacing.sm,
@@ -71,14 +53,14 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
     backgroundColor: colors.card,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.line,
   },
   historyTabPillActive: {
-    backgroundColor: '#111111',
-    borderColor: '#111111',
+    backgroundColor: colors.ink,
+    borderColor: colors.ink,
   },
   historyTabText: {
-    color: '#5c5c5c',
+    color: colors.inkFaint,
     fontWeight: '900',
     fontSize: 12,
   },

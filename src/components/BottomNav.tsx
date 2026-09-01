@@ -81,6 +81,6 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   navActiveText: {
-    color: colors.black,
+    color: colors.ink,
   },
 });

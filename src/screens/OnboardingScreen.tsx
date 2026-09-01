@@ -11,7 +11,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { onboardingStorage } from '../auth/onboardingStorage';
-import { radii, spacing } from '../theme/tokens';
+import { Button } from '../components/Button';
+import { colors, spacing } from '../theme/tokens';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 
@@ -88,12 +89,7 @@ export function OnboardingScreen({ onDone }: Props) {
         </View>
 
         <View style={styles.actions}>
-          <Pressable
-            onPress={isLast ? finish : goNext}
-            style={({ pressed }) => [styles.primaryButton, pressed && styles.pressed]}
-          >
-            <Text style={styles.primaryText}>{isLast ? '시작하기' : '다음'}</Text>
-          </Pressable>
+          <Button label={isLast ? '시작하기' : '다음'} onPress={isLast ? finish : goNext} />
 
           <Pressable
             onPress={finish}
@@ -110,7 +106,7 @@ export function OnboardingScreen({ onDone }: Props) {
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: colors.card,
   },
   sliderWrap: {
     flex: 1,
@@ -126,14 +122,14 @@ const styles = StyleSheet.create({
     fontSize: 80,
   },
   slideTitle: {
-    color: '#111',
+    color: colors.ink,
     fontSize: 26,
     fontWeight: '900',
     textAlign: 'center',
     lineHeight: 36,
   },
   slideSubtitle: {
-    color: '#9E9E9E',
+    color: colors.inkMuted,
     fontSize: 15,
     fontWeight: '500',
     textAlign: 'center',
@@ -159,22 +155,10 @@ const styles = StyleSheet.create({
   },
   dotActive: {
     width: 20,
-    backgroundColor: '#111',
+    backgroundColor: colors.ink,
   },
   actions: {
     gap: spacing.sm,
-  },
-  primaryButton: {
-    height: 52,
-    borderRadius: radii.lg,
-    backgroundColor: '#111',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  primaryText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '900',
   },
   skipButton: {
     height: 44,
@@ -182,7 +166,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   skipText: {
-    color: '#9E9E9E',
+    color: colors.inkMuted,
     fontSize: 15,
     fontWeight: '500',
   },

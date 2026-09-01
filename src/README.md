@@ -84,7 +84,7 @@ Home (메인 화면)
 
 ## 4. components/
 
-여러 화면에서 재사용하는 UI 컴포넌트를 기능별 하위 폴더(`chat/` `map/` `my/` `record/`)로 나눠 담습니다. 특정 화면에만 쓰이는 컴포넌트도 화면 파일이 커지면 이 폴더로 분리합니다. 최상위엔 `ScreenHeader.tsx` 외에 `AppBottomSheet.tsx`(gorhom `BottomSheet`를 감싼 범용 래퍼, 아래 5번 참고)도 있습니다.
+여러 화면에서 재사용하는 UI 컴포넌트를 기능별 하위 폴더(`chat/` `map/` `my/` `record/`)로 나눠 담습니다. 특정 화면에만 쓰이는 컴포넌트도 화면 파일이 커지면 이 폴더로 분리합니다. 최상위엔 공통 프리미티브(`Button` `ErrorBanner` `StatRow` `ScreenHeader` `PermissionPrompt` `TabScreen`)와 `AppBottomSheet.tsx`(gorhom `BottomSheet`를 감싼 범용 래퍼, 아래 5번 참고)가 있습니다.
 
 → **상세 문서:** [`src/components/README.md`](./components/README.md)
 
@@ -276,7 +276,7 @@ src/data/
 **`PREFERENCE_TAGS`** 는 백엔드 `TAG_WEIGHT_MAP`의 키와 1:1 대응하는 문자열 목록입니다. `as const`로 선언되어 있어 `typeof PREFERENCE_TAGS[number]`로 리터럴 유니온 타입을 파생할 수 있습니다. 이 배열이 태그 문자열의 **Single Source of Truth**입니다.
 
 - `src/config/surveyQuestions.ts`가 이 타입을 import해 설문 config의 타입 안전성을 보장합니다.
-- `src/components/my/MyPreferenceComponent.tsx`가 이 배열을 직접 import해 전부 렌더링합니다.
+- `src/components/my/MyPreferenceSection.tsx`가 이 배열을 직접 import해 전부 렌더링합니다.
 
 태그를 추가하거나 이름을 바꾸려면 백엔드 `TAG_WEIGHT_MAP`과 이 파일을 함께 수정해야 합니다.
 
@@ -344,7 +344,7 @@ src/theme/
 
 | 토큰 | 내용 |
 |---|---|
-| `colors` | 배경·텍스트·강조색·지도색 등 30개 이상의 색상 변수 |
+| `colors` | 흑백 UI(`ink`/`inkMuted`/`inkFaint`/`card`/`surfaceAlt`/`line`/`lineStrong`) · 피드백(`danger`/`dangerBg`/`dangerBorder`) · 채팅 민트 계열(`accent`/`mintDeep`/`containerBackground`/`line2`) |
 | `spacing` | `xs(4)` `sm(8)` `md(12)` `lg(16)` `xl(20)` `xxl(28)` |
 | `radii` | `sm(8)` `md(12)` `lg(16)` `xl(24)` |
 | `shadows` | `soft` (카드용) · `map` (지도 위 플로팅 UI용) |

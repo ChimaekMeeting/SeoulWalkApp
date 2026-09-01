@@ -17,6 +17,12 @@ import { MyPageScreen } from './MyPageScreen';
 const WALK_RESET_THRESHOLD_MS = 10 * 60 * 1000; // 산책 시작 후 10분 넘게 지나서 홈으로 돌아오면
 const INACTIVITY_RESET_THRESHOLD_MS = 30 * 60 * 1000; // 앱이 30분 넘게 백그라운드/비활성 상태였다가 돌아오면
 
+const TAB_ROUTES: Record<TabName, Route> = {
+  home: { name: 'home' },
+  record: { name: 'record' },
+  me: { name: 'me' },
+};
+
 interface MainRouterProps {
   onLogout?: () => void;
   userId?: string | null;
@@ -76,17 +82,7 @@ export function MainRouter({ onLogout, userId, onResetSurvey }: MainRouterProps)
   });
 
   const go = (next: Route | TabName) => {
-    if (typeof next === 'string') {
-      if (next === 'home') {
-        setRoute({ name: 'home' });
-      } else if (next === 'record') {
-        setRoute({ name: 'record' });
-      } else {
-        setRoute({ name: next });
-      }
-      return;
-    }
-    setRoute(next);
+    setRoute(typeof next === 'string' ? TAB_ROUTES[next] : next);
   };
 
   const activeTab = getTab(route);

@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { toggleFavoriteRoute } from '../../api/routes';
 import { estimateSteps } from '../../utils/walkEstimate';
-import { radii, spacing } from '../../theme/tokens';
+import { colors, radii, spacing } from '../../theme/tokens';
 import { RouteMapView } from '../../components/map';
+import { Button } from '../../components/Button';
+import { StatRow } from '../../components/StatRow';
 import { LocationInfo, WalkRouteResponse } from '../../types/prewalk';
 
 interface Props {
@@ -54,11 +56,14 @@ export function WalkCompleteScreen({
         <Text style={styles.celebrateTitle}>축하합니다!</Text>
       </View>
 
-      <View style={styles.statRow}>
-        <Stat value={traveledKm.toFixed(1)} unit="km" />
-        <Stat value={`${minutes}`} unit="분" />
-        <Stat value={steps.toLocaleString()} unit="걸음" />
-      </View>
+      <StatRow
+        style={styles.statRow}
+        items={[
+          { value: traveledKm.toFixed(1), unit: 'km' },
+          { value: `${minutes}`, unit: '분' },
+          { value: steps.toLocaleString(), unit: '걸음' },
+        ]}
+      />
 
       <View style={styles.routePreview}>
         <RouteMapView
@@ -72,50 +77,31 @@ export function WalkCompleteScreen({
       </View>
 
       <View style={styles.actionRow}>
-        <Pressable
+        <Button
+          label={isFavorite ? '★ 즐겨찾기됨' : '☆ 즐겨찾기'}
           onPress={handleFavorite}
+          variant="secondary"
           disabled={routeId == null || favoritePending}
-          style={({ pressed }) => [
-            styles.secondaryButton,
-            (routeId == null || favoritePending) && styles.secondaryButtonDisabled,
-            pressed && styles.buttonPressed,
-          ]}
-        >
-          <Text style={styles.secondaryButtonText} numberOfLines={1}>
-            {isFavorite ? '★ 즐겨찾기됨' : '☆ 즐겨찾기'}
-          </Text>
-        </Pressable>
+          style={styles.favoriteButton}
+          textStyle={styles.favoriteButtonText}
+        />
       </View>
 
-      <Pressable
-        onPress={onHome}
-        style={({ pressed }) => [styles.homeButton, pressed && styles.buttonPressed]}
-      >
-        <Text style={styles.homeButtonText}>홈으로</Text>
-      </Pressable>
+      <Button label="홈으로" onPress={onHome} style={styles.homeButton} />
     </SafeAreaView>
-  );
-}
-
-function Stat({ value, unit }: { value: string; unit: string }) {
-  return (
-    <View style={styles.stat}>
-      <Text style={styles.statValue}>{value}</Text>
-      <Text style={styles.statUnit}>{unit}</Text>
-    </View>
   );
 }
 
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: colors.card,
     paddingHorizontal: spacing.xl,
   },
   header: {
     fontSize: 16,
     fontWeight: '800',
-    color: '#111',
+    color: colors.ink,
     marginTop: spacing.md,
   },
   celebrate: {
@@ -129,33 +115,17 @@ const styles = StyleSheet.create({
   celebrateTitle: {
     fontSize: 22,
     fontWeight: '900',
-    color: '#111',
+    color: colors.ink,
   },
   statRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
     marginTop: spacing.xxl,
-  },
-  stat: {
-    alignItems: 'center',
-    gap: spacing.xs,
-  },
-  statValue: {
-    fontSize: 24,
-    fontWeight: '900',
-    color: '#111',
-  },
-  statUnit: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#9E9E9E',
   },
   routePreview: {
     marginTop: spacing.xl,
     height: 160,
     borderRadius: radii.lg,
     overflow: 'hidden',
-    backgroundColor: '#f2fbf7',
+    backgroundColor: colors.mapPreviewBg,
   },
   routePreviewMap: {
     flex: 1,
@@ -165,39 +135,17 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     marginTop: spacing.lg,
   },
-  secondaryButton: {
+  favoriteButton: {
     flex: 1,
     height: 48,
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
-    alignItems: 'center',
-    justifyContent: 'center',
+    borderColor: colors.line,
     paddingHorizontal: spacing.xs,
   },
-  secondaryButtonDisabled: {
-    opacity: 0.4,
-  },
-  secondaryButtonText: {
-    color: '#111',
+  favoriteButtonText: {
     fontSize: 14,
-    fontWeight: '700',
   },
   homeButton: {
     marginTop: 'auto',
     marginBottom: spacing.lg,
-    height: 52,
-    borderRadius: radii.lg,
-    backgroundColor: '#111',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  homeButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '900',
-  },
-  buttonPressed: {
-    opacity: 0.75,
   },
 });

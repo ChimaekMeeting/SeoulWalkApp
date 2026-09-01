@@ -1,7 +1,8 @@
 import React, { useEffect, useRef } from 'react';
 import { Animated, Dimensions, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { radii, spacing } from '../../theme/tokens';
+import { Button } from '../../components/Button';
+import { colors, radii, spacing } from '../../theme/tokens';
 
 const SCREEN_HEIGHT = Dimensions.get('window').height;
 
@@ -43,18 +44,8 @@ export function WalkEndConfirmModal({ visible, onCancel, onConfirm }: Props) {
           <Text style={styles.title}>산책을 정말로{'\n'}종료하시겠습니까?</Text>
           <Text style={styles.subtitle}>기록은 자동으로 저장돼요</Text>
           <View style={styles.actionRow}>
-            <Pressable
-              onPress={onCancel}
-              style={({ pressed }) => [styles.cancelButton, pressed && styles.buttonPressed]}
-            >
-              <Text style={styles.cancelButtonText}>아니요</Text>
-            </Pressable>
-            <Pressable
-              onPress={onConfirm}
-              style={({ pressed }) => [styles.confirmButton, pressed && styles.buttonPressed]}
-            >
-              <Text style={styles.confirmButtonText}>종료</Text>
-            </Pressable>
+            <Button label="아니요" onPress={onCancel} variant="secondary" style={styles.flexButton} />
+            <Button label="종료" onPress={onConfirm} style={styles.flexButton} />
           </View>
         </Animated.View>
       </View>
@@ -69,7 +60,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.4)',
   },
   sheet: {
-    backgroundColor: '#fff',
+    backgroundColor: colors.card,
     borderTopLeftRadius: radii.xl,
     borderTopRightRadius: radii.xl,
     paddingHorizontal: spacing.xl,
@@ -82,7 +73,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 4,
     borderRadius: 999,
-    backgroundColor: '#E0E0E0',
+    backgroundColor: colors.line,
     marginBottom: spacing.md,
   },
   icon: {
@@ -91,13 +82,13 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 18,
     fontWeight: '800',
-    color: '#111',
+    color: colors.ink,
     textAlign: 'center',
     lineHeight: 26,
   },
   subtitle: {
     fontSize: 13,
-    color: '#9E9E9E',
+    color: colors.inkMuted,
     fontWeight: '600',
     marginBottom: spacing.md,
   },
@@ -106,34 +97,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     width: '100%',
   },
-  cancelButton: {
+  flexButton: {
     flex: 1,
-    height: 52,
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    borderColor: '#C8C8C8',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  cancelButtonText: {
-    color: '#111',
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  confirmButton: {
-    flex: 1,
-    height: 52,
-    borderRadius: radii.lg,
-    backgroundColor: '#111',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  confirmButtonText: {
-    color: '#fff',
-    fontSize: 15,
-    fontWeight: '900',
-  },
-  buttonPressed: {
-    opacity: 0.75,
   },
 });

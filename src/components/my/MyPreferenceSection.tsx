@@ -1,12 +1,12 @@
-import { useState, useEffect } from "react"
-import { StyleSheet, View, Text } from "react-native"
+import React, { useState, useEffect } from 'react';
+import { StyleSheet, View, Text } from 'react-native';
+import { colors, radii, spacing } from '../../theme/tokens';
+import { MyPreferenceItem } from './MyPreferenceItem';
+import { PREFERENCE_TAGS } from '../../data/onboarding';
+import { getSurvey, postSurvey } from '../../api/survey';
 
-import { spacing, colors } from "../../theme/tokens"
-import { MyPreferenceItem } from "./MyPreferenceItem"
-import { PREFERENCE_TAGS } from "../../data/onboarding"
-import { getSurvey, postSurvey } from "../../api/survey"
-
-export function MyPreferenceComponent() {
+/** 마이페이지의 '내 산책 취향' 섹션 — 태그를 토글하면 즉시 서버에 저장한다. */
+export function MyPreferenceSection() {
   const [selected, setSelected] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
@@ -35,8 +35,8 @@ export function MyPreferenceComponent() {
   };
 
   return (
-    <View style={styles.background}>
-      <Text style={styles.text}>내 산책 취향</Text>
+    <View style={styles.section}>
+      <Text style={styles.heading}>내 산책 취향</Text>
       <View style={styles.row}>
         {PREFERENCE_TAGS.map(label => (
           <MyPreferenceItem
@@ -48,26 +48,24 @@ export function MyPreferenceComponent() {
         ))}
       </View>
     </View>
-  )
+  );
 }
 
 const styles = StyleSheet.create({
-  background: {
+  section: {
     backgroundColor: colors.containerBackground,
-    paddingTop: 8,
-    paddingBottom: 8,
-    paddingLeft: 16,
-    paddingRight: 16,
-    borderRadius: 15,
-    gap: 10,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    borderRadius: radii.lg,
+    gap: spacing.md,
   },
   row: {
     flexDirection: 'row',
     gap: spacing.sm,
     flexWrap: 'wrap',
   },
-  text: {
+  heading: {
     fontWeight: '900',
     fontSize: 16,
-  }
-})
+  },
+});

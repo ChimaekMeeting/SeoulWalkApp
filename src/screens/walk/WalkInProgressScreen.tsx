@@ -1,13 +1,14 @@
 import React, { useEffect, useMemo, useRef } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Pedometer } from 'expo-sensors';
 import { RouteMapView } from '../../components/map';
+import { Button } from '../../components/Button';
 import { WalkRouteResponse } from '../../types/prewalk';
 import { WalkEndSnapshot } from '../../types/walk';
 import { useWatchLocation } from '../../hooks/useWatchLocation';
 import { WalkProgressTracker, deriveProgress } from '../../utils/walkProgress';
-import { radii, spacing } from '../../theme/tokens';
+import { colors, spacing } from '../../theme/tokens';
 
 interface Props {
   routeResult: WalkRouteResponse;
@@ -92,12 +93,7 @@ export function WalkInProgressScreen({ routeResult, onRequestEnd }: Props) {
         />
 
         <SafeAreaView style={styles.bottomOverlay} edges={['bottom']} pointerEvents="box-none">
-          <Pressable
-            onPress={handleEnd}
-            style={({ pressed }) => [styles.endButton, pressed && styles.buttonPressed]}
-          >
-            <Text style={styles.endButtonText}>■ 산책 종료</Text>
-          </Pressable>
+          <Button label="■ 산책 종료" onPress={handleEnd} style={styles.endButton} />
         </SafeAreaView>
       </View>
     </View>
@@ -110,7 +106,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#000',
   },
   statsSection: {
-    backgroundColor: '#fff',
+    backgroundColor: colors.card,
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.sm,
     paddingBottom: spacing.md,
@@ -127,23 +123,23 @@ const styles = StyleSheet.create({
   traveledKm: {
     fontSize: 24,
     fontWeight: '900',
-    color: '#111',
+    color: colors.ink,
   },
   goalKm: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#9E9E9E',
+    color: colors.inkMuted,
   },
   progressTrack: {
     height: 6,
     borderRadius: 999,
-    backgroundColor: '#E0E0E0',
+    backgroundColor: colors.line,
     overflow: 'hidden',
   },
   progressFill: {
     height: '100%',
     borderRadius: 999,
-    backgroundColor: '#111',
+    backgroundColor: colors.ink,
   },
   statsFooter: {
     flexDirection: 'row',
@@ -152,12 +148,12 @@ const styles = StyleSheet.create({
   progressLabel: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#111',
+    color: colors.ink,
   },
   remainingLabel: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#9E9E9E',
+    color: colors.inkMuted,
   },
   bottomOverlay: {
     position: 'absolute',
@@ -168,18 +164,5 @@ const styles = StyleSheet.create({
   endButton: {
     marginHorizontal: spacing.lg,
     marginBottom: spacing.lg,
-    height: 52,
-    borderRadius: radii.lg,
-    backgroundColor: '#111',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  endButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '900',
-  },
-  buttonPressed: {
-    opacity: 0.75,
   },
 });
