@@ -8,6 +8,7 @@ import { computeChatSheetHalfHeight } from '../bottomsheets/chatSheetGeometry';
 import { ChatConversation, ChatConversationHandle } from '../components/chat/ChatConversation';
 import { ChatInput } from '../components/chat/ChatInput';
 import { LocationInfo, WalkRouteResponse } from '../types/prewalk';
+import type { LocationErrorReason } from '../hooks/useLocation';
 import { colors, spacing } from '../theme/tokens';
 
 const { height: SCREEN_H } = Dimensions.get('window');
@@ -18,7 +19,12 @@ interface HomeScreenProps {
   activeRoute: WalkRouteResponse | null;
   chatSessionKey: number;
   onRouteReady: (route: WalkRouteResponse) => void;
-  chatOpen: boolean;
+  /** 현재 위치 좌표를 아직 가져오는 중인지 (정상 로딩) */
+  locationLoading: boolean;
+  /** 위치 좌표 획득 실패 종류 (null이면 정상) */
+  locationError: LocationErrorReason;
+  /** 위치 좌표 재획득 시도 */
+  onRetryLocation: () => void;
 }
 
 /**
@@ -30,14 +36,22 @@ export function HomeScreen({
   activeRoute,
   chatSessionKey,
   onRouteReady,
-  chatOpen,
+  locationLoading,
+  locationError,
+  onRetryLocation,
 }: HomeScreenProps) {
   const chatRef = useRef<ChatConversationHandle>(null);
   const sheetRef = useRef<ChatBottomSheetHandle>(null);
   const insets = useSafeAreaInsets();
   const [chatDone, setChatDone] = useState(false);
   const [chatSending, setChatSending] = useState(false);
+  const [chatStarted, setChatStarted] = useState(false);
   const [previewHeight, setPreviewHeight] = useState(50);
+
+  // 대화가 아직 시작되지 않았고(위치 좌표가 필요) 위치 오류가 있으면 입력을 막는다 —
+  // 이유는 ChatConversation이 안내 버블 + 액션 버튼으로 보여준다. 대화가 한 번 시작된 뒤엔
+  // (threadId 확보) 좌표가 잠깐 흔들려도 후속 메시지 전송은 막지 않는다.
+  const inputBlockedByLocation = !!locationError && !chatStarted;
 
   // chatSessionKey가 바뀌면(대화 리셋) ChatConversation은 key로 리마운트되지만, 시트 자체는
   // 리마운트 대상이 아니라서 리셋 직전 스냅 위치(꽉 펼친 상태 등)가 그대로 남는다. 리셋될 때마다
@@ -63,7 +77,7 @@ export function HomeScreen({
   // 입력창이 키보드 속으로 파고들지 않는다. 여기에 더해 안드로이드가 텍스트 입력창 위에
   // 띄우는 복사/붙여넣기 팝업 같은 시스템 오버레이와 안 겹치도록 약간의 여백(spacing.sm)도 둔다.
   const chatInputBase =
-    keyboardHeight > 0 ? keyboardHeight + spacing.sm : chatOpen ? 0 : BOTTOM_NAV_HEIGHT;
+    keyboardHeight > 0 ? keyboardHeight + spacing.sm : BOTTOM_NAV_HEIGHT;
   const chatInputBottom = chatInputBase + insets.bottom;
   const chatBottomInset = chatInputBottom + CHAT_INPUT_HEIGHT;
 
@@ -119,8 +133,12 @@ export function HomeScreen({
           onRouteReady={onRouteReady}
           onDoneChange={setChatDone}
           onSendingChange={setChatSending}
+          onStartedChange={setChatStarted}
           onPreviewHeightChange={setPreviewHeight}
           bottomInset={chatBottomInset}
+          locationLoading={locationLoading}
+          locationError={locationError}
+          onRetryLocation={onRetryLocation}
         />
       </ChatBottomSheet>
 
@@ -131,7 +149,12 @@ export function HomeScreen({
             // 메시지를 보내는 순간, 3단계 스와이프 중 가장 위(꽉 찬) 상태로 올려준다.
             sheetRef.current?.expand();
           }}
-          disabled={chatDone || chatSending}
+          disabled={chatDone || chatSending || inputBlockedByLocation}
+          placeholder={
+            inputBlockedByLocation
+              ? '위치 확인 후 대화를 시작할 수 있어요'
+              : undefined
+          }
         />
       </View>
     </View>

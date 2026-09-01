@@ -4,15 +4,13 @@ import { colors, spacing } from '../theme/tokens';
 
 interface Props {
   title: string;
-  subtitle?: string;
   onBack?: () => void;
-  right?: string;
   /** 배경/하단 보더가 없는 투명 헤더 (전체화면 플로우용) */
   plain?: boolean;
   align?: 'left' | 'center';
 }
 
-export function ScreenHeader({ title, subtitle, onBack, right, plain, align = 'left' }: Props) {
+export function ScreenHeader({ title, onBack, plain, align = 'left' }: Props) {
   const centered = align === 'center';
   return (
     <View style={[styles.header, plain && styles.headerPlain]}>
@@ -25,13 +23,8 @@ export function ScreenHeader({ title, subtitle, onBack, right, plain, align = 'l
       ) : null}
       <View style={[styles.headerBody, centered && styles.headerBodyCentered]}>
         <Text style={styles.headerTitle}>{title}</Text>
-        {subtitle ? <Text style={styles.headerSubtitle}>{subtitle}</Text> : null}
       </View>
-      {right ? (
-        <Text style={styles.headerRight}>{right}</Text>
-      ) : centered && onBack ? (
-        <View style={styles.headerBack} />
-      ) : null}
+      {centered && onBack ? <View style={styles.headerBack} /> : null}
     </View>
   );
 }
@@ -74,16 +67,5 @@ const styles = StyleSheet.create({
     color: colors.ink,
     fontSize: 18,
     fontWeight: '900',
-  },
-  headerSubtitle: {
-    color: colors.ink3,
-    fontSize: 12,
-    marginTop: 2,
-    fontWeight: '700',
-  },
-  headerRight: {
-    color: colors.ink2,
-    fontSize: 12,
-    fontWeight: '800',
   },
 });
