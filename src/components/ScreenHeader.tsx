@@ -7,21 +7,31 @@ interface Props {
   subtitle?: string;
   onBack?: () => void;
   right?: string;
+  /** 배경/하단 보더가 없는 투명 헤더 (전체화면 플로우용) */
+  plain?: boolean;
+  align?: 'left' | 'center';
 }
 
-export function ScreenHeader({ title, subtitle, onBack, right }: Props) {
+export function ScreenHeader({ title, subtitle, onBack, right, plain, align = 'left' }: Props) {
+  const centered = align === 'center';
   return (
-    <View style={styles.header}>
+    <View style={[styles.header, plain && styles.headerPlain]}>
       {onBack ? (
         <Pressable onPress={onBack} style={styles.headerBack}>
           <Text style={styles.headerBackText}>‹</Text>
         </Pressable>
+      ) : centered ? (
+        <View style={styles.headerBack} />
       ) : null}
-      <View style={styles.headerBody}>
+      <View style={[styles.headerBody, centered && styles.headerBodyCentered]}>
         <Text style={styles.headerTitle}>{title}</Text>
         {subtitle ? <Text style={styles.headerSubtitle}>{subtitle}</Text> : null}
       </View>
-      {right ? <Text style={styles.headerRight}>{right}</Text> : null}
+      {right ? (
+        <Text style={styles.headerRight}>{right}</Text>
+      ) : centered && onBack ? (
+        <View style={styles.headerBack} />
+      ) : null}
     </View>
   );
 }
@@ -38,6 +48,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.sm,
   },
+  headerPlain: {
+    backgroundColor: 'transparent',
+    borderBottomWidth: 0,
+  },
   headerBack: {
     marginLeft: -spacing.sm,
     width: 32,
@@ -52,6 +66,9 @@ const styles = StyleSheet.create({
   },
   headerBody: {
     flex: 1,
+  },
+  headerBodyCentered: {
+    alignItems: 'center',
   },
   headerTitle: {
     color: colors.ink,

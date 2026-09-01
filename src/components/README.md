@@ -4,7 +4,12 @@
 
 ```
 src/components/
-├─ ScreenHeader.tsx    # 뒤로가기 화살표 + 제목/부제 + 우측 버튼 헤더 (여러 화면 공통)
+├─ ScreenHeader.tsx    # 뒤로가기 화살표 + 제목/부제 + 우측 버튼 헤더 (여러 화면 공통, plain·align 옵션)
+├─ Button.tsx          # 하단 액션 버튼 (variant: primary=검정 채움 / secondary=아웃라인), loading/disabled 지원
+├─ ErrorBanner.tsx     # 붉은 인라인 에러 박스 (로그인·설문 등), message 없으면 렌더 안 함
+├─ PermissionPrompt.tsx # 권한 요청 화면 공통 레이아웃 (아이콘/제목/본문/뱃지 + 버튼 2개)
+├─ StatRow.tsx         # 거리·시간·칼로리 같은 수치를 가로로 나열 (variant: summary / detail)
+├─ TabScreen.tsx       # 하단 탭(기록·마이페이지) 공통 셸: 헤더 + 스크롤 목록
 ├─ AppBottomSheet.tsx  # gorhom BottomSheet를 감싼 범용 래퍼 (src/bottomsheets/의 화면별 시트가 이걸 씀)
 ├─ BottomNav.tsx       # 하단 탭 바(홈/기록/마이페이지) — MainRouter가 렌더링
 ├─ chat/                # 홈 화면 하단시트에 들어가는 AI 챗봇 대화 UI
@@ -22,9 +27,11 @@ src/components/
 │  ├─ RouteEndpointMarkers.tsx # 출발·도착 마커 — 순환 코스면 하나로 합쳐서 표시 (내부용)
 │  └─ index.ts
 ├─ my/                   # '마이페이지' 탭(MyPageScreen)에서만 쓰는 컴포넌트
-│  ├─ MyPreferenceComponent.tsx # 산책 취향 태그 선택 섹션
-│  ├─ MyPreferenceItem.tsx      # 취향 태그 버튼 1개
-│  └─ SettingComponent.tsx      # 설정 메뉴 한 줄(라벨 + '>' 화살표)
+│  ├─ ProfileCard.tsx          # 상단 프로필 요약 카드 (아바타 + 닉네임 + 이메일)
+│  ├─ MyPreferenceSection.tsx  # 산책 취향 태그 선택 섹션 (토글 시 즉시 저장)
+│  ├─ MyPreferenceItem.tsx     # 취향 태그 버튼 1개
+│  ├─ SettingRow.tsx           # 설정 메뉴 한 줄 (라벨 + '>' 화살표, danger·showChevron 옵션)
+│  └─ DevMenu.tsx              # 개발 빌드 전용 디버그 버튼 (프로덕션에선 null)
 └─ record/               # '기록' 탭(RecordTab)에서만 쓰는 컴포넌트
    ├─ RouteHistoryList.tsx   # 저장된 경로 목록 조회/표시 (실API 연동)
    └─ HistoryPlaceLabel.tsx  # 경로 카드에 좌표를 역지오코딩한 장소명을 보여주는 라벨
@@ -34,7 +41,17 @@ src/components/
 
 ## 1. `ScreenHeader.tsx`
 
-`title`/`subtitle`/`onBack`/`right` props만 받는 순수 헤더. `onBack`이 있을 때만 뒤로가기 화살표가 뜹니다. 지금은 `MyPageScreen.tsx`, `record/RecordTab.tsx`에서 쓰고 있고, 새 화면을 추가할 때도 이 컴포넌트로 헤더를 통일하면 됩니다.
+`title`/`subtitle`/`onBack`/`right` props를 받는 순수 헤더. `onBack`이 있을 때만 뒤로가기 화살표가 뜹니다. `plain`이면 배경/하단 보더가 없는 투명 헤더(전체화면 플로우용, `WalkPrepScreen`), `align="center"`면 제목을 가운데 정렬합니다. `MyPageScreen`·`RecordTab`은 `TabScreen`을 통해 간접적으로 씁니다.
+
+## 1-2. `Button.tsx` / `ErrorBanner.tsx` / `PermissionPrompt.tsx` / `StatRow.tsx` / `TabScreen.tsx`
+
+화면마다 복붙되던 하단 버튼·에러 박스·권한 화면 뼈대·수치 행·탭 셸을 한 곳으로 모은 것들입니다.
+
+- **`Button`**: 높이 52 · `radii.lg` 고정. `variant="primary"`(검정 채움, 기본) / `"secondary"`(흰 배경 + `colors.lineStrong` 아웃라인). `loading`이면 스피너를 보여주고 눌리지 않으며, `disabled`면 흐려집니다(opacity 0.4). 바깥 여백이나 `flex: 1`은 `style` prop으로, 글자 크기 조정은 `textStyle`로 넘깁니다. 카카오 로그인 버튼처럼 색/레이아웃이 완전히 다른 건 각 화면이 직접 그립니다.
+- **`ErrorBanner`**: `message`가 falsy면 `null`을 반환하므로 `{cond ? ... : null}` 없이 `<ErrorBanner message={errorMsg} />`만 두면 됩니다.
+- **`PermissionPrompt`**: `LocationPermissionScreen`·`ActivityPermissionScreen`이 공유하는 레이아웃(중앙 아이콘/제목/본문/뱃지 + 하단 primary·secondary 버튼). 권한 상태 확인·요청 로직은 각 화면에 남아 있고, 여기서는 UI만 그립니다. `body`는 여러 줄이면 `'\n'`을 포함한 문자열로 넘깁니다.
+- **`StatRow`**: `items`(값/단위/라벨 배열)를 가로로 나열. `variant="summary"`는 큰 값 + 아래 단위(완료 화면), `"detail"`은 값+단위 한 줄 + 아래 라벨(준비 화면).
+- **`TabScreen`**: `title` + `children`만 받아 `ScreenHeader` + 하단 탭바 여백이 잡힌 `ScrollView`를 그립니다. `RecordTab`·`MyPageScreen`이 사용.
 
 ## 1-1. `AppBottomSheet.tsx`
 
@@ -128,7 +145,12 @@ const locationInfo: LocationInfo | null = coords
 
 ## 4. `my/` — 내 정보 탭 전용
 
-`MyPageScreen.tsx` 하나에서만 쓰는, 재사용 범위가 좁은 컴포넌트들입니다. `MyPreferenceComponent`가 `src/data/onboarding.ts`의 `PREFERENCE_TAGS`를 받아 `MyPreferenceItem`(태그 버튼)을 나열하고, `SettingComponent`는 설정 메뉴의 각 행(예: "알림 설정", "로그아웃")을 그리는 데 씁니다.
+`MyPageScreen.tsx` 하나에서만 쓰는, 재사용 범위가 좁은 컴포넌트들입니다.
+
+- **`ProfileCard`**: 닉네임/이메일을 받아 아바타 + 이름 + 카카오 이메일 카드를 그립니다.
+- **`MyPreferenceSection`**: `src/data/onboarding.ts`의 `PREFERENCE_TAGS`를 `MyPreferenceItem`(태그 버튼)으로 나열하고, 토글할 때마다 `postSurvey`로 즉시 저장합니다(실패 시 롤백).
+- **`SettingRow`**: 설정 메뉴의 각 행. `danger`로 빨간 텍스트(로그아웃), `showChevron={false}`로 오른쪽 화살표를 끕니다.
+- **`DevMenu`**: `__DEV__`일 때만 렌더되는 디버그 버튼 모음(토큰 강제 만료, 설문 다시 보기). 프로덕션에선 `null`.
 
 ## 5. `record/` — 기록 탭 전용
 

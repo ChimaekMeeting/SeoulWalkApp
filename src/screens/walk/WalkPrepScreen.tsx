@@ -1,11 +1,14 @@
 import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { RouteMapView } from '../../components/map';
+import { Button } from '../../components/Button';
+import { ScreenHeader } from '../../components/ScreenHeader';
+import { StatRow } from '../../components/StatRow';
 import { LocationInfo, WalkRouteResponse } from '../../types/prewalk';
 import { estimateDurationMinutes, estimateKcal } from '../../utils/walkEstimate';
 import { WALK_MODE_LABEL } from '../../utils/walkMode';
-import { radii, spacing } from '../../theme/tokens';
+import { colors, radii, spacing } from '../../theme/tokens';
 
 interface Props {
   routeResult: WalkRouteResponse;
@@ -20,13 +23,7 @@ export function WalkPrepScreen({ routeResult, currentLocation, onStart, onBack }
 
   return (
     <SafeAreaView style={styles.safe} edges={['left', 'right', 'bottom']}>
-      <View style={styles.header}>
-        <Pressable onPress={onBack} hitSlop={12}>
-          <Text style={styles.backIcon}>←</Text>
-        </Pressable>
-        <Text style={styles.headerTitle}>산책 준비</Text>
-        <View style={styles.headerSpacer} />
-      </View>
+      <ScreenHeader title="산책 준비" onBack={onBack} plain align="center" />
 
       <View style={styles.mapCard}>
         <RouteMapView
@@ -40,66 +37,32 @@ export function WalkPrepScreen({ routeResult, currentLocation, onStart, onBack }
 
       <View style={styles.infoCard}>
         <Text style={styles.modeLabel}>{WALK_MODE_LABEL[routeResult.mode]}</Text>
-        <View style={styles.statRow}>
-          <Stat label="거리" value={`${routeResult.total_km.toFixed(1)}`} unit="km" />
-          <Stat label="예상 시간" value={`${durationMinutes}`} unit="분" />
-          <Stat label="예상 칼로리" value={`${kcal}`} unit="kcal" />
-        </View>
+        <StatRow
+          variant="detail"
+          items={[
+            { label: '거리', value: routeResult.total_km.toFixed(1), unit: 'km' },
+            { label: '예상 시간', value: `${durationMinutes}`, unit: '분' },
+            { label: '예상 칼로리', value: `${kcal}`, unit: 'kcal' },
+          ]}
+        />
       </View>
 
-      <Pressable
-        onPress={onStart}
-        style={({ pressed }) => [styles.startButton, pressed && styles.buttonPressed]}
-      >
-        <Text style={styles.startButtonText}>▶ 산책 시작</Text>
-      </Pressable>
+      <Button label="▶ 산책 시작" onPress={onStart} style={styles.startButton} />
     </SafeAreaView>
-  );
-}
-
-function Stat({ label, value, unit }: { label: string; value: string; unit: string }) {
-  return (
-    <View style={styles.stat}>
-      <Text style={styles.statValue}>
-        {value}
-        <Text style={styles.statUnit}> {unit}</Text>
-      </Text>
-      <Text style={styles.statLabel}>{label}</Text>
-    </View>
   );
 }
 
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: '#fff',
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-  },
-  backIcon: {
-    fontSize: 22,
-    color: '#111',
-    width: 32,
-  },
-  headerTitle: {
-    fontSize: 17,
-    fontWeight: '800',
-    color: '#111',
-  },
-  headerSpacer: {
-    width: 32,
+    backgroundColor: colors.card,
   },
   mapCard: {
     marginHorizontal: spacing.lg,
     height: 300,
     borderRadius: radii.xl,
     overflow: 'hidden',
-    backgroundColor: '#f2fbf7',
+    backgroundColor: colors.mapPreviewBg,
   },
   map: {
     flex: 1,
@@ -110,52 +73,17 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     borderRadius: radii.lg,
     borderWidth: 1,
-    borderColor: '#E0E0E0',
+    borderColor: colors.line,
     gap: spacing.md,
   },
   modeLabel: {
     fontSize: 16,
     fontWeight: '800',
-    color: '#111',
-  },
-  statRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  stat: {
-    gap: spacing.xs,
-  },
-  statValue: {
-    fontSize: 18,
-    fontWeight: '900',
-    color: '#111',
-  },
-  statUnit: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#9E9E9E',
-  },
-  statLabel: {
-    fontSize: 12,
-    color: '#9E9E9E',
-    fontWeight: '600',
+    color: colors.ink,
   },
   startButton: {
     marginHorizontal: spacing.lg,
     marginTop: 'auto',
     marginBottom: spacing.lg,
-    height: 52,
-    borderRadius: radii.lg,
-    backgroundColor: '#111',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  startButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '900',
-  },
-  buttonPressed: {
-    opacity: 0.75,
   },
 });
