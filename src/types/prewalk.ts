@@ -8,6 +8,11 @@ export interface InitRequest {
 export interface ChatRequest {
   thread_id: string;
   user_prompt: string;
+  // 대화 도중 사용자가 이동했을 수 있으므로 매 요청에 최신 현재 위치를 함께 보낸다.
+  // 백엔드가 이 값을 읽어 대화 상태의 출발지(current_LocationInfo)를 갱신하면, 같은 스레드에서도
+  // 이동한 위치 기준으로 경로가 계산된다. (백엔드가 아직 안 읽어도 무해한 추가 필드)
+  lat?: number;
+  lon?: number;
 }
 
 /* 챗봇 상태를 알려주는 스키마 */
@@ -102,7 +107,9 @@ export interface State {
   origin_candidate: LocationInfo[] | null;
   destination_candidate: LocationInfo[] | null;
 
-  route_result: WalkRouteResponse[] | null;
+  // 스키마상 배열이지만 백엔드는 경로 1개일 때 단일 객체로 보낸다. 소비하는 쪽(ChatConversation)에서
+  // 항상 배열로 정규화한다.
+  route_result: WalkRouteResponse[] | WalkRouteResponse | null;
   is_complete: boolean;
   awaiting_confirmation: boolean;
   user_prompt: string;

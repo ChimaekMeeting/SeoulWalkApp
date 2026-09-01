@@ -55,14 +55,33 @@ export function OnboardingScreen({ onDone }: Props) {
     setCurrentIndex(next);
   };
 
+  const [isFinishing, setIsFinishing] = useState(false);
+  const [finishError, setFinishError] = useState<string | null>(null);
+
+  // 시작하기·건너뛰기 모두 이 함수를 쓴다. 저장이 실제로 검증될 때까지 onDone()을 호출하지
+  // 않는다 — 저장 안 된 채 다음 화면으로 넘어가면 앱을 껐다 켤 때 온보딩이 다시 나온다.
   const finish = async () => {
-    const saved = await onboardingStorage.markSeen();
-    if (!saved) {
-      // 저장 실패를 조용히 넘기지 않는다. 이번 실행은 그대로 진행하되(사용자를 온보딩에 가두지
-      // 않음), 저장이 안 됐으므로 다음 실행에서 온보딩이 다시 보일 수 있음을 로그로 남긴다.
-      console.warn('[Onboarding] has_seen_onboarding 저장 실패 — 다음 실행에서 온보딩이 다시 보일 수 있음');
+    if (isFinishing) return;
+
+    setIsFinishing(true);
+    setFinishError(null);
+
+    try {
+      const saved = await onboardingStorage.markSeen();
+
+      if (!saved) {
+        console.warn('[Onboarding] has_seen_onboarding 저장/검증 실패 — 온보딩 화면 유지');
+        setFinishError('설정을 저장하지 못했어요. 잠시 후 다시 시도해주세요.');
+        return;
+      }
+
+      onDone();
+    } catch (error) {
+      console.warn('[Onboarding] 완료 처리 실패:', error);
+      setFinishError('완료 처리에 실패했어요. 잠시 후 다시 시도해주세요.');
+    } finally {
+      setIsFinishing(false);
     }
-    onDone();
   };
 
   return (
@@ -94,14 +113,21 @@ export function OnboardingScreen({ onDone }: Props) {
         </View>
 
         <View style={styles.actions}>
-          <Button label={isLast ? '시작하기' : '다음'} onPress={isLast ? finish : goNext} />
+          <Button
+            label={isLast ? '시작하기' : '다음'}
+            onPress={isLast ? finish : goNext}
+            loading={isLast && isFinishing}
+          />
 
           <Pressable
             onPress={finish}
+            disabled={isFinishing}
             style={({ pressed }) => [styles.skipButton, pressed && styles.pressed]}
           >
             <Text style={styles.skipText}>건너뛰기</Text>
           </Pressable>
+
+          {finishError && <Text style={styles.errorText}>{finishError}</Text>}
         </View>
       </View>
     </SafeAreaView>
@@ -174,6 +200,12 @@ const styles = StyleSheet.create({
     color: colors.inkMuted,
     fontSize: 15,
     fontWeight: '500',
+  },
+  errorText: {
+    color: colors.danger,
+    fontSize: 13,
+    fontWeight: '500',
+    textAlign: 'center',
   },
   pressed: {
     opacity: 0.75,

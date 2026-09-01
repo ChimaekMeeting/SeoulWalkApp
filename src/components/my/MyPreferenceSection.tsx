@@ -12,10 +12,12 @@ export function MyPreferenceSection() {
   useEffect(() => {
     getSurvey()
       .then(({ data }) => {
+        console.log('[MyPreferenceSection] GET /api/user/survey 응답:', data);
         const tags = data.selected_tags ?? [];
         setSelected(Object.fromEntries(tags.map(t => [t, true])));
       })
-      .catch(() => {
+      .catch(e => {
+        console.warn('[MyPreferenceSection] GET /api/user/survey 실패:', e?.message ?? e);
         // 실패 시 {} 유지 — 전부 기본 스타일
       });
   }, []);
@@ -25,10 +27,16 @@ export function MyPreferenceSection() {
       const next = { ...prev, [label]: !prev[label] };
 
       const tags = PREFERENCE_TAGS.filter(tag => next[tag]);
-      postSurvey({ tags }).catch(() => {
-        // 저장 실패 시 토글 이전 상태로 되돌림
-        setSelected(prev);
-      });
+      console.log('[MyPreferenceSection] POST /api/user/survey 요청:', { tags });
+      postSurvey({ tags })
+        .then(({ data }) => {
+          console.log('[MyPreferenceSection] POST /api/user/survey 응답:', data);
+        })
+        .catch(e => {
+          console.warn('[MyPreferenceSection] POST /api/user/survey 실패:', e?.message ?? e);
+          // 저장 실패 시 토글 이전 상태로 되돌림
+          setSelected(prev);
+        });
 
       return next;
     });

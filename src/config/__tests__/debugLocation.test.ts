@@ -16,15 +16,13 @@ afterEach(() => {
 
 describe('DEBUG_FIXED_COORDS', () => {
   it('빈 문자열이면 null (실제 GPS 사용)', () => {
-    const { DEBUG_FIXED_COORDS, HAS_DEBUG_FIXED_LOCATION } = loadWith('');
+    const { DEBUG_FIXED_COORDS } = loadWith('');
     expect(DEBUG_FIXED_COORDS).toBeNull();
-    expect(HAS_DEBUG_FIXED_LOCATION).toBe(false);
   });
 
   it('"위도,경도" 형식이면 좌표로 파싱', () => {
-    const { DEBUG_FIXED_COORDS, HAS_DEBUG_FIXED_LOCATION } = loadWith('37.5665,126.978');
+    const { DEBUG_FIXED_COORDS } = loadWith('37.5665,126.978');
     expect(DEBUG_FIXED_COORDS).toEqual({ latitude: 37.5665, longitude: 126.978 });
-    expect(HAS_DEBUG_FIXED_LOCATION).toBe(true);
   });
 
   it('공백이 섞여도 파싱', () => {

@@ -56,8 +56,16 @@ describe('computeTargetScreen — 최우선 분기', () => {
     expect(computeTargetScreen({ ...base, authState: 'loggedOut' })).toBe('Login');
   });
 
-  it('설문 미완료면 Survey', () => {
+  it('설문 미완료(서버가 명시)면 Survey', () => {
     expect(computeTargetScreen({ ...base, surveyStatus: 'pending' })).toBe('Survey');
+  });
+
+  it('설문 완료 여부 확인 중(loading)이면 Loading', () => {
+    expect(computeTargetScreen({ ...base, surveyStatus: 'loading' })).toBe('Loading');
+  });
+
+  it('설문 조회 실패(unknown)면 Survey로 보내지 않고 통과 — 일시적 실패로 재온보딩 금지', () => {
+    expect(computeTargetScreen({ ...base, surveyStatus: 'unknown' })).toBe('Home');
   });
 });
 
