@@ -10,6 +10,7 @@
   // src/types/survey.ts도 같은 성격(설문 API 스키마 미러)이라 함께 제외한다.
   "ignore": ["src/types/prewalk.ts", "src/types/survey.ts"],
   // knip의 expo 플러그인이 SDK 기본 템플릿을 가정해 "참조됨"으로 잡지만 실제로는
-  // 코드·config 어디에도 쓰이지 않는다. expo-updates는 EAS Update 미사용.
-  "ignoreDependencies": ["expo-updates"]
+  // 코드·config 어디에도 쓰이지 않는 패키지들. expo-updates는 EAS Update 미사용,
+  // expo-system-ui는 expo-doctor도 요구하지 않음(제거 완료).
+  "ignoreDependencies": ["expo-updates", "expo-system-ui"]
 }

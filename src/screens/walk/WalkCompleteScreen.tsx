@@ -1,15 +1,10 @@
-import React, { useRef, useState } from 'react';
+import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ViewShotRef } from 'react-native-view-shot';
-import RNShare, { Social } from 'react-native-share';
 import { toggleFavoriteRoute } from '../../api/routes';
 import { estimateSteps } from '../../utils/walkEstimate';
-import { buildRouteThumbnailUrl } from '../../utils/routeThumbnail';
-import { colors, radii, spacing } from '../../theme/tokens';
+import { radii, spacing } from '../../theme/tokens';
 import { RouteMapView } from '../../components/map';
-import { ShareCard } from '../../components/walk/ShareCard';
-import { env } from '../../config/env';
 import { LocationInfo, WalkRouteResponse } from '../../types/prewalk';
 
 interface Props {
@@ -35,51 +30,9 @@ export function WalkCompleteScreen({
 }: Props) {
   const [isFavorite, setIsFavorite] = useState(routeResult.is_favorite ?? false);
   const [favoritePending, setFavoritePending] = useState(false);
-  const [sharing, setSharing] = useState(false);
-  const [instaSharing, setInstaSharing] = useState(false);
-  const shareCardRef = useRef<ViewShotRef>(null);
 
   const minutes = Math.round(elapsedMs / 60000);
   const steps = measuredSteps ?? estimateSteps(traveledKm);
-  const thumbnailUrl = buildRouteThumbnailUrl(routeResult.coordinates, 320);
-
-  const handleShare = async () => {
-    if (sharing) return;
-    setSharing(true);
-    try {
-      const uri = await shareCardRef.current?.capture?.();
-      await RNShare.open({
-        url: uri,
-        message: `방금 ${traveledKm.toFixed(1)}km, ${minutes}분 동안 산책했어요! 🚶`,
-        failOnCancel: false,
-      });
-    } catch {
-      // 캡처 실패/공유 취소 등 — 무시
-    } finally {
-      setSharing(false);
-    }
-  };
-
-  const handleInstagramStoryShare = async () => {
-    if (instaSharing || !env.INSTAGRAM_APP_ID) return;
-    setInstaSharing(true);
-    try {
-      const uri = await shareCardRef.current?.capture?.();
-      if (uri) {
-        await RNShare.shareSingle({
-          social: Social.InstagramStories,
-          appId: env.INSTAGRAM_APP_ID,
-          stickerImage: uri,
-          backgroundTopColor: colors.mintDeep,
-          backgroundBottomColor: '#04302a',
-        });
-      }
-    } catch {
-      // 인스타그램 미설치/공유 취소 등 — 무시
-    } finally {
-      setInstaSharing(false);
-    }
-  };
 
   const handleFavorite = async () => {
     if (routeId == null || favoritePending) return;
@@ -118,28 +71,7 @@ export function WalkCompleteScreen({
         />
       </View>
 
-      <ShareCard
-        ref={shareCardRef}
-        traveledKm={traveledKm}
-        minutes={minutes}
-        steps={steps}
-        thumbnailUrl={thumbnailUrl}
-      />
-
       <View style={styles.actionRow}>
-        <Pressable
-          onPress={handleShare}
-          disabled={sharing}
-          style={({ pressed }) => [
-            styles.secondaryButton,
-            sharing && styles.secondaryButtonDisabled,
-            pressed && styles.buttonPressed,
-          ]}
-        >
-          <Text style={styles.secondaryButtonText} numberOfLines={1}>
-            {sharing ? '공유중...' : '🔗 공유'}
-          </Text>
-        </Pressable>
         <Pressable
           onPress={handleFavorite}
           disabled={routeId == null || favoritePending}
@@ -154,20 +86,6 @@ export function WalkCompleteScreen({
           </Text>
         </Pressable>
       </View>
-
-      <Pressable
-        onPress={handleInstagramStoryShare}
-        disabled={instaSharing}
-        style={({ pressed }) => [
-          styles.instagramButton,
-          instaSharing && styles.secondaryButtonDisabled,
-          pressed && styles.buttonPressed,
-        ]}
-      >
-        <Text style={styles.instagramButtonText}>
-          {instaSharing ? '공유 준비 중...' : '📸 인스타 스토리로 공유'}
-        </Text>
-      </Pressable>
 
       <Pressable
         onPress={onHome}
@@ -264,19 +182,6 @@ const styles = StyleSheet.create({
     color: '#111',
     fontSize: 14,
     fontWeight: '700',
-  },
-  instagramButton: {
-    marginTop: spacing.sm,
-    height: 48,
-    borderRadius: radii.lg,
-    backgroundColor: '#fce3ec',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  instagramButtonText: {
-    color: '#c2185b',
-    fontSize: 14,
-    fontWeight: '800',
   },
   homeButton: {
     marginTop: 'auto',
