@@ -16,7 +16,7 @@ import {
 
 const { height: SCREEN_H } = Dimensions.get('window');
 
-export const CHAT_SHEET_INDEX = {
+const CHAT_SHEET_INDEX = {
   DOWN: 0,
   HALF: 1,
   UP: 2,

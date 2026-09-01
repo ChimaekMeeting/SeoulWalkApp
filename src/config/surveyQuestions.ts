@@ -2,7 +2,7 @@ import { PREFERENCE_TAGS } from '../data/onboarding';
 
 type PreferenceTag = typeof PREFERENCE_TAGS[number];
 
-export interface SurveyOption {
+interface SurveyOption {
   id: string;
   label: PreferenceTag;
   tagValue: PreferenceTag;

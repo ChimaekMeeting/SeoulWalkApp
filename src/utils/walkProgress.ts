@@ -1,9 +1,9 @@
 import { WalkRouteResponse } from '../types/prewalk';
 import { haversineDistanceKm, projectOntoRoute } from './geo';
 
-// 지도 레이어(RouteEndpointMarkers 등)도 같은 거리/투영 계산이 필요해서 geo.ts로 옮겼다 —
-// 이 파일을 그대로 쓰던 곳(테스트 포함)이 안 깨지도록 여기서도 그대로 내보낸다.
-export { haversineDistanceKm, projectOntoRoute };
+// 거리/투영 계산은 지도 레이어(RouteEndpointMarkers 등)와 공유하려고 geo.ts로 옮겼다.
+// haversineDistanceKm는 이 파일 경로로 import하던 테스트가 안 깨지도록 계속 재노출한다.
+export { haversineDistanceKm };
 
 // 이 거리보다 경로에서 멀리 떨어져 있으면(GPS 오차 범위를 넘어 다른 길을 걷는 것으로 보고)
 // 이번 측정치는 진행률에 반영하지 않는다.
