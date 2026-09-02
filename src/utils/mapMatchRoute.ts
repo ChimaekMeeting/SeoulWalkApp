@@ -1,5 +1,6 @@
 import { env } from '../config/env';
-import { haversineDistanceKm, polylineLengthKm, segmentProjection } from './geo';
+import { haversineDistanceKm, isLoopRoute, polylineLengthKm, segmentProjection } from './geo';
+import { debugLog } from './logger';
 import type { WalkRouteResponse } from '../types/prewalk';
 
 // 백엔드는 그래프 노드 좌표만 내려주고 프론트가 그걸 직선으로 이어 그린다 —
@@ -11,6 +12,13 @@ import type { WalkRouteResponse } from '../types/prewalk';
 
 type LatLon = [number, number]; // [위도, 경도] — 앱 전역 규약(WalkRouteResponse.coordinates와 동일)
 
+// 스냅 진단 로그 스위치 — 매칭이 이상할 때 true로 켠다(청크·leg별 채택 사유·고리 닫힘 등을 콘솔에 찍음).
+// 평소엔 false로 두어 무음. 아래 snapLog() 호출과 logLegDiagnostics()가 이 값에 걸린다.
+const SNAP_DEBUG: boolean = false;
+function snapLog(message: string, data?: Record<string, unknown>): void {
+  if (SNAP_DEBUG) debugLog('snap', message, data);
+}
+
 // --- 튜닝 상수 -----------------------------------------------------------------
 // Mapbox Map Matching 좌표 상한은 요청당 100개. 여유를 두고 자르고, 청크 경계 노드는
 // 다음 청크와 1개 겹쳐 이어 붙인다.
@@ -21,14 +29,20 @@ const MATCH_RADIUS_M = 14;
 const REQUEST_TIMEOUT_MS = 5000;
 
 // --- 구간 채택 기준(하나라도 어기면 그 구간은 백엔드 원본 직선 유지) --------------
-// Mapbox의 confidence는 "매칭 전체(trace)" 단위 점수라, 같은 길이라도 긴 경로에선 높고 짧은
-// 경로에선 낮게 나온다(구간별 품질 신호로는 부적절). 그래서 여기선 명백한 쓰레기 매칭만
-// 걸러내는 낮은 바닥값으로만 쓰고, 실제 채택 여부는 구간별 기하 검사(스냅 거리·측방 이탈·우회)로 판단한다.
-const MIN_CONFIDENCE = 0.05;
+// Mapbox walking 프로파일의 confidence는 "매칭 전체(trace)" 단위 점수인데, 점이 촘촘하거나
+// 격자형 골목(평행 후보 도로가 많음)에선 완벽히 붙은 매칭도 0.0~0.1로 나온다 — 실측 결과
+// 정상 경로 전체가 0.049로 몰살당했다. 그래서 confidence 게이트는 사실상 끄고(0), 실제 품질
+// 판단은 구간별 기하 검사(스냅 거리·측방 이탈·우회 비율)에 맡긴다.
+const MIN_CONFIDENCE = 0;
 const MAX_SNAP_KM = 0.02; // Mapbox가 노드를 도로에 붙이려고 옮긴 거리(20m) 상한 — 넘으면 그 길은 보행망에 없다고 본다
 const MAX_LATERAL_DEV_KM = 0.025; // 매칭 형상이 원본 직선에서 옆으로 벗어난 최대 거리(25m) — 넘으면 다른 길로 우회한 것
 const MAX_DETOUR_RATIO = 1.7; // 매칭 경로가 원본 직선의 몇 배까지 길어져도 되는지
 const MAX_DETOUR_ABS_KM = 0.03; // 짧은 구간에서 비율만으로 과민 반응하지 않도록 더하는 절대 여유
+
+// 순환 코스에서 스냅된 시작점↔끝점이 이만큼(m) 안으로 벌어졌을 때만 끝점을 시작점으로 당겨
+// 고리를 닫는다. 더 벌어졌다면 어느 한쪽 끝 매칭이 크게 어긋난 것 — 억지로 이으면 긴 가짜
+// 직선이 생기므로 벌어진 채로 둔다.
+const MAX_LOOP_CLOSE_KM = 0.04; // 40m
 
 interface MatchedLeg {
   from: number; // 원본 coords 인덱스(구간 시작 노드)
@@ -133,12 +147,33 @@ async function matchChunk(chunk: LatLon[], offset: number, token: string): Promi
   const timer = setTimeout(() => ctrl.abort(), REQUEST_TIMEOUT_MS);
   try {
     const res = await fetch(url, { signal: ctrl.signal });
-    if (!res.ok) return [];
+    if (!res.ok) {
+      snapLog('chunk http error', { offset, nodes: chunk.length, status: res.status });
+      return [];
+    }
     const data = (await res.json()) as MapboxMatchResponse;
-    if (data.code !== 'Ok') return [];
-    return extractLegs(chunk, offset, data);
-  } catch {
-    return []; // 네트워크 실패·타임아웃 → 이 청크는 원본 직선으로 폴백
+    if (data.code !== 'Ok') {
+      snapLog('chunk mapbox error', { offset, nodes: chunk.length, code: data.code });
+      return [];
+    }
+    const legs = extractLegs(chunk, offset, data);
+    snapLog('chunk ok', {
+      offset,
+      nodes: chunk.length,
+      matchedNodes: (data.tracepoints ?? []).filter(Boolean).length,
+      matchings: data.matchings?.length ?? 0,
+      legs: legs.length,
+    });
+    return legs;
+  } catch (e) {
+    // 네트워크 실패·타임아웃 → 이 청크는 원본 직선으로 폴백
+    const aborted = e instanceof Error && e.name === 'AbortError';
+    snapLog('chunk request failed', {
+      offset,
+      nodes: chunk.length,
+      reason: aborted ? 'timeout' : 'network',
+    });
+    return [];
   } finally {
     clearTimeout(timer);
   }
@@ -148,14 +183,47 @@ async function matchChunk(chunk: LatLon[], offset: number, token: string): Promi
  * 매칭된 구간들을 원본 노드열 위에 병합한다. 채택 기준을 통과한 구간만 스냅 형상으로 바꾸고,
  * 나머지(매칭 실패/우회 과다/스냅 과다)는 원본 노드 사이 직선을 유지한다. 순수 함수 — 테스트용.
  */
-function legAcceptable(leg: MatchedLeg, raw: LatLon[]): boolean {
+interface LegVerdict {
+  accepted: boolean;
+  failed: string[]; // 어긴 기준 이름들('confidence' | 'snap' | 'lateral' | 'detour')
+  straightKm: number;
+  detourLimitKm: number;
+}
+
+function evaluateLeg(leg: MatchedLeg, raw: LatLon[]): LegVerdict {
   const straightKm = polylineLengthKm(raw.slice(leg.from, leg.to + 1));
-  return (
-    leg.confidence >= MIN_CONFIDENCE &&
-    leg.snapKm <= MAX_SNAP_KM &&
-    leg.maxDevKm <= MAX_LATERAL_DEV_KM &&
-    leg.matchedKm <= straightKm * MAX_DETOUR_RATIO + MAX_DETOUR_ABS_KM
-  );
+  const detourLimitKm = straightKm * MAX_DETOUR_RATIO + MAX_DETOUR_ABS_KM;
+  const failed: string[] = [];
+  if (leg.confidence < MIN_CONFIDENCE) failed.push('confidence');
+  if (leg.snapKm > MAX_SNAP_KM) failed.push('snap');
+  if (leg.maxDevKm > MAX_LATERAL_DEV_KM) failed.push('lateral');
+  if (leg.matchedKm > detourLimitKm) failed.push('detour');
+  return { accepted: failed.length === 0, failed, straightKm, detourLimitKm };
+}
+
+function legAcceptable(leg: MatchedLeg, raw: LatLon[]): boolean {
+  return evaluateLeg(leg, raw).accepted;
+}
+
+/** [DEV] leg별 채택 여부와 각 기준 실측값을 로그로 남긴다(좌표값은 넘기지 않음). SNAP_DEBUG일 때만. */
+function logLegDiagnostics(legs: MatchedLeg[], raw: LatLon[]): void {
+  if (!SNAP_DEBUG) return;
+  let accepted = 0;
+  for (const leg of legs) {
+    const v = evaluateLeg(leg, raw);
+    if (v.accepted) accepted += 1;
+    snapLog(v.accepted ? 'leg ok' : 'leg rejected', {
+      seg: `${leg.from}-${leg.to}`,
+      failed: v.failed.join(',') || '-',
+      snapM: Math.round(leg.snapKm * 1000),
+      devM: Math.round(leg.maxDevKm * 1000),
+      matchedM: Math.round(leg.matchedKm * 1000),
+      straightM: Math.round(v.straightKm * 1000),
+      detourX: v.straightKm > 0 ? +(leg.matchedKm / v.straightKm).toFixed(2) : null,
+      conf: +leg.confidence.toFixed(3),
+    });
+  }
+  snapLog('legs summary', { total: legs.length, accepted, rejected: legs.length - accepted });
 }
 
 export function mergeMatchedRoute(raw: LatLon[], legs: MatchedLeg[]): LatLon[] {
@@ -183,17 +251,44 @@ export function mergeMatchedRoute(raw: LatLon[], legs: MatchedLeg[]): LatLon[] {
 }
 
 /**
+ * 순환 코스는 백엔드 원본에서 시작점≈끝점이지만, 스냅은 첫 노드와 끝 노드를 각각 따로 도로에
+ * 붙이기 때문에 두 지점이 어긋나 고리가 열린 채로 그려진다. 원본이 순환이고 어긋난 정도가 작으면
+ * 스냅 결과의 끝점을 시작점으로 당겨 고리를 닫는다. 순수 함수 — 테스트용.
+ */
+export function closeSnappedLoop(raw: LatLon[], snapped: LatLon[]): LatLon[] {
+  if (snapped.length < 2 || !isLoopRoute(raw)) return snapped;
+  const start = snapped[0];
+  const end = snapped[snapped.length - 1];
+  if (start[0] === end[0] && start[1] === end[1]) return snapped;
+  // 끝점이 원본 그대로면 마지막 구간이 스냅 채택되지 않은 것(Mapbox가 모르는 길일 수 있음) —
+  // 억지로 당겨 닫으면 실제 단절을 가리므로 그대로 둔다.
+  const rawEnd = raw[raw.length - 1];
+  const tailIsRaw = end[0] === rawEnd[0] && end[1] === rawEnd[1];
+  const gapKm = haversineDistanceKm(start, end);
+  const willClose = !tailIsRaw && gapKm <= MAX_LOOP_CLOSE_KM;
+  snapLog('loop close', { gapM: Math.round(gapKm * 1000), tailIsRaw, willClose });
+  return willClose ? [...snapped.slice(0, -1), start] : snapped;
+}
+
+/**
  * 백엔드 경로 좌표열([위도, 경도])을 도로에 스냅한 좌표열로 바꾼다. 토큰이 없거나 좌표가
  * 2개 미만이면, 또는 매칭이 하나도 성립하지 않으면 입력을 그대로 돌려준다(참조 동일).
  */
 export async function snapRouteToWalkways(coords: LatLon[]): Promise<LatLon[]> {
   if (!Array.isArray(coords) || coords.length < 2 || !env.MAPBOX_PUBLIC_ACCESS_TOKEN) {
+    snapLog('skipped', {
+      nodes: Array.isArray(coords) ? coords.length : 0,
+      hasToken: !!env.MAPBOX_PUBLIC_ACCESS_TOKEN,
+    });
     return coords;
   }
 
   const key = cacheKey(coords);
   const cached = cache.get(key);
-  if (cached) return cached;
+  if (cached) {
+    snapLog('cache hit', { nodes: coords.length, changed: cached !== coords });
+    return cached;
+  }
 
   try {
     const token = env.MAPBOX_PUBLIC_ACCESS_TOKEN;
@@ -203,12 +298,23 @@ export async function snapRouteToWalkways(coords: LatLon[]): Promise<LatLon[]> {
       if (chunk.length < 2) break;
       requests.push(matchChunk(chunk, start, token));
     }
+    snapLog('start', { nodes: coords.length, chunks: requests.length });
 
     const legs = (await Promise.all(requests)).flat();
-    const merged = legs.length > 0 ? mergeMatchedRoute(coords, legs) : coords;
+    logLegDiagnostics(legs, coords);
+    const merged =
+      legs.length > 0 ? closeSnappedLoop(coords, mergeMatchedRoute(coords, legs)) : coords;
+    snapLog('done', {
+      nodes: coords.length,
+      legs: legs.length,
+      changed: merged !== coords,
+      outNodes: merged.length,
+      loopClosed: isLoopRoute(coords) && merged !== coords,
+    });
     cache.set(key, merged);
     return merged;
-  } catch {
+  } catch (e) {
+    snapLog('aborted with error', { message: e instanceof Error ? e.message : 'unknown' });
     return coords;
   }
 }

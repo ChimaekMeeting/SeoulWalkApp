@@ -1,12 +1,11 @@
 import React from 'react';
 import Mapbox from '@rnmapbox/maps';
 import { WalkRouteResponse } from '../../types/prewalk';
-import { haversineDistanceKm } from '../../utils/geo';
+import { isLoopRoute } from '../../utils/geo';
 import { colors } from '../../theme/tokens';
 
-// 이 거리 안이면 출발점과 도착점을 사실상 같은 지점(순환 코스)으로 보고 마커 하나로 합쳐서
-// "출발·도착"로 표시한다 — 두 마커를 각각 찍으면 같은 자리에 겹쳐서 하나만 있는 것처럼 보인다.
-const LOOP_ENDPOINT_THRESHOLD_KM = 0.03; // 30m
+// 순환 코스는 출발·도착 마커를 각각 찍으면 같은 자리에 겹쳐 하나만 있는 것처럼 보이므로
+// 마커 하나로 합쳐서 "출발·도착"로 표시한다.
 
 interface Props {
   route: WalkRouteResponse['coordinates'];
@@ -18,9 +17,8 @@ export function RouteEndpointMarkers({ route }: Props) {
 
   const start = route[0];
   const end = route[route.length - 1];
-  const isLoop = haversineDistanceKm(start, end) <= LOOP_ENDPOINT_THRESHOLD_KM;
 
-  const features: GeoJSON.Feature<GeoJSON.Point>[] = isLoop
+  const features: GeoJSON.Feature<GeoJSON.Point>[] = isLoopRoute(route)
     ? [pointFeature(start, '출발·도착', 'loop')]
     : [pointFeature(start, '출발', 'start'), pointFeature(end, '도착', 'end')];
 

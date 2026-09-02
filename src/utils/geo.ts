@@ -26,6 +26,17 @@ export function polylineLengthKm(coords: WalkRouteResponse['coordinates']): numb
   return km;
 }
 
+// 출발점과 도착점이 이 거리(km) 안이면 사실상 같은 지점 — 순환 코스로 본다.
+export const LOOP_ENDPOINT_THRESHOLD_KM = 0.03; // 30m
+
+/** coords가 순환 코스(시작점≈끝점)인지. 좌표가 2개 미만이면 false. */
+export function isLoopRoute(coords: WalkRouteResponse['coordinates']): boolean {
+  if (!Array.isArray(coords) || coords.length < 2) return false;
+  return (
+    haversineDistanceKm(coords[0], coords[coords.length - 1]) <= LOOP_ENDPOINT_THRESHOLD_KM
+  );
+}
+
 /**
  * 점 p([위도, 경도])를 선분 a→b에 사영한다. 위경도를 선분 시작점 위도 기준 평면으로 근사 투영하되
  * 경도축에 cos(위도) 보정을 적용해(서울에서 경도 1°는 위도 1°의 약 0.79배 거리) 사영 비율 t(0~1)와

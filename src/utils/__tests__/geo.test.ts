@@ -1,6 +1,7 @@
 import {
   computeRouteBounds,
   haversineDistanceKm,
+  isLoopRoute,
   polylineLengthKm,
   projectOntoRoute,
   segmentProjection,
@@ -27,6 +28,19 @@ describe('polylineLengthKm', () => {
   it('좌표가 2개 미만이면 0', () => {
     expect(polylineLengthKm([])).toBe(0);
     expect(polylineLengthKm([[37.5, 127.0]])).toBe(0);
+  });
+});
+
+describe('isLoopRoute', () => {
+  it('시작점≈끝점이면 순환 코스', () => {
+    expect(isLoopRoute([[37.5, 127.0], [37.51, 127.0], [37.50002, 127.0]])).toBe(true);
+  });
+  it('끝점이 30m 넘게 떨어져 있으면 편도 코스', () => {
+    expect(isLoopRoute(NS_ROUTE)).toBe(false);
+  });
+  it('좌표가 2개 미만이면 false', () => {
+    expect(isLoopRoute([])).toBe(false);
+    expect(isLoopRoute([[37.5, 127.0]])).toBe(false);
   });
 });
 
