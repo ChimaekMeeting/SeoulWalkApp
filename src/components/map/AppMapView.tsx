@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { StyleProp, View, ViewStyle } from 'react-native';
 import Mapbox from '@rnmapbox/maps';
 import { LocationInfo, WalkRouteResponse } from '../../types/prewalk';
@@ -59,6 +59,11 @@ interface WalkMapViewProps extends AppMapViewCommonProps {
    * 표시한다(순환 코스에서 방향·진행 상황을 지도로 바로 알 수 있도록). 생략하면 경로 전체를 단일 색으로.
    */
   routeProgressKm?: number;
+  /**
+   * 개발용 — 도로 스냅 전 원본 경로를 빨간 점선으로 겹쳐 그린다. 스냅 결과(route)가 실제 도보로에
+   * 제대로 붙었는지 눈으로 대조하기 위한 것. 프로덕션에서는 넘기지 않는다.
+   */
+  debugOverlayRoute?: WalkRouteResponse['coordinates'];
 }
 
 export type AppMapViewProps = OverviewMapViewProps | WalkMapViewProps;
@@ -91,9 +96,22 @@ export function AppMapView(props: AppMapViewProps) {
   // true인 동안만 추적이 꺼진다 — 마지막 조작 후 WALK_RECENTER_DELAY_MS가 지나면 다시 켜진다.
   const [walkInteractionNonce, setWalkInteractionNonce] = useState(0);
   const [walkFollowSuspended, setWalkFollowSuspended] = useState(false);
+  // @rnmapbox의 onCameraChanged는 카메라 프레임마다 호출되고, followUserLocation 토글이나
+  // flyTo 같은 "프로그램적" 이동 중에도 isGestureActive=true로 보고한다. 그래서 콜백에서
+  // 매 프레임 setState를 하면 → 카메라 prop이 바뀌고 → 콜백이 다시 발화하는 무한 렌더 루프가
+  // 생긴다("Maximum update depth exceeded"). 아래 두 ref로 그 루프를 끊는다.
+  //  - wasGestureActiveRef: 직전 프레임의 제스처 상태. 비활성→활성 "상승 엣지"에서만 반응한다.
+  //  - suppressGestureUntilRef: 추적 재개 직후 flyTo가 만드는 제스처 오탐을 무시하는 시각(ms).
+  const wasGestureActiveRef = useRef(false);
+  const suppressGestureUntilRef = useRef(Date.now() + 2000);
   const handleCameraChanged = useCallback(
     (state: { gestures?: { isGestureActive?: boolean } }) => {
-      if (!state?.gestures?.isGestureActive) return;
+      const isGestureActive = !!state?.gestures?.isGestureActive;
+      const wasGestureActive = wasGestureActiveRef.current;
+      wasGestureActiveRef.current = isGestureActive;
+      // 제스처 상승 엣지에서만 처리 — 프레임마다/프로그램적 이동 중엔 무시.
+      if (!isGestureActive || wasGestureActive) return;
+      if (Date.now() < suppressGestureUntilRef.current) return;
       if (isWalk) {
         setWalkInteractionNonce(n => n + 1);
         debugLog('Map', 'walk: user gesture → pause follow (auto-resume scheduled)');
@@ -108,7 +126,11 @@ export function AppMapView(props: AppMapViewProps) {
   useEffect(() => {
     if (!isWalk || walkInteractionNonce === 0) return;
     setWalkFollowSuspended(true);
-    const timer = setTimeout(() => setWalkFollowSuspended(false), WALK_RECENTER_DELAY_MS);
+    const timer = setTimeout(() => {
+      // 재개로 인한 flyTo가 onCameraChanged를 제스처로 오탐하며 다시 추적을 끄지 않도록 가드.
+      suppressGestureUntilRef.current = Date.now() + 1500;
+      setWalkFollowSuspended(false);
+    }, WALK_RECENTER_DELAY_MS);
     return () => clearTimeout(timer);
   }, [isWalk, walkInteractionNonce]);
   // 경로 미리보기(previewRoute)나 지정 중심(centerOverride)이 있으면 그게 우선이라 추적하지 않는다.
@@ -168,6 +190,14 @@ export function AppMapView(props: AppMapViewProps) {
             )}
             <RouteDirectionArrows route={props.route} />
             <RouteEndpointMarkers route={props.route} />
+            {props.debugOverlayRoute && props.debugOverlayRoute.length > 1 && (
+              <RouteLayer
+                id="route-debug-original"
+                data={routeCoordinatesToLineString(props.debugOverlayRoute)}
+                color="#FF3B30"
+                dashed
+              />
+            )}
           </>
         )}
         {!isWalk && props.previewRoute && props.previewRoute.length > 0 && (
