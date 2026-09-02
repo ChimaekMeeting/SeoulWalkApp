@@ -163,11 +163,21 @@ export function MainRouter({
     // 도로 스냅(Mapbox Map Matching)은 prep 화면에서 끝낸다 — realWalk엔 원본으로 즉시 진입하되
     // "산책 시작" 버튼을 스냅이 끝날 때까지 잠그고, 끝나면 경로 선을 교체한다. 실패하면 원본 유지.
     // 가드 타임아웃: 스냅이 너무 늦으면 원본으로 진행하도록 pending을 푼다.
+    // const snapStartedAt = Date.now(); // [스냅 진단]
     const guard = new Promise<WalkRouteResponse>(resolve =>
       setTimeout(() => resolve(selected), SNAP_GUARD_MS),
     );
     Promise.race([snapWalkRoute(selected), guard])
       .then(snapped => {
+        // [스냅 진단] 스냅이 가드 전에 끝났는지 / 경로가 바뀌었는지
+        // const elapsedMs = Date.now() - snapStartedAt;
+        // debugLog('snap', 'race settled', {
+        //   elapsedMs,
+        //   guardHit: elapsedMs >= SNAP_GUARD_MS - 50,
+        //   routeChanged: snapped !== selected,
+        //   beforeNodes: selected.coordinates.length,
+        //   afterNodes: snapped.coordinates.length,
+        // });
         if (snapped !== selected) {
           setActiveRoute(prev => (prev === selected ? snapped : prev));
         }

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { RouteMapView } from '../../components/map';
 import { Button } from '../../components/Button';
@@ -14,7 +14,7 @@ import { colors, radii, spacing } from '../../theme/tokens';
 interface Props {
   routeResult: WalkRouteResponse;
   currentLocation: LocationInfo | null;
-  /** 도로 스냅(Map Matching)이 아직 진행 중이면 시작 버튼을 잠근다 — 산책 중 경로 교체를 없애기 위함. */
+  /** 도로 스냅(Map Matching)이 아직 진행 중이면 시작 버튼 대신 스냅 바를 띄운다 — 산책 중 경로 교체를 없애기 위함. */
   snapPending: boolean;
   onStart: () => void;
   onBack: () => void;
@@ -31,7 +31,7 @@ export function WalkPrepScreen({
   const kcal = estimateKcal(routeResult.total_km);
 
   // [DEV] 실제 스냅은 1초 안에 끝나 "경로를 도로에 맞추는 중…" 상태를 눈으로 보기 어렵다.
-  // 이 토글로 그 상태(힌트 문구 + 시작 버튼 스피너/잠금)를 붙잡아 둔다.
+  // 이 토글로 그 상태(시작 버튼 자리에 뜨는 스냅 바)를 붙잡아 둔다.
   const [devForceSnap, setDevForceSnap] = useState(false);
   const snapping = snapPending || devForceSnap;
 
@@ -71,14 +71,13 @@ export function WalkPrepScreen({
       ) : null}
 
       {snapping ? (
-        <Text style={styles.snapHint}>경로를 도로에 맞추는 중…</Text>
-      ) : null}
-      <Button
-        label="▶ 산책 시작"
-        onPress={onStart}
-        loading={snapping}
-        style={styles.startButton}
-      />
+        <View style={styles.snapBar}>
+          <ActivityIndicator size="small" color={colors.inkMuted} />
+          <Text style={styles.snapBarText}>경로를 도로에 맞추는 중…</Text>
+        </View>
+      ) : (
+        <Button label="▶ 산책 시작" onPress={onStart} style={styles.startButton} />
+      )}
     </SafeAreaView>
   );
 }
@@ -118,14 +117,24 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
     flexDirection: 'row',
   },
-  snapHint: {
-    marginTop: 'auto',
+  snapBar: {
+    height: 52,
     marginHorizontal: spacing.lg,
-    marginBottom: spacing.xs,
-    fontSize: 13,
-    fontWeight: '600',
+    marginTop: 'auto',
+    marginBottom: spacing.lg,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.card,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+  },
+  snapBarText: {
+    fontSize: 14,
+    fontWeight: '700',
     color: colors.inkMuted,
-    textAlign: 'center',
   },
   startButton: {
     marginHorizontal: spacing.lg,

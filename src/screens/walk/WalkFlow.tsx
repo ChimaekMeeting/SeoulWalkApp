@@ -39,6 +39,9 @@ export function WalkFlow({
   // walking 진입 시점의 경로를 얼려, 산책 도중 스냅 결과가 도착해도 tracker 기준이 바뀌지 않게 한다.
   const frozenRouteRef = useRef<WalkRouteResponse | null>(null);
   const walkRoute = frozenRouteRef.current ?? routeResult;
+  // 첫 렌더의 routeResult는 항상 도로 스냅 전 원본(스냅은 이후 비동기로 도착) — 개발용으로 원본
+  // 경로를 지도에 겹쳐 스냅이 도보로에 제대로 붙었는지 대조하기 위해 보관한다.
+  const [originalRouteCoords] = useState(() => routeResult.coordinates);
 
   // 종착점 geofence 도달(endReason)로 완주/조기 종료를 구분한다. 세션 리셋 판단에는 영향 없고
   // (둘 다 actualWalkingStarted=true) 통계·분석용 구분이다.
@@ -94,6 +97,7 @@ export function WalkFlow({
       <>
         <WalkInProgressScreen
           routeResult={walkRoute}
+          originalRouteCoordinates={originalRouteCoords}
           onRequestEnd={s => {
             setSnapshot(s);
             setEndConfirmVisible(true);

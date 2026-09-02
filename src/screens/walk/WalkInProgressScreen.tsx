@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Pedometer } from 'expo-sensors';
@@ -15,12 +15,19 @@ import { colors, spacing } from '../../theme/tokens';
 
 interface Props {
   routeResult: WalkRouteResponse;
+  /** 개발용 — 도로 스냅 전 원본 경로 좌표. [DEV] "원본 경로 보기" 칩으로 빨간 점선 오버레이를 켠다. */
+  originalRouteCoordinates?: WalkRouteResponse['coordinates'];
   onRequestEnd: (snapshot: WalkEndSnapshot) => void;
   /** 종착점 geofence로 완료가 확정됐을 때 1회 호출 — 상위(WalkFlow)가 완료 확인 모달을 띄운다. */
   onGoalReached: (snapshot: WalkEndSnapshot) => void;
 }
 
-export function WalkInProgressScreen({ routeResult, onRequestEnd, onGoalReached }: Props) {
+export function WalkInProgressScreen({
+  routeResult,
+  originalRouteCoordinates,
+  onRequestEnd,
+  onGoalReached,
+}: Props) {
   const { coords } = useWatchLocation();
   // 폰 자체 뒤로가기/홈 제스처 바에 줌 버튼이 가려지지 않도록 하단 안전영역만큼 더 띄운다.
   const insets = useSafeAreaInsets();
@@ -28,6 +35,8 @@ export function WalkInProgressScreen({ routeResult, onRequestEnd, onGoalReached 
   const stepsRef = useRef<number | null>(null);
   // 완료 제안(onGoalReached)은 한 번만 — "더 걷기"를 눌러도 다시 뜨지 않게.
   const goalFiredRef = useRef(false);
+  // [DEV] 스냅 전 원본 경로 오버레이 on/off.
+  const [showOriginalRoute, setShowOriginalRoute] = useState(false);
 
   // 진행률 분모는 백엔드 total_km가 아니라 tracker가 실제 투영에 쓰는 폴리라인의 누적 길이다
   // (직선 현 vs 실도로라 스케일이 달라 total_km로 나누면 종착점에서도 100%에 못 닿는다).
@@ -120,6 +129,12 @@ export function WalkInProgressScreen({ routeResult, onRequestEnd, onGoalReached 
               <DevChip label="이탈" onPress={dev.offRoute} />
               <DevChip label="GPS 재개" onPress={dev.resume} />
               <DevChip label="0%로 초기화" onPress={dev.reset} />
+              {originalRouteCoordinates && originalRouteCoordinates.length > 1 ? (
+                <DevChip
+                  label={showOriginalRoute ? '원본 경로 숨기기' : '원본 경로 보기'}
+                  onPress={() => setShowOriginalRoute(v => !v)}
+                />
+              ) : null}
             </ScrollView>
           </View>
         ) : null}
@@ -131,6 +146,7 @@ export function WalkInProgressScreen({ routeResult, onRequestEnd, onGoalReached 
           currentLocation={currentLocation}
           route={routeResult.coordinates}
           routeProgressKm={progress.routeProgressKm}
+          debugOverlayRoute={showOriginalRoute ? originalRouteCoordinates : undefined}
           style={StyleSheet.absoluteFill}
           zoomControlBottomOffset={96 + insets.bottom}
         />

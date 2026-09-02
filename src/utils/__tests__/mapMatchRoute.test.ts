@@ -1,4 +1,4 @@
-import { mergeMatchedRoute } from '../mapMatchRoute';
+import { closeSnappedLoop, mergeMatchedRoute } from '../mapMatchRoute';
 import { haversineDistanceKm } from '../geo';
 
 type LatLon = [number, number];
@@ -40,8 +40,9 @@ describe('mergeMatchedRoute', () => {
     expect(merged).toEqual([RAW[0], l.geom[1], RAW[1], RAW[2], RAW[3]]);
   });
 
-  it('신뢰도가 바닥값 미만이면(쓰레기 매칭) 원본 직선을 유지한다', () => {
-    expect(mergeMatchedRoute(RAW, [leg(0, 1, { confidence: 0.02 })])).toEqual(RAW);
+  it('confidence는 채택에 영향을 주지 않는다(게이트 비활성 — 기하 검사에만 의존)', () => {
+    const l = leg(0, 1, { confidence: 0 });
+    expect(mergeMatchedRoute(RAW, [l])).toEqual([RAW[0], l.geom[1], RAW[1], RAW[2], RAW[3]]);
   });
 
   it('스냅 이동거리가 크면(보행망에 없는 길) 원본 직선을 유지한다', () => {
@@ -74,5 +75,55 @@ describe('mergeMatchedRoute', () => {
     const merged = mergeMatchedRoute(RAW, [wide, leg(1, 2)]);
     // 마지막 3번 노드는 매칭 없음 → 원본으로 이어붙는다.
     expect(merged[merged.length - 1]).toEqual(RAW[3]);
+  });
+});
+
+describe('closeSnappedLoop', () => {
+  // 시작점≈끝점(약 1m) 순환 경로.
+  const LOOP: LatLon[] = [
+    [37.5, 127.0],
+    [37.502, 127.0],
+    [37.5, 127.00001],
+  ];
+
+  it('순환 경로의 스냅 끝점이 조금 어긋났으면 시작점으로 당겨 고리를 닫는다', () => {
+    const snapped: LatLon[] = [
+      [37.50005, 127.0],
+      [37.502, 127.0],
+      [37.5001, 127.0], // 시작점에서 약 6m
+    ];
+    const closed = closeSnappedLoop(LOOP, snapped);
+    expect(closed[closed.length - 1]).toEqual(closed[0]);
+    expect(closed[closed.length - 1]).toEqual(snapped[0]);
+  });
+
+  it('어긋난 정도가 크면(한쪽 끝 매칭 이상) 벌어진 채로 둔다', () => {
+    const snapped: LatLon[] = [
+      [37.50005, 127.0],
+      [37.502, 127.0],
+      [37.5007, 127.0], // 시작점에서 약 70m
+    ];
+    expect(closeSnappedLoop(LOOP, snapped)).toBe(snapped);
+  });
+
+  it('편도 경로는 끝점을 건드리지 않는다', () => {
+    const oneWay: LatLon[] = [
+      [37.5, 127.0],
+      [37.503, 127.0],
+    ];
+    const snapped: LatLon[] = [
+      [37.50003, 127.0],
+      [37.50303, 127.0],
+    ];
+    expect(closeSnappedLoop(oneWay, snapped)).toBe(snapped);
+  });
+
+  it('끝점이 원본 그대로면(마지막 구간 미채택) 고리를 닫지 않는다', () => {
+    const snapped: LatLon[] = [
+      [37.50005, 127.0],
+      [37.502, 127.0],
+      LOOP[2], // 원본 끝점 그대로 — 스냅되지 않은 꼬리
+    ];
+    expect(closeSnappedLoop(LOOP, snapped)).toBe(snapped);
   });
 });
