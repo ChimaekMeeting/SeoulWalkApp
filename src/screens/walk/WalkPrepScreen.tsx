@@ -13,11 +13,19 @@ import { colors, radii, spacing } from '../../theme/tokens';
 interface Props {
   routeResult: WalkRouteResponse;
   currentLocation: LocationInfo | null;
+  /** 도로 스냅(Map Matching)이 아직 진행 중이면 시작 버튼을 잠근다 — 산책 중 경로 교체를 없애기 위함. */
+  snapPending: boolean;
   onStart: () => void;
   onBack: () => void;
 }
 
-export function WalkPrepScreen({ routeResult, currentLocation, onStart, onBack }: Props) {
+export function WalkPrepScreen({
+  routeResult,
+  currentLocation,
+  snapPending,
+  onStart,
+  onBack,
+}: Props) {
   const durationMinutes = estimateDurationMinutes(routeResult.total_km);
   const kcal = estimateKcal(routeResult.total_km);
 
@@ -47,7 +55,15 @@ export function WalkPrepScreen({ routeResult, currentLocation, onStart, onBack }
         />
       </View>
 
-      <Button label="▶ 산책 시작" onPress={onStart} style={styles.startButton} />
+      {snapPending ? (
+        <Text style={styles.snapHint}>경로를 도로에 맞추는 중…</Text>
+      ) : null}
+      <Button
+        label="▶ 산책 시작"
+        onPress={onStart}
+        loading={snapPending}
+        style={styles.startButton}
+      />
     </SafeAreaView>
   );
 }
@@ -80,6 +96,15 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '800',
     color: colors.ink,
+  },
+  snapHint: {
+    marginTop: 'auto',
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.xs,
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.inkMuted,
+    textAlign: 'center',
   },
   startButton: {
     marginHorizontal: spacing.lg,

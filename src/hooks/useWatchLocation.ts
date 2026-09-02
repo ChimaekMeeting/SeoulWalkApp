@@ -36,6 +36,8 @@ export function useWatchLocation() {
         setCoords({
           latitude: position.coords.latitude,
           longitude: position.coords.longitude,
+          timestamp: position.timestamp ?? Date.now(),
+          accuracy: position.coords.accuracy,
         });
       },
     )

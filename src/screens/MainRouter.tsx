@@ -12,6 +12,7 @@ import { useLocation } from '../hooks/useLocation';
 import { useAppStateChange } from '../hooks/useAppStateChange';
 import { useAndroidBackHandler } from '../hooks/useAndroidBackHandler';
 import { debugLog } from '../utils/logger';
+import { snapWalkRoute } from '../utils/mapMatchRoute';
 import { LocationInfo, WalkRouteResponse } from '../types/prewalk';
 import { colors } from '../theme/tokens';
 import { authStorage } from '../auth/authStorage';
@@ -28,6 +29,9 @@ const INACTIVITY_RESET_THRESHOLD_MS = 30 * 60 * 1000;
 
 // 홈에서 뒤로가기를 이 시간 안에 두 번 누르면 앱을 종료한다(안드로이드 표준 "한 번 더 누르면 종료").
 const EXIT_CONFIRM_WINDOW_MS = 2000;
+
+// 도로 스냅이 이 시간 안에 안 끝나면 원본 경로로 산책을 시작할 수 있게 한다.
+const SNAP_GUARD_MS = 7000;
 
 const TAB_ROUTES: Record<TabName, Route> = {
   home: { name: 'home' },
@@ -87,6 +91,9 @@ export function MainRouter({
   const [activeRoute, setActiveRoute] = useState<WalkRouteResponse | null>(
     null,
   );
+  // 도로 스냅(Map Matching)이 진행 중인 동안 prep의 "산책 시작"을 잠근다 — 산책 시작 후
+  // 경로 좌표가 바뀌면 진행률 트래커 기준이 흔들리므로, 스냅을 시작 전에 끝낸다.
+  const [routeSnapPending, setRouteSnapPending] = useState(false);
 
   // key가 바뀌면 ChatConversation이 통째로 리마운트되면서 대화 내역(메시지/threadId)이
   // 초기화된다. ChatConversation 내부(팀원 코드)를 직접 건드리지 않는 안전한 리셋 방법.
@@ -141,7 +148,22 @@ export function MainRouter({
     }
 
     setActiveRoute(selected);
+    setRouteSnapPending(true);
     go({ name: 'realWalk' });
+
+    // 도로 스냅(Mapbox Map Matching)은 prep 화면에서 끝낸다 — realWalk엔 원본으로 즉시 진입하되
+    // "산책 시작" 버튼을 스냅이 끝날 때까지 잠그고, 끝나면 경로 선을 교체한다. 실패하면 원본 유지.
+    // 가드 타임아웃: 스냅이 너무 늦으면 원본으로 진행하도록 pending을 푼다.
+    const guard = new Promise<WalkRouteResponse>(resolve =>
+      setTimeout(() => resolve(selected), SNAP_GUARD_MS),
+    );
+    Promise.race([snapWalkRoute(selected), guard])
+      .then(snapped => {
+        if (snapped !== selected) {
+          setActiveRoute(prev => (prev === selected ? snapped : prev));
+        }
+      })
+      .finally(() => setRouteSnapPending(false));
   };
 
   // 안드로이드 하드웨어 뒤로가기. realWalk 단계는 WalkFlow가 직접 처리하므로 여기선 구독하지 않는다.
@@ -194,6 +216,7 @@ export function MainRouter({
           <WalkFlow
             routeResult={activeRoute}
             currentLocation={currentLocation}
+            routeSnapPending={routeSnapPending}
             onExitToHome={event => {
               // 실제 산책을 시작했다면(조기종료·완주 무관) 새 prewalk 세션을 준비한다.
               // prep에서 취소한 경우(cancelled_before_start)엔 기존 대화를 유지한다.
@@ -201,6 +224,7 @@ export function MainRouter({
                 resetChatSession();
               }
               setActiveRoute(null);
+              setRouteSnapPending(false);
               go('home');
               // 산책 중 이동한 위치로 홈 지도/다음 대화 출발지를 맞춘다.
               retryLocation();

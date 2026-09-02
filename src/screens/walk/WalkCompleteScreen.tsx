@@ -12,7 +12,10 @@ import { LocationInfo, WalkRouteResponse } from '../../types/prewalk';
 interface Props {
   routeResult: WalkRouteResponse;
   currentLocation: LocationInfo | null;
-  traveledKm: number;
+  /** 경로 진행 거리(km). 화면 헤드라인 거리값. */
+  routeProgressKm: number;
+  /** 실측 이동거리(km) — 경로를 벗어나 걸은 구간 포함. 걸음 수 추정에 쓴다. 없으면 routeProgressKm 사용. */
+  actualDistanceKm?: number;
   elapsedMs: number;
   /** 실제 만보계 걸음 수(6b에서 측정). 만보계를 못 쓴 경우 null이면 거리 기반 추정치를 대신 보여준다. */
   steps?: number | null;
@@ -21,10 +24,13 @@ interface Props {
   onHome: () => void;
 }
 
+// 완주 여부(종착점 도착 / 중간 종료)와 무관하게 완료 화면은 동일하게 보여준다 —
+// "걸은 만큼 인정"이 이 앱의 방침이라 종료 방식을 화면에서 구분하지 않는다.
 export function WalkCompleteScreen({
   routeResult,
   currentLocation,
-  traveledKm,
+  routeProgressKm,
+  actualDistanceKm,
   elapsedMs,
   steps: measuredSteps,
   routeId,
@@ -34,7 +40,7 @@ export function WalkCompleteScreen({
   const [favoritePending, setFavoritePending] = useState(false);
 
   const minutes = Math.round(elapsedMs / 60000);
-  const steps = measuredSteps ?? estimateSteps(traveledKm);
+  const steps = measuredSteps ?? estimateSteps(actualDistanceKm ?? routeProgressKm);
 
   const handleFavorite = async () => {
     if (routeId == null || favoritePending) return;
@@ -59,7 +65,7 @@ export function WalkCompleteScreen({
       <StatRow
         style={styles.statRow}
         items={[
-          { value: traveledKm.toFixed(1), unit: 'km' },
+          { value: routeProgressKm.toFixed(1), unit: 'km' },
           { value: `${minutes}`, unit: '분' },
           { value: steps.toLocaleString(), unit: '걸음' },
         ]}

@@ -99,9 +99,9 @@ WalkCompleteScreen (6d)
 onExitToHome (MainRouter가 activeRoute를 비우고 'home' 탭으로 복귀)
 ```
 
-- **`WalkPrepScreen` (6a)**: 받은 경로를 지도에 미리 보여주고 거리/예상 시간/칼로리를 계산해 표시. "산책 시작" → `stage: 'walking'`. 뒤로가기(`onBack`)는 `WalkFlow` 밖으로 나가 바로 `onExitToHome` 호출.
-- **`WalkInProgressScreen` (6b)**: `useWatchLocation`으로 실시간 위치를 추적해 `WalkProgressTracker`(`src/utils/walkProgress.ts`)로 진행률을 계산하고, 만보계(`Pedometer.watchStepCount`)로 걸음 수를 측정. 지도(`RouteMapView`)엔 진행률(`traveledKm`)을 넘겨 지나온 구간/남은 구간을 다른 색으로, 방향 화살표와 출발·도착 마커도 함께 표시합니다(순환 코스에서 방향을 알기 쉽게). 종료 버튼을 누르면 지금까지의 거리/시간/걸음 수를 스냅샷으로 만들어 `onRequestEnd`로 올려보냄 → `WalkFlow`가 6c 모달을 띄운다.
-- **`WalkEndConfirmModal` (6c)**: "정말 종료할까요?" 확인 모달. `onConfirm`을 눌러야만 `stage: 'complete'`로 넘어가고, `onCancel`이면 모달만 닫히고 6b가 계속 진행됨.
-- **`WalkCompleteScreen` (6d)**: 최종 거리/시간/걸음 수 요약, 즐겨찾기 토글(`toggleFavoriteRoute`). "홈으로" → `onHome` → `WalkFlow`의 `onExitToHome` → `MainRouter`가 `home` 탭으로 복귀.
+- **`WalkPrepScreen` (6a)**: 받은 경로를 지도에 미리 보여주고 거리/예상 시간/칼로리를 계산해 표시. 도로 스냅이 진행 중이면(`snapPending`) "산책 시작" 버튼을 잠근다 — 산책 시작 후 경로 좌표가 바뀌면 진행률 트래커 기준이 흔들리므로 스냅을 시작 전에 끝낸다. "산책 시작" → `stage: 'walking'`(이때 경로를 얼린다). 뒤로가기(`onBack`)는 `WalkFlow` 밖으로 나가 바로 `onExitToHome` 호출.
+- **`WalkInProgressScreen` (6b)**: `useWatchLocation` + `useWalkProgress` 훅으로 경로 진행률을 계산(`WalkProgressTracker`, `src/utils/walkProgress.ts`), 만보계(`Pedometer.watchStepCount`)로 걸음 수 측정. 진행률 분모는 `polylineLengthKm(coordinates)`(백엔드 `total_km` 아님). 지도(`RouteMapView`)엔 `routeProgressKm`을 넘겨 지나온/남은 구간을 다른 색으로, 방향 화살표·출발·도착 마커도 표시. 종착점 geofence로 완료가 확정되면(`state === 'complete'`) `onGoalReached` 1회. 종료 버튼 → 스냅샷(`routeProgressKm`/`routeProgressRatio`/`actualDistanceKm`/`endReason`)을 `onRequestEnd`로 올림.
+- **`WalkEndConfirmModal` (6c)**: 종료/완료 확인 모달(재사용). `onConfirm`을 눌러야 `stage: 'complete'`로.
+- **`WalkCompleteScreen` (6d)**: 완주/중간 종료 구분 없이 항상 "산책 완료! 🎉 축하합니다!" — "걸은 만큼 인정"이 방침이라 종료 방식을 화면에서 안 나눈다. 거리(`routeProgressKm`)/시간/걸음 수 요약, 즐겨찾기 토글. "홈으로" → `onHome` → `onExitToHome`. 단 `WalkFlow`는 스냅샷의 `endReason`으로 세션 리셋 사유만 `completed`/`ended_early`로 구분(챗봇 세션 처리용, UI엔 안 보임).
 
-> **`WalkInProgressScreen`의 진행률 계산 상세**는 `src/README.md`의 "14. utils/" 항목과 `src/utils/walkProgress.ts`의 클래스 주석을 참고하세요 — GPS 튐 필터링, 경로 이탈 시 갱신 보류, 역행 방지 세 가지를 처리합니다.
+> **`WalkInProgressScreen`의 진행률 계산 상세**는 `src/README.md`의 "14. utils/" 항목과 `src/utils/walkProgress.ts`의 클래스 주석을 참고하세요.

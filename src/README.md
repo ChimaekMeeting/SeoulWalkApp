@@ -386,16 +386,21 @@ src/types/
 ```
 src/utils/
 ├── geo.ts              # 좌표 변환·bounding box 계산 + 경로 위 투영/거리 계산 (haversineDistanceKm,
-│                        # projectOntoRoute, sliceRouteAtDistanceKm — walkProgress.ts와 지도 레이어가 공유)
+│                        # polylineLengthKm, segmentProjection(경도축 cos(위도) 보정), projectOntoRoute,
+│                        # sliceRouteAtDistanceKm — walkProgress.ts·mapMatchRoute.ts·지도 레이어가 공유)
 ├── reverseGeocode.ts   # 좌표 → 장소명 역지오코딩 (Mapbox Geocoding API, 메모리 캐시)
 ├── routeHistory.ts     # RouteHistoryItem → WalkRouteResponse 변환 (기록 → 재산책)
 ├── routeThumbnail.ts   # 경로 좌표 → Mapbox Static Images URL 생성 (기록 탭 경로 썸네일용)
 ├── walkEstimate.ts     # km → 소요시간·칼로리·걸음수 추정 (평균 보행 속도 기준)
 ├── walkMode.ts         # WalkMode enum → 한글 라벨 (순환 코스, 편도 코스)
-└── walkProgress.ts     # WalkProgressTracker — 실시간 GPS + 경로 좌표로 진행률(traveledKm)을 계산
+└── walkProgress.ts     # WalkProgressTracker — 실시간 GPS + 경로 좌표로 경로 진행률(routeProgressKm)을 계산
 ```
 
-**`walkProgress.ts`의 `WalkProgressTracker`** 는 산책 한 번(화면 마운트~종료) 동안 상태(누적 거리·직전 GPS 지점/시각)를 들고 있는 클래스입니다. GPS 업데이트마다 세 가지를 확인합니다: ① 직전 지점 대비 도보로 불가능한 속도(15km/h 초과)면 무시, ② 경로에서 50m 넘게 벗어나 있으면 그 측정치는 진행률에 반영하지 않고 보류(엉뚱한 구간에 잘못 매칭될 수 있어서), ③ 진행률은 지금까지의 최댓값 아래로 내려가지 않음(역행 방지). 순환 코스 자기교차 대응을 위해 직전 매칭 지점 근처(±150m)를 우선 탐색하는 윈도우 매칭도 `geo.ts`의 `projectOntoRoute`에 함께 구현되어 있습니다.
+**`walkProgress.ts`의 `WalkProgressTracker`** 는 산책 한 번(화면 마운트~종료) 동안 상태를 들고 있는 클래스입니다. 두 앵커를 분리해서 듭니다 — `lastValidFix`(거부되지 않은 모든 GPS fix; `actualDistanceKm` 누적·점프 필터 기준)와 매칭 앵커(`routeProgressKm` + 마지막 매칭 시각). 그래서 **경로에서 벗어나 정상적으로 걷는 동안 `actualDistanceKm`는 늘지만 `routeProgressKm`는 유지**됩니다. 상태는 `initializing → tracking / uncertain / off_route → complete`.
+
+매 update: ① 완료 후엔 얼린 snapshot 그대로 반환 ② 동일/과거 timestamp fix 폐기 ③ 도보 불가능 속도(15km/h 초과) fix 폐기 ④ 유효 이동거리 누적 ⑤ 종착점 geofence(50m 반경 연속 2fix, `initializing`·종착점 영역을 아직 안 떠난 동안은 미검사) — 완료는 **진행률 숫자와 독립** ⑥ 창을 `[150, 300, 600]m`로 넓혀가며(+전역) 후보 탐색, 검증 3종(근접·전진량 상한·역행 금지) 통과한 첫 후보 채택 ⑦ 기본 창 밖 원거리 후보는 같은 구간 연속 2fix 확인 후에만 확정(순환·왕복 코스 오매칭 방지) ⑧ hysteresis 상태 전이 ⑨ 첫 위치 확정.
+
+진행률 분모는 백엔드 `total_km`가 아니라 tracker가 투영에 쓰는 폴리라인의 누적 길이(`polylineLengthKm`)입니다 — 스케일이 달라 `total_km`로 나누면 종착점에서도 100%에 못 닿습니다. 경로는 `WalkFlow`가 walking 진입 시점에 얼려(`frozenRouteRef`) tracker가 산책 한 번 동안 단일 폴리라인만 봅니다. GPS 소비는 `useWalkProgress` 훅이 `useEffect`에서만 하고(렌더 중 tracker 변이 금지), 동일 fix는 건너뜁니다.
 
 ---
 
