@@ -6,25 +6,21 @@
 import React from 'react';
 import ReactTestRenderer from 'react-test-renderer';
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const calls: Record<string, any> = {};
 
 jest.mock('../WalkPrepScreen', () => ({
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   WalkPrepScreen: (p: any) => {
     calls.prep = p;
     return null;
   },
 }));
 jest.mock('../WalkInProgressScreen', () => ({
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   WalkInProgressScreen: (p: any) => {
     calls.walk = p;
     return null;
   },
 }));
 jest.mock('../WalkCompleteScreen', () => ({
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   WalkCompleteScreen: (p: any) => {
     calls.complete = p;
     return null;
