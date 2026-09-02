@@ -8,14 +8,14 @@ import React, {
   useState,
 } from 'react';
 import { useKakaoAuth } from './useKakaoAuth';
-import { onboardingStorage, activityPromptStorage } from './onboardingStorage';
+import { onboardingStorage, activityPromptStorage, surveyCompletedStorage } from './onboardingStorage';
 import {
   PermissionSnapshot,
   PermissionState,
   readPermissionSnapshot,
   requestLocationPermission as requestLocationPermissionOS,
 } from './permissions';
-import { getSurvey } from '../api/survey';
+import { getSurvey, SurveyStatusResponse } from '../api/survey';
 import { navigationRef } from '../navigation/navigationRef';
 import { useAppStateChange } from '../hooks/useAppStateChange';
 import { debugLog } from '../utils/logger';
@@ -77,7 +77,10 @@ export function computeTargetScreen(s: {
   showBrandSplash: boolean;
   onboardingStatus: 'checking' | 'seen' | 'unseen';
   authState: 'loading' | 'loggedIn' | 'loggedOut';
-  surveyStatus: 'checking' | 'completed' | 'pending';
+  // 'loading' : 설문 완료 여부 확인 중 · 'completed' : 완료 · 'pending' : 서버가 명시적으로 미완료 반환
+  // 'unknown' : 네트워크 오류·타임아웃 등으로 확인 실패 — 이 상태로는 설문 화면으로 보내지 않는다
+  //             (일시적 실패로 기존 사용자를 신규 사용자처럼 다루면 안 되므로).
+  surveyStatus: 'loading' | 'completed' | 'pending' | 'unknown';
   permissionStatus: PermissionStatus;
   activityStatus: PermissionStatus;
   activityPromptStatus: 'checking' | 'done' | 'pending';
@@ -93,9 +96,12 @@ export function computeTargetScreen(s: {
   if (s.showBrandSplash) return 'BrandSplash';
   if (s.onboardingStatus === 'checking') return 'Loading';
   if (s.onboardingStatus === 'unseen') return 'Onboarding';
-  if (s.authState === 'loading' || (s.authState === 'loggedIn' && s.surveyStatus === 'checking')) {
+  if (s.authState === 'loading' || (s.authState === 'loggedIn' && s.surveyStatus === 'loading')) {
     return 'Loading';
   }
+  // 서버가 "설문 미완료"라고 명시(pending)했을 때만 설문 화면으로. 'unknown'(조회 실패)은
+  // 여기서 걸러지지 않고 아래로 흘러 Home으로 간다 — AppBootstrapProvider가 백그라운드에서
+  // 재시도하며, 서버가 실제로 pending을 주면 그때 이 분기가 다시 잡는다.
   if (s.authState === 'loggedIn' && s.surveyStatus === 'pending') return 'Survey';
   if (s.authState === 'loggedIn' && isCheckingPermissions) return 'Loading';
   if (s.authState === 'loggedOut') return 'Login';
@@ -129,44 +135,126 @@ export function AppBootstrapProvider({ children }: { children: React.ReactNode }
   const [onboardingStatus, setOnboardingStatus] = useState<'checking' | 'seen' | 'unseen'>(
     'checking',
   );
-  const [surveyStatus, setSurveyStatus] = useState<'checking' | 'completed' | 'pending'>(
-    'checking',
-  );
+  const [surveyStatus, setSurveyStatus] = useState<
+    'loading' | 'completed' | 'pending' | 'unknown'
+  >('loading');
 
   useEffect(() => {
     // 온보딩 열람 여부 · 걸음 수 권한 안내 완료 여부를 SecureStore에서 한 번 읽어 초기화한다.
-    // 두 조회 모두 onboardingStorage 내부에서 실패를 잡아 안전한 기본값(false)을 돌려주므로
-    // Promise가 reject되어 'checking'에 갇히는 일은 없지만, 방어적으로 catch도 달아 둔다.
-    onboardingStorage
-      .getHasSeen()
-      .then(hasSeen => setOnboardingStatus(hasSeen ? 'seen' : 'unseen'))
-      .catch(e => {
-        console.warn('[App] 온보딩 열람 기록 조회 실패 → unseen 폴백:', e);
-        setOnboardingStatus('unseen');
-      });
+    let cancelled = false;
+
+    // 온보딩 플래그 조회: 저장소 오류는 최대 3회 재시도한다. 끝내 실패하면 'unseen'이 아니라
+    // 'seen'으로 폴백한다 — 조회 실패를 신규 사용자처럼 다뤄 기존 사용자를 온보딩으로 되돌리는
+    // 것이 이 화면 반복 버그의 핵심이었기 때문. (신규 사용자가 이번 실행에서 온보딩을 한 번
+    // 놓칠 수는 있으나, 온보딩 무한 반복보다 안전하다. 무한 Loading도 재시도 상한으로 방지.)
+    const resolveOnboarding = async () => {
+      const MAX_ATTEMPTS = 3;
+      for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+        const result = await onboardingStorage.readHasSeen();
+        if (cancelled) return;
+        if (result.ok) {
+          if (__DEV__) {
+            console.log('[App] onboarding flag read', {
+              value: result.raw,
+              hasSeen: result.value,
+            });
+          }
+          setOnboardingStatus(result.value ? 'seen' : 'unseen');
+          return;
+        }
+        console.warn(
+          `[App] 온보딩 열람 기록 조회 실패 (${attempt}/${MAX_ATTEMPTS}):`,
+          result.error,
+        );
+        if (attempt < MAX_ATTEMPTS) {
+          await new Promise<void>(resolve => setTimeout(() => resolve(), 300));
+          if (cancelled) return;
+        }
+      }
+      console.warn('[App] 온보딩 열람 기록 조회 최종 실패 → seen 폴백(온보딩 재노출 방지 우선)');
+      setOnboardingStatus('seen');
+    };
+    resolveOnboarding();
+
     // 걸음 수 권한 안내를 이전 실행에서 이미 처리(허용/건너뛰기)했으면 다시 띄우지 않는다.
     activityPromptStorage
       .getPromptDone()
-      .then(done => setActivityPromptStatus(done ? 'done' : 'pending'))
+      .then(done => {
+        if (!cancelled) setActivityPromptStatus(done ? 'done' : 'pending');
+      })
       .catch(e => {
         console.warn('[App] activity_prompt_done 조회 실패 → pending 폴백:', e);
-        setActivityPromptStatus('pending');
+        if (!cancelled) setActivityPromptStatus('pending');
       });
     const timer = setTimeout(() => setShowBrandSplash(false), 2000);
-    return () => clearTimeout(timer);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
   }, []);
 
   useEffect(() => {
     if (authState !== 'loggedIn') return;
-    getSurvey({ timeout: 8000 })
-      .then(({ data }) => {
-        console.log('[App] GET /api/user/survey 응답:', data);
-        setSurveyStatus(data.survey_completed ? 'completed' : 'pending');
-      })
-      .catch(e => {
-        console.warn('[App] GET /api/user/survey 실패 → pending 폴백:', e?.message ?? e);
-        setSurveyStatus('pending');
-      });
+    let cancelled = false;
+
+    // 설문(산책 취향) 완료 여부 확인.
+    //  - 별도 timeout을 지정하지 않고 client.ts의 공통 정책(기본 20초, Cloud Run 콜드스타트 대비)을 그대로 쓴다.
+    //  - 조회 실패(네트워크 오류·타임아웃)를 'pending'(미완료)으로 처리하지 않는다 — 그게 "재시작마다
+    //    설문 재노출" 버그의 핵심이었다. 실패 시엔 로컬 완료 캐시가 있으면 'completed', 없으면 'unknown'.
+    //  - 최초 1회는 결과가 나올 때까지 Loading을 유지하고, 실패하면 Home으로 내보낸 뒤 백그라운드에서
+    //    재시도해 서버와 상태를 맞춘다(서버가 실제로 'pending'을 주면 computeTargetScreen이 설문으로 보냄).
+    const applyServerData = (data: SurveyStatusResponse) => {
+      console.log('[App] GET /api/user/survey 응답:', data);
+      // 마이그레이션 기간: survey_completed가 아직 false여도 저장된 태그가 있으면 완료로 본다.
+      const completed = Boolean(
+        data.survey_completed || (data.selected_tags?.length ?? 0) > 0,
+      );
+      setSurveyStatus(completed ? 'completed' : 'pending');
+      // markCompleted(set)는 내부에서 실패를 잡아 boolean만 돌려주므로 reject되지 않는다.
+      if (completed) surveyCompletedStorage.markCompleted();
+    };
+
+    const resolveSurvey = async () => {
+      try {
+        const { data } = await getSurvey();
+        if (cancelled) return;
+        applyServerData(data);
+        return;
+      } catch (e) {
+        if (cancelled) return;
+        const locallyCompleted = await surveyCompletedStorage.get().catch(() => false);
+        if (cancelled) return;
+        console.warn(
+          `[App] GET /api/user/survey failed → ${
+            locallyCompleted ? 'completed(로컬 캐시)' : 'unknown'
+          }, 백그라운드 재시도:`,
+          (e as { message?: string })?.message ?? e,
+        );
+        setSurveyStatus(locallyCompleted ? 'completed' : 'unknown');
+      }
+
+      // 백그라운드 재시도: 이미 Home(또는 completed)인 상태로 서버 상태를 다시 맞춘다.
+      for (let attempt = 1; attempt <= 3 && !cancelled; attempt++) {
+        await new Promise<void>(resolve => setTimeout(() => resolve(), attempt * 3000));
+        if (cancelled) return;
+        try {
+          const { data } = await getSurvey();
+          if (cancelled) return;
+          applyServerData(data);
+          return;
+        } catch (e) {
+          console.warn(
+            `[App] 설문 백그라운드 재시도 ${attempt}/3 실패:`,
+            (e as { message?: string })?.message ?? e,
+          );
+        }
+      }
+    };
+
+    resolveSurvey();
+    return () => {
+      cancelled = true;
+    };
   }, [authState]);
 
   // 위치·걸음 수 권한을 OS에 한 번에 물어 3-state와 boolean 스냅샷을 함께 갱신한다.
@@ -237,6 +325,32 @@ export function AppBootstrapProvider({ children }: { children: React.ReactNode }
   // 전혀 남지 않는 게 원래 동작이었으므로(로그인 화면으로 뒤로가기가 되면 안 됨) replace 대신 reset 사용.
   // Stack.Navigator의 initialRouteName이 이미 'BrandSplash'라, 최초 마운트 시 targetScreen도
   // 'BrandSplash'라면 reset()이 불필요하다 — 그 1회만 건너뛰면 되므로 boolean으로 충분하다.
+  useEffect(() => {
+    if (__DEV__) {
+      // targetScreen 계산에 실제로 들어간 입력 전체를 같이 찍는다 — surveyStatus가 왜 이
+      // 값인지(pending인데 왜 Survey가 아닌지 등) 이 한 줄만 보고 바로 알 수 있게.
+      console.log('[App] target screen derived', {
+        targetScreen,
+        showBrandSplash,
+        onboardingStatus,
+        authState,
+        surveyStatus,
+        permissionStatus,
+        activityStatus,
+        activityPromptStatus,
+      });
+    }
+  }, [
+    targetScreen,
+    showBrandSplash,
+    onboardingStatus,
+    authState,
+    surveyStatus,
+    permissionStatus,
+    activityStatus,
+    activityPromptStatus,
+  ]);
+
   const hasNavigatedRef = useRef(false);
   // 마지막으로 reset한 화면 이름. computeTargetScreen이 같은 값을 다시 내놓거나(useEffect deps로도
   // 걸러지지만 StrictMode 이중 호출 대비) 초기 상태가 checking→실제값으로 바뀌며 잠깐 왕복해도
@@ -249,11 +363,16 @@ export function AppBootstrapProvider({ children }: { children: React.ReactNode }
       return;
     }
     hasNavigatedRef.current = true;
-    if (lastResetTargetRef.current === targetScreen) return;
+    if (lastResetTargetRef.current === targetScreen) {
+      debugLog('navigation', 'skip: same as last reset target', { targetScreen });
+      return;
+    }
     if (navigationRef.isReady()) {
       debugLog('navigation', 'reset to derived target screen', { targetScreen });
       navigationRef.reset({ index: 0, routes: [{ name: targetScreen }] });
       lastResetTargetRef.current = targetScreen;
+    } else {
+      debugLog('navigation', 'skip: navigationRef not ready', { targetScreen });
     }
   }, [targetScreen]);
 
@@ -266,7 +385,12 @@ export function AppBootstrapProvider({ children }: { children: React.ReactNode }
       signOut,
       onboardingDone: () => setOnboardingStatus('seen'),
       surveyDone: () => setSurveyStatus('completed'),
-      resetSurvey: () => setSurveyStatus('pending'),
+      resetSurvey: () => {
+        debugLog('resetSurvey', 'called: local flag clear + surveyStatus → pending');
+        // clear는 내부에서 실패를 잡으므로 reject되지 않는다.
+        surveyCompletedStorage.clear();
+        setSurveyStatus('pending');
+      },
       permissionStatus,
       requestLocationPermission: async () => {
         await requestLocationPermissionOS();

@@ -1,22 +1,33 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { Alert, StatusBar, StyleSheet, View } from 'react-native';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import {
+  Alert,
+  BackHandler,
+  StatusBar,
+  StyleSheet,
+  ToastAndroid,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocation } from '../hooks/useLocation';
 import { useAppStateChange } from '../hooks/useAppStateChange';
+import { useAndroidBackHandler } from '../hooks/useAndroidBackHandler';
 import { debugLog } from '../utils/logger';
 import { LocationInfo, WalkRouteResponse } from '../types/prewalk';
 import { colors } from '../theme/tokens';
 import { authStorage } from '../auth/authStorage';
 import { Route, TabName } from '../navigation/types';
 import { BottomNav } from '../components/BottomNav';
-import { HomeScreen } from './HomeScreen';
+import { HomeScreen, HomeScreenHandle } from './HomeScreen';
 import { WalkFlow } from './walk/WalkFlow';
 import { RecordTab } from './record/RecordTab';
 import { MyPageScreen } from './MyPageScreen';
 
-// 챗봇 세션(대화 내역)을 자동으로 리셋하는 두 가지 기준.
-const WALK_RESET_THRESHOLD_MS = 10 * 60 * 1000; // 산책 시작 후 10분 넘게 지나서 홈으로 돌아오면
-const INACTIVITY_RESET_THRESHOLD_MS = 30 * 60 * 1000; // 앱이 30분 넘게 백그라운드/비활성 상태였다가 돌아오면
+// 앱이 30분 넘게 백그라운드/비활성 상태였다가 돌아오면 챗봇 세션(대화 내역)을 리셋한다.
+// (실제 산책을 시작한 뒤 종료하면 시간과 무관하게 리셋 — WalkExitEvent.actualWalkingStarted 참고.)
+const INACTIVITY_RESET_THRESHOLD_MS = 30 * 60 * 1000;
+
+// 홈에서 뒤로가기를 이 시간 안에 두 번 누르면 앱을 종료한다(안드로이드 표준 "한 번 더 누르면 종료").
+const EXIT_CONFIRM_WINDOW_MS = 2000;
 
 const TAB_ROUTES: Record<TabName, Route> = {
   home: { name: 'home' },
@@ -49,6 +60,9 @@ export function MainRouter({
   const [route, setRoute] = useState<Route>({ name: 'home' });
   const [nickname, setNickname] = useState<string | null>(null);
   const [email, setEmail] = useState<string | null>(null);
+  const homeScreenRef = useRef<HomeScreenHandle>(null);
+  // 홈에서 뒤로가기를 마지막으로 누른 시각(2초 내 재입력이면 앱 종료).
+  const backPressedAtRef = useRef(0);
 
   useEffect(() => {
     Promise.all([authStorage.getNickname(), authStorage.getEmail()]).then(
@@ -78,9 +92,9 @@ export function MainRouter({
   // 초기화된다. ChatConversation 내부(팀원 코드)를 직접 건드리지 않는 안전한 리셋 방법.
   const [chatSessionKey, setChatSessionKey] = useState(0);
   const resetChatSession = () => setChatSessionKey(key => key + 1);
-  const realWalkEnteredAtRef = useRef<number | null>(null);
 
   // 앱이 30분 넘게 백그라운드/비활성 상태였다가 다시 돌아오면 대화를 리셋한다.
+  // 단, realWalk 진행 중에는 산책 상태를 보존해야 하므로 리셋하지 않는다.
   const backgroundedAtRef = useRef<number | null>(null);
   useAppStateChange({
     onBackground: () => {
@@ -89,11 +103,14 @@ export function MainRouter({
     onForeground: () => {
       if (
         backgroundedAtRef.current != null &&
-        Date.now() - backgroundedAtRef.current >= INACTIVITY_RESET_THRESHOLD_MS
+        Date.now() - backgroundedAtRef.current >= INACTIVITY_RESET_THRESHOLD_MS &&
+        route.name !== 'realWalk'
       ) {
         resetChatSession();
       }
       backgroundedAtRef.current = null;
+      // 백그라운드 동안 사용자가 이동했을 수 있으니 현재 위치를 다시 잡는다(지도 파란 점 + 다음 대화 출발지).
+      if (route.name !== 'realWalk') retryLocation();
     },
   });
 
@@ -124,9 +141,32 @@ export function MainRouter({
     }
 
     setActiveRoute(selected);
-    realWalkEnteredAtRef.current = Date.now();
     go({ name: 'realWalk' });
   };
+
+  // 안드로이드 하드웨어 뒤로가기. realWalk 단계는 WalkFlow가 직접 처리하므로 여기선 구독하지 않는다.
+  const handleAndroidBack = useCallback(() => {
+    // record/me 탭 → 홈 탭으로.
+    if (route.name === 'record' || route.name === 'me') {
+      go('home');
+      return true;
+    }
+    if (route.name === 'home') {
+      // 채팅 시트가 꽉 펼쳐져 있으면 먼저 절반으로 접는다.
+      if (homeScreenRef.current?.collapseSheetIfExpanded()) return true;
+      // "한 번 더 누르면 종료" — 2초 내 재입력이면 앱 종료.
+      const now = Date.now();
+      if (now - backPressedAtRef.current < EXIT_CONFIRM_WINDOW_MS) {
+        BackHandler.exitApp();
+        return true;
+      }
+      backPressedAtRef.current = now;
+      ToastAndroid.show('한 번 더 누르면 종료돼요', ToastAndroid.SHORT);
+      return true;
+    }
+    return false;
+  }, [route.name]);
+  useAndroidBackHandler(handleAndroidBack, route.name !== 'realWalk');
 
   const activeTab = route.name as TabName;
   const showNav = ['home', 'record', 'me'].includes(route.name);
@@ -139,6 +179,7 @@ export function MainRouter({
             숨기기만 한다(display:'none') — home 라우트가 아닐 때만 화면에서 감춘다. */}
         <View style={[styles.fill, route.name !== 'home' && styles.hidden]}>
           <HomeScreen
+            ref={homeScreenRef}
             currentLocation={currentLocation}
             activeRoute={activeRoute}
             chatSessionKey={chatSessionKey}
@@ -146,20 +187,23 @@ export function MainRouter({
             locationLoading={locationLoading}
             locationError={locationError}
             onRetryLocation={retryLocation}
+            onRefreshLocation={retryLocation}
           />
         </View>
         {route.name === 'realWalk' && activeRoute ? (
           <WalkFlow
             routeResult={activeRoute}
             currentLocation={currentLocation}
-            onExitToHome={() => {
-              const enteredAt = realWalkEnteredAtRef.current;
-              if (enteredAt != null && Date.now() - enteredAt >= WALK_RESET_THRESHOLD_MS) {
+            onExitToHome={event => {
+              // 실제 산책을 시작했다면(조기종료·완주 무관) 새 prewalk 세션을 준비한다.
+              // prep에서 취소한 경우(cancelled_before_start)엔 기존 대화를 유지한다.
+              if (event.actualWalkingStarted) {
                 resetChatSession();
               }
-              realWalkEnteredAtRef.current = null;
               setActiveRoute(null);
               go('home');
+              // 산책 중 이동한 위치로 홈 지도/다음 대화 출발지를 맞춘다.
+              retryLocation();
             }}
           />
         ) : null}

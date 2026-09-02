@@ -1,7 +1,10 @@
-import { Pressable, Text, View, StyleSheet } from 'react-native';
+import { Image, Pressable, Text, View, StyleSheet } from 'react-native';
 import { WalkMode, WalkRouteResponse } from '../../types/prewalk';
 import { estimateDurationMinutes, estimateKcal } from '../../utils/walkEstimate';
+import { buildRouteThumbnailUrl } from '../../utils/routeThumbnail';
 import { colors, radii, spacing } from '../../theme/tokens';
+
+const THUMB_SIZE = 62;
 
 const MODE_ICON: Record<WalkMode, string> = {
   [WalkMode.CIRCULAR_RANDOM]: '◯',
@@ -16,19 +19,34 @@ export function RouteCandidate({
   route,
   index,
   onPress,
+  disabled,
 }: {
   route: WalkRouteResponse;
   index: number;
   onPress: () => void;
+  disabled?: boolean;
 }) {
   const durationMinutes = estimateDurationMinutes(route.total_km);
   const kcal = estimateKcal(route.total_km);
+  const thumbnailUrl = buildRouteThumbnailUrl(route.coordinates, THUMB_SIZE);
 
   return (
-    <Pressable onPress={onPress} style={styles.card}>
-      <View style={styles.icon}>
-        <Text style={styles.iconText}>{MODE_ICON[route.mode]}</Text>
-      </View>
+    <Pressable
+      onPress={onPress}
+      disabled={disabled}
+      style={({ pressed }) => [
+        styles.card,
+        disabled && styles.cardDisabled,
+        pressed && !disabled && styles.cardPressed,
+      ]}
+    >
+      {thumbnailUrl ? (
+        <Image source={{ uri: thumbnailUrl }} style={styles.icon} />
+      ) : (
+        <View style={styles.icon}>
+          <Text style={styles.iconText}>{MODE_ICON[route.mode]}</Text>
+        </View>
+      )}
       <View style={styles.body}>
         <Text style={styles.title}>코스 {index + 1}</Text>
         <Text style={styles.meta}>
@@ -51,13 +69,20 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     width: '100%',
   },
+  cardPressed: {
+    opacity: 0.7,
+  },
+  cardDisabled: {
+    opacity: 0.4,
+  },
   icon: {
-    width: 62,
-    height: 62,
+    width: THUMB_SIZE,
+    height: THUMB_SIZE,
     borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.containerBackground,
+    overflow: 'hidden',
   },
   iconText: {
     color: colors.ink,
