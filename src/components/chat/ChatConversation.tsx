@@ -35,7 +35,12 @@ export type ChatConversationHandle = {
  */
 export type ChatPhase = 'idle' | 'chatting' | 'route_recommended' | 'session_expired';
 
-type Message = { from: 'bot' | 'me'; text: string };
+// 'routes'는 추천 경로 카드 묶음을 타임라인상의 한 항목으로 취급하기 위한 것.
+// 재추천마다 새 항목을 이어붙이므로(교체가 아님) 이전 추천 카드도 그대로 남아 선택할 수 있고,
+// 이후 채팅은 자연스럽게 그 카드 밑으로 쌓인다.
+type Message =
+  | { from: 'bot' | 'me'; text: string }
+  | { from: 'routes'; routes: WalkRouteResponse[] };
 
 const STATUS_MESSAGES: Partial<Record<ChatStatus, string>> = {
   [ChatStatus.ACCESS_EXPIRED_TOKEN]: '로그인이 만료되었어요. 다시 로그인해주세요.',
@@ -99,9 +104,6 @@ export const ChatConversation = forwardRef(function ChatConversation(
 ) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [threadId, setThreadId] = useState<string | null>(null);
-  const [routeResults, setRouteResults] = useState<WalkRouteResponse[] | null>(
-    null,
-  );
   const [phase, setPhase] = useState<ChatPhase>('idle');
   const [sending, setSending] = useState(false);
   // getInitMessage 실패 시 true — hasStartedRef가 재시도를 막아버리지 않도록 별도로 추적한다.
@@ -173,11 +175,17 @@ export const ChatConversation = forwardRef(function ChatConversation(
     const routeReady = !!(res.state?.is_complete && hasRoutes);
     const botText = res.state?.response;
     setMessages(prev => {
-      const base = options?.reset ? [] : prev;
-      return botText && !routeReady ? base.concat({ from: 'bot', text: botText }) : base;
+      let next = options?.reset ? [] : prev;
+      if (botText && !routeReady) {
+        next = next.concat({ from: 'bot', text: botText });
+      }
+      // 새 추천은 기존 카드를 대체하지 않고 타임라인에 이어붙인다 — 이전 추천 경로도
+      // 계속 보이고 선택할 수 있어야 하기 때문.
+      if (hasRoutes) {
+        next = next.concat({ from: 'routes', routes: routeList });
+      }
+      return next;
     });
-    // 경로가 없으면(빈 배열 포함) 이전 카드도 지운다.
-    setRouteResults(hasRoutes ? routeList : null);
     // is_complete=true인데 경로가 없는 응답도 막힌 화면이 되지 않도록 계속 대화 가능 상태로 둔다.
     setPhase(routeReady ? 'route_recommended' : 'chatting');
   };
@@ -457,7 +465,27 @@ export const ChatConversation = forwardRef(function ChatConversation(
           ) : null}
           {messages.map((message, index) => {
             const bubble =
-              message.from === 'bot' ? (
+              message.from === 'routes' ? (
+                <View style={styles.chatLine}>
+                  <View style={styles.chatIcon}>
+                    <Text style={styles.chatIconText}>✳</Text>
+                  </View>
+                  <View style={styles.cardColumn}>
+                    {message.routes.map((route, routeIndex) => (
+                      <RouteCandidate
+                        key={route.id ?? routeIndex}
+                        route={route}
+                        index={routeIndex}
+                        // 재추천 요청 중에는 카드 선택을 막는다 — 산책 시작과 intent 응답이
+                        // 동시에 진행되어 오래된 경로로 산책이 시작되는 것을 방지. 응답이
+                        // 오면 다시 풀리고, 이전에 추천된 카드도 계속 선택할 수 있다.
+                        disabled={sending}
+                        onPress={() => onRouteReady(route)}
+                      />
+                    ))}
+                  </View>
+                </View>
+              ) : message.from === 'bot' ? (
                 <ChatBubble text={message.text} />
               ) : (
                 <MyBubble text={message.text} />
@@ -486,26 +514,6 @@ export const ChatConversation = forwardRef(function ChatConversation(
                   : '좋은 답변을 생각 중입니다.'
               }
             />
-          ) : null}
-          {routeResults && routeResults.length > 0 ? (
-            <View style={styles.chatLine}>
-              <View style={styles.chatIcon}>
-                <Text style={styles.chatIconText}>✳</Text>
-              </View>
-              <View style={styles.cardColumn}>
-                {routeResults.map((route, index) => (
-                  <RouteCandidate
-                    key={route.id ?? index}
-                    route={route}
-                    index={index}
-                    // 재추천 요청 중에는 카드 선택을 막는다 — 산책 시작과 intent 응답이
-                    // 동시에 진행되어 오래된 경로로 산책이 시작되는 것을 방지.
-                    disabled={sending}
-                    onPress={() => onRouteReady(route)}
-                  />
-                ))}
-              </View>
-            </View>
           ) : null}
           {initFailed && !sending ? (
             <Pressable
