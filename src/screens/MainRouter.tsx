@@ -13,6 +13,7 @@ import { useAppStateChange } from '../hooks/useAppStateChange';
 import { useAndroidBackHandler } from '../hooks/useAndroidBackHandler';
 import { debugLog } from '../utils/logger';
 import { snapWalkRoute } from '../utils/mapMatchRoute';
+import { markRouteWalked } from '../utils/recentRouteUsage';
 import { LocationInfo, WalkRouteResponse } from '../types/prewalk';
 import { colors } from '../theme/tokens';
 import { authStorage } from '../auth/authStorage';
@@ -21,6 +22,7 @@ import { BottomNav } from '../components/BottomNav';
 import { HomeScreen, HomeScreenHandle } from './HomeScreen';
 import { WalkFlow } from './walk/WalkFlow';
 import { RecordTab } from './record/RecordTab';
+import { HistoryFilter } from '../components/record/RouteHistoryList';
 import { MyPageScreen } from './MyPageScreen';
 
 // 앱이 30분 넘게 백그라운드/비활성 상태였다가 돌아오면 챗봇 세션(대화 내역)을 리셋한다.
@@ -62,11 +64,17 @@ export function MainRouter({
   locationGranted,
 }: MainRouterProps) {
   const [route, setRoute] = useState<Route>({ name: 'home' });
+  // 기록 탭 필터('최근 경로'/'즐겨찾기'). 탭을 벗어났다 돌아와도 유지되도록 RecordTab이 아닌
+  // 여기서 소유한다 — 안드로이드 뒤로가기로 '즐겨찾기'→'최근 경로'로 한 단계 되돌리기도 처리.
+  const [recordFilter, setRecordFilter] = useState<HistoryFilter>('recent');
   const [nickname, setNickname] = useState<string | null>(null);
   const [email, setEmail] = useState<string | null>(null);
   const homeScreenRef = useRef<HomeScreenHandle>(null);
   // 홈에서 뒤로가기를 마지막으로 누른 시각(2초 내 재입력이면 앱 종료).
   const backPressedAtRef = useRef(0);
+  // 산책 플로우(realWalk)에 진입하기 직전 탭. prep 단계에서 취소하고 나갈 때 이 탭으로
+  // 되돌린다 — 기록 탭에서 코스를 골라 들어왔으면 홈이 아니라 기록 탭으로 복귀시킨다.
+  const walkOriginTabRef = useRef<TabName>('home');
 
   useEffect(() => {
     Promise.all([authStorage.getNickname(), authStorage.getEmail()]).then(
@@ -147,6 +155,7 @@ export function MainRouter({
       return;
     }
 
+    walkOriginTabRef.current = route.name === 'record' ? 'record' : 'home';
     setActiveRoute(selected);
     setRouteSnapPending(true);
     go({ name: 'realWalk' });
@@ -168,8 +177,12 @@ export function MainRouter({
 
   // 안드로이드 하드웨어 뒤로가기. realWalk 단계는 WalkFlow가 직접 처리하므로 여기선 구독하지 않는다.
   const handleAndroidBack = useCallback(() => {
-    // record/me 탭 → 홈 탭으로.
+    // record/me 탭 → 홈 탭으로. 단 기록 탭에서 '즐겨찾기'를 보고 있으면 먼저 '최근 경로'로 되돌린다.
     if (route.name === 'record' || route.name === 'me') {
+      if (route.name === 'record' && recordFilter !== 'recent') {
+        setRecordFilter('recent');
+        return true;
+      }
       go('home');
       return true;
     }
@@ -187,7 +200,7 @@ export function MainRouter({
       return true;
     }
     return false;
-  }, [route.name]);
+  }, [route.name, recordFilter]);
   useAndroidBackHandler(handleAndroidBack, route.name !== 'realWalk');
 
   const activeTab = route.name as TabName;
@@ -222,17 +235,30 @@ export function MainRouter({
               // prep에서 취소한 경우(cancelled_before_start)엔 기존 대화를 유지한다.
               if (event.actualWalkingStarted) {
                 resetChatSession();
+                // 저장된 경로로 다시 걸었으면 기록 탭 "최근 경로" 정렬에 반영한다 —
+                // 재산책은 서버에 아무 기록도 남기지 않으므로 로컬에 시각을 남긴다.
+                if (activeRoute?.id != null) markRouteWalked(activeRoute.id);
               }
               setActiveRoute(null);
               setRouteSnapPending(false);
-              go('home');
+              // prep에서 취소(cancelled_before_start)한 경우엔 들어온 탭으로 되돌린다.
+              // 실제로 걷고 나온 경우(완주·조기종료)엔 새 세션이므로 홈으로.
+              go(
+                event.reason === 'cancelled_before_start'
+                  ? walkOriginTabRef.current
+                  : 'home',
+              );
               // 산책 중 이동한 위치로 홈 지도/다음 대화 출발지를 맞춘다.
               retryLocation();
             }}
           />
         ) : null}
         {route.name === 'record' ? (
-          <RecordTab onSelectRoute={startWalk} />
+          <RecordTab
+            filter={recordFilter}
+            onFilterChange={setRecordFilter}
+            onSelectRoute={startWalk}
+          />
         ) : null}
         {route.name === 'me' ? (
           <MyPageScreen

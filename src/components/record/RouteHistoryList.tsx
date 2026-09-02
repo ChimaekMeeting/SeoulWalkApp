@@ -1,11 +1,17 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { WalkMode, WalkRouteResponse } from '../../types/prewalk';
 import { RouteHistoryItem } from '../../types/routes';
 import { getRouteHistories, toggleFavoriteRoute } from '../../api/routes';
 import { estimateDurationMinutes } from '../../utils/walkEstimate';
 import { buildRouteThumbnailUrl } from '../../utils/routeThumbnail';
-import { formatHistoryDate, routeHistoryToWalkRoute } from '../../utils/routeHistory';
+import {
+  dedupeRouteHistories,
+  formatHistoryDate,
+  routeHistoryToWalkRoute,
+  RouteUsageMap,
+} from '../../utils/routeHistory';
+import { getRecentRouteUsage } from '../../utils/recentRouteUsage';
 import { WALK_MODE_LABEL } from '../../utils/walkMode';
 import { colors, radii, spacing } from '../../theme/tokens';
 import { HistoryPlaceLabel } from './HistoryPlaceLabel';
@@ -19,6 +25,7 @@ interface Props {
 
 export function RouteHistoryList({ filter, onSelectRoute }: Props) {
   const [histories, setHistories] = useState<RouteHistoryItem[]>([]);
+  const [usage, setUsage] = useState<RouteUsageMap>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
@@ -26,12 +33,17 @@ export function RouteHistoryList({ filter, onSelectRoute }: Props) {
     let cancelled = false;
     setLoading(true);
     setError(false);
-    getRouteHistories({
-      limit: 20,
-      is_favorite: filter === 'favorite' ? true : undefined,
-    })
-      .then(res => {
-        if (!cancelled) setHistories(res.histories);
+    Promise.all([
+      getRouteHistories({
+        limit: 20,
+        is_favorite: filter === 'favorite' ? true : undefined,
+      }),
+      getRecentRouteUsage(),
+    ])
+      .then(([res, usageMap]) => {
+        if (cancelled) return;
+        setHistories(res.histories);
+        setUsage(usageMap);
       })
       .catch(() => {
         if (!cancelled) setError(true);
@@ -43,6 +55,13 @@ export function RouteHistoryList({ filter, onSelectRoute }: Props) {
       cancelled = true;
     };
   }, [filter]);
+
+  // 같은 경로로 여러 번 산책해 쌓인 중복 기록을 카드 하나로 합치고, 최근에 걸은
+  // (서버 생성 시각 또는 로컬 재산책 시각 중 나중) 순으로 정렬한다.
+  const visibleHistories = useMemo(
+    () => dedupeRouteHistories(histories, usage),
+    [histories, usage],
+  );
 
   const handleToggleFavorite = async (id: number) => {
     try {
@@ -63,7 +82,7 @@ export function RouteHistoryList({ filter, onSelectRoute }: Props) {
   if (error) {
     return <Text style={styles.historyEmptyText}>경로 기록을 불러오지 못했어요.</Text>;
   }
-  if (histories.length === 0) {
+  if (visibleHistories.length === 0) {
     return (
       <Text style={styles.historyEmptyText}>
         {filter === 'favorite' ? '즐겨찾기한 경로가 없어요.' : '아직 산책 기록이 없어요.'}
@@ -73,7 +92,7 @@ export function RouteHistoryList({ filter, onSelectRoute }: Props) {
 
   return (
     <>
-      {histories.map(history => {
+      {visibleHistories.map(history => {
         const thumbnailUrl = buildRouteThumbnailUrl(history.coordinates);
         return (
           <Pressable

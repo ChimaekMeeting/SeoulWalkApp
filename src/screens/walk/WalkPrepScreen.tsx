@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { RouteMapView } from '../../components/map';
 import { Button } from '../../components/Button';
+import { DevChip } from '../../components/DevChip';
 import { ScreenHeader } from '../../components/ScreenHeader';
 import { StatRow } from '../../components/StatRow';
 import { LocationInfo, WalkRouteResponse } from '../../types/prewalk';
@@ -28,6 +29,11 @@ export function WalkPrepScreen({
 }: Props) {
   const durationMinutes = estimateDurationMinutes(routeResult.total_km);
   const kcal = estimateKcal(routeResult.total_km);
+
+  // [DEV] 실제 스냅은 1초 안에 끝나 "경로를 도로에 맞추는 중…" 상태를 눈으로 보기 어렵다.
+  // 이 토글로 그 상태(힌트 문구 + 시작 버튼 스피너/잠금)를 붙잡아 둔다.
+  const [devForceSnap, setDevForceSnap] = useState(false);
+  const snapping = snapPending || devForceSnap;
 
   return (
     <SafeAreaView style={styles.safe} edges={['left', 'right', 'bottom']}>
@@ -55,13 +61,22 @@ export function WalkPrepScreen({
         />
       </View>
 
-      {snapPending ? (
+      {__DEV__ ? (
+        <View style={styles.devRow}>
+          <DevChip
+            label={devForceSnap ? '[DEV] 스냅 화면 해제' : '[DEV] 도로 스냅 화면 보기'}
+            onPress={() => setDevForceSnap(v => !v)}
+          />
+        </View>
+      ) : null}
+
+      {snapping ? (
         <Text style={styles.snapHint}>경로를 도로에 맞추는 중…</Text>
       ) : null}
       <Button
         label="▶ 산책 시작"
         onPress={onStart}
-        loading={snapPending}
+        loading={snapping}
         style={styles.startButton}
       />
     </SafeAreaView>
@@ -96,6 +111,12 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '800',
     color: colors.ink,
+  },
+  devRow: {
+    marginTop: 'auto',
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.sm,
+    flexDirection: 'row',
   },
   snapHint: {
     marginTop: 'auto',

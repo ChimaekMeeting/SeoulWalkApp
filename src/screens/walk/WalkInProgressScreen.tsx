@@ -1,9 +1,10 @@
 import React, { useEffect, useMemo, useRef } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Pedometer } from 'expo-sensors';
 import { RouteMapView } from '../../components/map';
 import { Button } from '../../components/Button';
+import { DevChip } from '../../components/DevChip';
 import { WalkRouteResponse } from '../../types/prewalk';
 import { WalkEndSnapshot } from '../../types/walk';
 import { useWatchLocation } from '../../hooks/useWatchLocation';
@@ -142,15 +143,6 @@ export function WalkInProgressScreen({ routeResult, onRequestEnd, onGoalReached 
   );
 }
 
-/** 개발 빌드 전용 — 진행률 상태를 강제하는 칩 버튼. */
-function DevChip({ label, onPress }: { label: string; onPress: () => void }) {
-  return (
-    <Pressable style={styles.devChip} onPress={onPress}>
-      <Text style={styles.devChipText}>{label}</Text>
-    </Pressable>
-  );
-}
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -169,21 +161,6 @@ const styles = StyleSheet.create({
   devRow: {
     gap: spacing.xs,
     paddingRight: spacing.lg,
-  },
-  devChip: {
-    minHeight: 32,
-    borderRadius: 10,
-    backgroundColor: '#1a1a2e',
-    borderWidth: 1,
-    borderColor: '#ff6b35',
-    paddingHorizontal: spacing.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  devChipText: {
-    color: '#ff6b35',
-    fontSize: 12,
-    fontWeight: '800',
   },
   statsSection: {
     backgroundColor: colors.card,
