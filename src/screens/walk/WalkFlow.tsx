@@ -12,6 +12,8 @@ type Stage = 'prep' | 'walking' | 'complete';
 interface Props {
   routeResult: WalkRouteResponse;
   currentLocation: LocationInfo | null;
+  /** 도로 스냅(Map Matching)이 아직 진행 중인지. true면 prep의 "산책 시작" 버튼을 잠근다. */
+  routeSnapPending: boolean;
   /** 산책 플로우를 빠져나가 홈으로 돌아갈 때. 취소/조기종료/완료를 event.reason으로 구분한다. */
   onExitToHome: (event: WalkExitEvent) => void;
 }
@@ -21,20 +23,26 @@ interface Props {
  * 아직 실제 네비게이션 스택이 없어 로컬 상태로 화면을 전환한다 —
  * 나중에 진짜 네비게이션이 생기면 이 컴포넌트 하나만 그 자리에 꽂으면 된다.
  */
-export function WalkFlow({ routeResult, currentLocation, onExitToHome }: Props) {
+export function WalkFlow({
+  routeResult,
+  currentLocation,
+  routeSnapPending,
+  onExitToHome,
+}: Props) {
   const [stage, setStage] = useState<Stage>('prep');
   const [endConfirmVisible, setEndConfirmVisible] = useState(false);
-  // 진행률 100% 도달 시 뜨는 완주 확인 모달.
+  // 종착점 도착으로 완료가 확정됐을 때 뜨는 완료 확인 모달.
   const [goalModalVisible, setGoalModalVisible] = useState(false);
   const [snapshot, setSnapshot] = useState<WalkEndSnapshot | null>(null);
   // 실제 walking 단계에 진입한 적이 있는지. prep에서 바로 취소한 경우와 구분한다.
   const walkingStartedRef = useRef(false);
+  // walking 진입 시점의 경로를 얼려, 산책 도중 스냅 결과가 도착해도 tracker 기준이 바뀌지 않게 한다.
+  const frozenRouteRef = useRef<WalkRouteResponse | null>(null);
+  const walkRoute = frozenRouteRef.current ?? routeResult;
 
-  // 목표 거리의 90% 이상 걸었으면 완주로 본다(그 외엔 조기 종료). 세션 리셋 판단에는
-  // 영향 없고(둘 다 actualWalkingStarted=true) 통계·분석용 구분이다.
-  const traveledKm = snapshot?.traveledKm ?? 0;
-  const completedRoute =
-    routeResult.total_km > 0 && traveledKm / routeResult.total_km >= 0.9;
+  // 종착점 geofence 도달(endReason)로 완주/조기 종료를 구분한다. 세션 리셋 판단에는 영향 없고
+  // (둘 다 actualWalkingStarted=true) 통계·분석용 구분이다.
+  const completedRoute = snapshot?.endReason === 'destination_arrived';
 
   const exitFromComplete = useCallback(() => {
     onExitToHome({
@@ -65,8 +73,10 @@ export function WalkFlow({ routeResult, currentLocation, onExitToHome }: Props) 
       <WalkPrepScreen
         routeResult={routeResult}
         currentLocation={currentLocation}
+        snapPending={routeSnapPending}
         onStart={() => {
           walkingStartedRef.current = true;
+          frozenRouteRef.current = routeResult;
           setStage('walking');
         }}
         onBack={() =>
@@ -83,7 +93,7 @@ export function WalkFlow({ routeResult, currentLocation, onExitToHome }: Props) 
     return (
       <>
         <WalkInProgressScreen
-          routeResult={routeResult}
+          routeResult={walkRoute}
           onRequestEnd={s => {
             setSnapshot(s);
             setEndConfirmVisible(true);
@@ -104,7 +114,7 @@ export function WalkFlow({ routeResult, currentLocation, onExitToHome }: Props) 
         <WalkEndConfirmModal
           visible={goalModalVisible}
           icon="🎉"
-          title={'목표 거리를 완주했어요!\n산책을 완료할까요?'}
+          title={'종착점에 도착했어요!\n산책을 완료할까요?'}
           confirmLabel="완료"
           cancelLabel="더 걷기"
           onCancel={() => setGoalModalVisible(false)}
@@ -119,12 +129,13 @@ export function WalkFlow({ routeResult, currentLocation, onExitToHome }: Props) 
 
   return (
     <WalkCompleteScreen
-      routeResult={routeResult}
+      routeResult={walkRoute}
       currentLocation={currentLocation}
-      traveledKm={traveledKm}
+      routeProgressKm={snapshot?.routeProgressKm ?? 0}
+      actualDistanceKm={snapshot?.actualDistanceKm}
       elapsedMs={snapshot?.elapsedMs ?? 0}
       steps={snapshot?.steps}
-      routeId={routeResult.id ?? undefined}
+      routeId={walkRoute.id ?? undefined}
       onHome={exitFromComplete}
     />
   );

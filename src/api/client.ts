@@ -18,6 +18,9 @@ export const client = axios.create({
   timeout: 20000,
 });
 
+// 지금 실행 중인 번들이 어느 백엔드를 보는지 한 줄로 확인용(설문·로그인 상태가 서버마다 다름).
+if (__DEV__) console.log('[api] baseURL =', env.API_BASE_URL);
+
 client.interceptors.request.use(async (config) => {
   const token = await authStorage.getAccessToken();
   if (token) {

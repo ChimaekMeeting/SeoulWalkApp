@@ -18,6 +18,40 @@ export function haversineDistanceKm(a: [number, number], b: [number, number]): n
   return 2 * EARTH_RADIUS_KM * Math.asin(Math.sqrt(h));
 }
 
+/** 폴리라인([위도, 경도] 배열)의 누적 대권거리(km). 좌표가 2개 미만이면 0. */
+export function polylineLengthKm(coords: WalkRouteResponse['coordinates']): number {
+  if (!Array.isArray(coords)) return 0;
+  let km = 0;
+  for (let i = 1; i < coords.length; i++) km += haversineDistanceKm(coords[i - 1], coords[i]);
+  return km;
+}
+
+/**
+ * 점 p([위도, 경도])를 선분 a→b에 사영한다. 위경도를 선분 시작점 위도 기준 평면으로 근사 투영하되
+ * 경도축에 cos(위도) 보정을 적용해(서울에서 경도 1°는 위도 1°의 약 0.79배 거리) 사영 비율 t(0~1)와
+ * 투영점, 투영점까지의 거리(km)를 구한다. mapMatchRoute.ts의 pointToSegmentKm와 동일한 좌표 모델.
+ */
+export function segmentProjection(
+  p: [number, number],
+  a: [number, number],
+  b: [number, number],
+): { t: number; distanceKm: number; point: [number, number] } {
+  const cosLat = Math.cos((a[0] * Math.PI) / 180) || 1;
+  const ax = a[1] * cosLat;
+  const ay = a[0];
+  const bx = b[1] * cosLat;
+  const by = b[0];
+  const px = p[1] * cosLat;
+  const py = p[0];
+  const dx = bx - ax;
+  const dy = by - ay;
+  const lenSq = dx * dx + dy * dy;
+  let t = lenSq === 0 ? 0 : ((px - ax) * dx + (py - ay) * dy) / lenSq;
+  t = Number.isFinite(t) ? Math.max(0, Math.min(1, t)) : 0;
+  const point: [number, number] = [ay + t * dy, (ax + t * dx) / cosLat];
+  return { t, distanceKm: haversineDistanceKm(p, point), point };
+}
+
 /**
  * current를 route 폴리라인의 각 구간에 투영해 가장 가까운 지점을 찾고,
  * 경로 시작점부터 그 지점까지의 누적 거리를 반환한다.
@@ -26,14 +60,17 @@ export function haversineDistanceKm(a: [number, number], b: [number, number]): n
  * @param window 지정하면 route 위 [centerKm - windowKm, centerKm + windowKm] 범위의 구간만 후보로
  *   본다. 순환 코스처럼 경로가 자기 자신과 가까이 지나가는 구간(출발점≈도착점 등)에서, 실제로는
  *   경로 뒤쪽을 걷고 있는데 지리적으로만 가까운 앞쪽 구간에 잘못 매칭되는 걸 막기 위한 것 —
- *   "직전에 있던 지점 근처에서 우선 찾는다"는 제약.
+ *   "직전에 있던 지점 근처에서 우선 찾는다"는 제약. 창 안에 후보가 하나도 없으면
+ *   distanceToRouteKm는 Infinity로 반환된다(호출부가 창을 넓히거나 전역 탐색으로 폴백).
  */
 export function projectOntoRoute(
   current: [number, number],
   route: WalkRouteResponse['coordinates'],
   window?: { centerKm: number; windowKm: number },
 ): { distanceAlongRouteKm: number; distanceToRouteKm: number } {
-  if (route.length === 0) return { distanceAlongRouteKm: 0, distanceToRouteKm: 0 };
+  if (!Array.isArray(route) || route.length === 0) {
+    return { distanceAlongRouteKm: 0, distanceToRouteKm: Infinity };
+  }
   if (route.length === 1) {
     return { distanceAlongRouteKm: 0, distanceToRouteKm: haversineDistanceKm(current, route[0]) };
   }
@@ -47,19 +84,7 @@ export function projectOntoRoute(
     const segEnd = route[i + 1];
     const segLengthKm = haversineDistanceKm(segStart, segEnd);
 
-    // 세그먼트 위 투영 비율 t(0~1)를 위도/경도 평면상의 벡터 투영으로 근사.
-    const [lat1, lon1] = segStart;
-    const [lat2, lon2] = segEnd;
-    const [latC, lonC] = current;
-
-    const dx = lon2 - lon1;
-    const dy = lat2 - lat1;
-    const lenSq = dx * dx + dy * dy;
-    let t = lenSq === 0 ? 0 : ((lonC - lon1) * dx + (latC - lat1) * dy) / lenSq;
-    t = Math.max(0, Math.min(1, t));
-
-    const projected: [number, number] = [lat1 + t * dy, lon1 + t * dx];
-    const distanceToRouteKm = haversineDistanceKm(current, projected);
+    const { t, distanceKm: distanceToRouteKm } = segmentProjection(current, segStart, segEnd);
     const distanceAlongRouteKm = cumulativeKm + t * segLengthKm;
 
     const withinWindow =

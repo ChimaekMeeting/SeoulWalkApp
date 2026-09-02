@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Pedometer } from 'expo-sensors';
 import { RouteMapView } from '../../components/map';
@@ -7,17 +7,15 @@ import { Button } from '../../components/Button';
 import { WalkRouteResponse } from '../../types/prewalk';
 import { WalkEndSnapshot } from '../../types/walk';
 import { useWatchLocation } from '../../hooks/useWatchLocation';
-import { WalkProgressTracker, deriveProgress } from '../../utils/walkProgress';
+import { useWalkProgress } from '../../hooks/useWalkProgress';
+import { resolveEndReason } from '../../utils/walkProgress';
+import { polylineLengthKm } from '../../utils/geo';
 import { colors, spacing } from '../../theme/tokens';
-
-// 진행률이 이 값 이상이면 완주로 보고 완료를 제안한다. 경로 좌표열의 누적 길이와 total_km,
-// GPS 투영 오차 때문에 정확히 1.0에는 안 닿을 수 있어 살짝 낮춘다.
-const GOAL_REACHED_RATIO = 0.99;
 
 interface Props {
   routeResult: WalkRouteResponse;
   onRequestEnd: (snapshot: WalkEndSnapshot) => void;
-  /** 진행률이 목표(≈100%)에 도달했을 때 1회 호출 — 상위(WalkFlow)가 완주 확인 모달을 띄운다. */
+  /** 종착점 geofence로 완료가 확정됐을 때 1회 호출 — 상위(WalkFlow)가 완료 확인 모달을 띄운다. */
   onGoalReached: (snapshot: WalkEndSnapshot) => void;
 }
 
@@ -27,11 +25,17 @@ export function WalkInProgressScreen({ routeResult, onRequestEnd, onGoalReached 
   const insets = useSafeAreaInsets();
   const startedAtRef = useRef(Date.now());
   const stepsRef = useRef<number | null>(null);
-  // GPS 튐 필터링·연속 이탈 확인·직전 매칭 지점 기억을 위해 산책 한 번 동안 상태를 유지하는
-  // 트래커. 화면이 마운트된 동안(=산책 한 번) 하나의 인스턴스를 그대로 재사용한다.
-  const trackerRef = useRef(new WalkProgressTracker());
-  // 완주 제안(onGoalReached)은 한 번만 — "더 걷기"를 눌러도 다시 뜨지 않게.
+  // 완료 제안(onGoalReached)은 한 번만 — "더 걷기"를 눌러도 다시 뜨지 않게.
   const goalFiredRef = useRef(false);
+
+  // 진행률 분모는 백엔드 total_km가 아니라 tracker가 실제 투영에 쓰는 폴리라인의 누적 길이다
+  // (직선 현 vs 실도로라 스케일이 달라 total_km로 나누면 종착점에서도 100%에 못 닿는다).
+  // routeResult는 WalkFlow가 walking 진입 시점에 얼린 값이라 산책 중 좌표가 바뀌지 않는다.
+  const routeLengthKm = useMemo(
+    () => polylineLengthKm(routeResult.coordinates),
+    [routeResult.coordinates],
+  );
+  const { progress, dev } = useWalkProgress(coords, routeResult.coordinates, routeLengthKm);
 
   useEffect(() => {
     let subscription: { remove: () => void } | undefined;
@@ -50,55 +54,74 @@ export function WalkInProgressScreen({ routeResult, onRequestEnd, onGoalReached 
     };
   }, []);
 
-  const progress = useMemo(() => {
-    // coords가 아직 없는 경우는 첫 GPS fix 전뿐이라, 트래커도 아직 0에서 시작한 상태다.
-    if (!coords) {
-      return deriveProgress(0, routeResult.total_km);
-    }
-    return trackerRef.current.update(
-      [coords.latitude, coords.longitude],
-      routeResult.coordinates,
-      routeResult.total_km,
-    );
-  }, [coords, routeResult]);
-
   const currentLocation = coords
     ? { lat: coords.latitude, lon: coords.longitude, address: null, place_name: null }
     : null;
 
   const buildSnapshot = (): WalkEndSnapshot => ({
-    traveledKm: progress.traveledKm,
+    routeProgressKm: progress.routeProgressKm,
+    routeProgressRatio: progress.routeProgressRatio,
+    remainingRouteKm: progress.remainingRouteKm,
+    actualDistanceKm: progress.actualDistanceKm,
     elapsedMs: Date.now() - startedAtRef.current,
     steps: stepsRef.current,
+    endReason: resolveEndReason(progress.state, coords != null),
   });
 
   const handleEnd = () => {
     onRequestEnd(buildSnapshot());
   };
 
-  // 목표 거리에 도달하면 완주 확인을 1회 제안한다.
+  // 종착점 geofence로 완료가 확정되면 완료 확인을 1회 제안한다(진행률 숫자가 아니라 state 기준).
   useEffect(() => {
     if (goalFiredRef.current) return;
-    if (progress.progressRatio < GOAL_REACHED_RATIO) return;
+    if (progress.state !== 'complete') return;
     goalFiredRef.current = true;
     onGoalReached(buildSnapshot());
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [progress.progressRatio]);
+  }, [progress.state]);
 
   return (
     <View style={styles.container}>
       <SafeAreaView style={styles.statsSection} edges={['top', 'left', 'right']}>
         <View style={styles.statsHeader}>
-          <Text style={styles.traveledKm}>{progress.traveledKm.toFixed(1)} km</Text>
+          <Text style={styles.traveledKm}>{progress.routeProgressKm.toFixed(1)} km</Text>
           <Text style={styles.goalKm}>목표 {routeResult.total_km.toFixed(1)}km</Text>
         </View>
         <View style={styles.progressTrack}>
-          <View style={[styles.progressFill, { width: `${Math.round(progress.progressRatio * 100)}%` }]} />
+          <View
+            style={[
+              styles.progressFill,
+              { width: `${Math.round(progress.routeProgressRatio * 100)}%` },
+            ]}
+          />
         </View>
         <View style={styles.statsFooter}>
-          <Text style={styles.progressLabel}>{Math.round(progress.progressRatio * 100)}% 걸었어요</Text>
-          <Text style={styles.remainingLabel}>남은 거리 {progress.remainingKm.toFixed(1)}km</Text>
+          <Text style={styles.progressLabel}>
+            {Math.round(progress.routeProgressRatio * 100)}% 걸었어요
+          </Text>
+          <Text style={styles.remainingLabel}>
+            남은 거리 {progress.remainingRouteKm.toFixed(1)}km
+          </Text>
         </View>
+        {dev ? (
+          <View style={styles.devPanel}>
+            <Text style={styles.devLabel}>[DEV] state: {progress.state}</Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.devRow}
+            >
+              <DevChip label="25%" onPress={() => dev.seek(0.25)} />
+              <DevChip label="50%" onPress={() => dev.seek(0.5)} />
+              <DevChip label="99%" onPress={() => dev.seek(0.99)} />
+              <DevChip label="완주" onPress={dev.complete} />
+              <DevChip label="이탈" onPress={dev.offRoute} />
+              <DevChip label="GPS 재개" onPress={dev.resume} />
+              <DevChip label="0%로 초기화" onPress={dev.reset} />
+            </ScrollView>
+          </View>
+        ) : null}
       </SafeAreaView>
 
       <View style={styles.mapSection}>
@@ -106,7 +129,7 @@ export function WalkInProgressScreen({ routeResult, onRequestEnd, onGoalReached 
           mode="walk"
           currentLocation={currentLocation}
           route={routeResult.coordinates}
-          traveledKm={progress.traveledKm}
+          routeProgressKm={progress.routeProgressKm}
           style={StyleSheet.absoluteFill}
           zoomControlBottomOffset={96 + insets.bottom}
         />
@@ -119,10 +142,48 @@ export function WalkInProgressScreen({ routeResult, onRequestEnd, onGoalReached 
   );
 }
 
+/** 개발 빌드 전용 — 진행률 상태를 강제하는 칩 버튼. */
+function DevChip({ label, onPress }: { label: string; onPress: () => void }) {
+  return (
+    <Pressable style={styles.devChip} onPress={onPress}>
+      <Text style={styles.devChipText}>{label}</Text>
+    </Pressable>
+  );
+}
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#000',
+  },
+  devPanel: {
+    gap: spacing.xs,
+    marginTop: spacing.xs,
+  },
+  devLabel: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#ff6b35',
+    letterSpacing: 0.3,
+  },
+  devRow: {
+    gap: spacing.xs,
+    paddingRight: spacing.lg,
+  },
+  devChip: {
+    minHeight: 32,
+    borderRadius: 10,
+    backgroundColor: '#1a1a2e',
+    borderWidth: 1,
+    borderColor: '#ff6b35',
+    paddingHorizontal: spacing.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  devChipText: {
+    color: '#ff6b35',
+    fontSize: 12,
+    fontWeight: '800',
   },
   statsSection: {
     backgroundColor: colors.card,

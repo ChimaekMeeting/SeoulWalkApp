@@ -13,7 +13,7 @@ import { RouteLayer } from './RouteLayer';
 import { RouteEndpointMarkers } from './RouteEndpointMarkers';
 import { RouteDirectionArrows } from './RouteDirectionArrows';
 
-// 아직 안 걸은 구간(traveledKm 이후)을 지나온 구간과 다른 색으로 표시할 때 쓰는 "남은 길" 색.
+// 아직 안 걸은 구간(routeProgressKm 이후)을 지나온 구간과 다른 색으로 표시할 때 쓰는 "남은 길" 색.
 // 순환 코스에서 어디까지 걸었고 어느 방향으로 진행 중인지 지도만 보고 알 수 있게 하기 위함.
 // 지나온 구간은 원래 경로색(routeColor, 기본 파랑)을 그대로 쓰고, 남은 구간만 옅게 — 이 화면의
 // 진행률 바(걸은 만큼 진하게 채워지고 track은 회색인 것)와 같은 방향으로 맞춘 것.
@@ -54,11 +54,11 @@ interface WalkMapViewProps extends AppMapViewCommonProps {
   route: WalkRouteResponse['coordinates'];
   routeColor?: string;
   /**
-   * 지금까지 걸은 거리(km). 전달하면 경로 선을 이 지점 기준으로 지나온 구간(routeColor 그대로,
-   * 진하게)/남은 구간(옅은 회색)으로 나눠 그리고, 출발·도착 마커도 함께 표시한다(순환 코스에서
-   * 방향·진행 상황을 지도로 바로 알 수 있도록). 생략하면 기존처럼 경로 전체를 단일 색으로 그린다.
+   * 경로 시작점부터 현재까지의 진행 거리(km). 전달하면 경로 선을 이 지점 기준으로 지나온 구간
+   * (routeColor 그대로, 진하게)/남은 구간(옅은 회색)으로 나눠 그리고, 출발·도착 마커도 함께
+   * 표시한다(순환 코스에서 방향·진행 상황을 지도로 바로 알 수 있도록). 생략하면 경로 전체를 단일 색으로.
    */
-  traveledKm?: number;
+  routeProgressKm?: number;
 }
 
 export type AppMapViewProps = OverviewMapViewProps | WalkMapViewProps;
@@ -157,10 +157,10 @@ export function AppMapView(props: AppMapViewProps) {
 
         {isWalk && props.route.length > 0 && (
           <>
-            {props.traveledKm != null ? (
+            {props.routeProgressKm != null ? (
               <TraveledSplitRouteLayers
                 route={props.route}
-                traveledKm={props.traveledKm}
+                routeProgressKm={props.routeProgressKm}
                 traveledColor={props.routeColor}
               />
             ) : (
@@ -180,17 +180,17 @@ export function AppMapView(props: AppMapViewProps) {
   );
 }
 
-/** route를 traveledKm 지점에서 잘라 지나온 구간/남은 구간을 다른 색 레이어 두 개로 그린다. */
+/** route를 routeProgressKm 지점에서 잘라 지나온 구간/남은 구간을 다른 색 레이어 두 개로 그린다. */
 function TraveledSplitRouteLayers({
   route,
-  traveledKm,
+  routeProgressKm,
   traveledColor,
 }: {
   route: WalkRouteResponse['coordinates'];
-  traveledKm: number;
+  routeProgressKm: number;
   traveledColor?: string;
 }) {
-  const { before, after } = sliceRouteAtDistanceKm(route, traveledKm);
+  const { before, after } = sliceRouteAtDistanceKm(route, routeProgressKm);
   return (
     <>
       {before.length > 1 && (

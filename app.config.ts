@@ -54,6 +54,9 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
         },
       },
     ],
+    // Pins the Kakao Android SDK to a non-vulnerable version — see the plugin
+    // for why the library's own `overrideKakaoSDKVersion` option doesn't work.
+    './plugins/withKakaoSdkVersion',
     'expo-secure-store',
     [
       'expo-location',
