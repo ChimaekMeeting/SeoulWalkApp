@@ -1,9 +1,11 @@
 import {
+  computeRouteBounds,
   haversineDistanceKm,
   polylineLengthKm,
   projectOntoRoute,
   segmentProjection,
   sliceRouteAtDistanceKm,
+  zoomLevelForBounds,
 } from '../geo';
 import { WalkRouteResponse } from '../../types/prewalk';
 
@@ -107,6 +109,50 @@ describe('projectOntoRoute', () => {
     const p: [number, number] = [37.5008, 127.002];
     const near = projectOntoRoute(p, uShape, { centerKm: total * 0.85, windowKm: 0.15 });
     expect(near.distanceAlongRouteKm).toBeGreaterThan(total * 0.6);
+  });
+});
+
+describe('zoomLevelForBounds', () => {
+  // Mapbox GL(512px 타일)에서 zoom의 미터/픽셀.
+  const metersPerPx = (lat: number, zoom: number) =>
+    (40075016.686 * Math.cos((lat * Math.PI) / 180)) / (512 * 2 ** zoom);
+
+  it('경로 전체가 뷰포트 안에 들어오는 줌을 준다(잘리지 않음)', () => {
+    // 약 1km 편도 경로(WalkPrepScreen 미리보기 카드 크기).
+    const route: WalkRouteResponse['coordinates'] = [
+      [37.6, 126.92],
+      [37.603, 126.928],
+      [37.606, 126.935],
+    ];
+    const bounds = computeRouteBounds(route)!;
+    const width = 340;
+    const height = 300;
+    const padding = 40;
+    const zoom = zoomLevelForBounds(bounds, width, height, padding);
+
+    const midLat = (bounds.minLat + bounds.maxLat) / 2;
+    const mpp = metersPerPx(midLat, zoom);
+    const spanLatM = (bounds.maxLat - bounds.minLat) * 111_320;
+    const spanLonM =
+      (bounds.maxLon - bounds.minLon) * 111_320 * Math.cos((midLat * Math.PI) / 180);
+
+    expect(spanLatM).toBeLessThanOrEqual((height - padding * 2) * mpp);
+    expect(spanLonM).toBeLessThanOrEqual((width - padding * 2) * mpp);
+  });
+
+  it('작은 bbox일수록 더 크게 확대한다', () => {
+    const wide = { minLat: 37.5, maxLat: 37.53, minLon: 127.0, maxLon: 127.04 };
+    const tight = { minLat: 37.5, maxLat: 37.501, minLon: 127.0, maxLon: 127.001 };
+    expect(zoomLevelForBounds(tight, 300, 300)).toBeGreaterThan(
+      zoomLevelForBounds(wide, 300, 300),
+    );
+  });
+
+  it('mapConfig 줌 범위(10~18)를 벗어나지 않는다', () => {
+    const hair = { minLat: 37.5, maxLat: 37.5001, minLon: 127.0, maxLon: 127.0001 };
+    const country = { minLat: 33, maxLat: 39, minLon: 124, maxLon: 132 };
+    expect(zoomLevelForBounds(hair, 300, 300)).toBeLessThanOrEqual(18);
+    expect(zoomLevelForBounds(country, 300, 300)).toBeGreaterThanOrEqual(10);
   });
 });
 

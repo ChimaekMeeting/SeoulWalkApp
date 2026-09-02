@@ -195,7 +195,10 @@ export function centerOfBounds(bounds: LatLonBounds): [number, number] {
   return [(bounds.minLon + bounds.maxLon) / 2, (bounds.minLat + bounds.maxLat) / 2];
 }
 
-const WORLD_TILE_PX = 256;
+// Mapbox GL(및 @rnmapbox)은 512px 타일을 쓰므로 zoom 0에서 세계가 512px에 들어온다.
+// 256px 타일 기준(구글 슬리피맵) 공식을 그대로 쓰면 결과 줌이 한 단계씩 높게(2배 확대) 나와
+// 경로가 화면 밖으로 잘린다 — 타일 크기를 512로 맞춰 그 오프셋을 없앤다.
+const WORLD_TILE_PX = 512;
 
 function latRad(lat: number): number {
   const sin = Math.sin((lat * Math.PI) / 180);
@@ -210,7 +213,8 @@ function zoomForFraction(viewportPx: number, fraction: number): number {
 
 /**
  * lat/lon bounds가 주어진 뷰포트(px) 안에 딱 들어오는 줌 레벨을 계산한다
- * (Google Maps의 getBoundsZoomLevel과 동일한 공식). Mapbox Camera의 imperative
+ * (Google Maps의 getBoundsZoomLevel과 같은 공식, 단 WORLD_TILE_PX=512로 Mapbox GL
+ * 줌 정의에 맞춤). Mapbox Camera의 imperative
  * fitBounds 대신 이 값을 zoomLevel/centerCoordinate로 선언적으로 넘기면,
  * 이후 수동 줌 버튼과 같은 state를 공유해서 서로 어긋나지 않는다.
  */

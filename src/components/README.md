@@ -12,6 +12,7 @@ src/components/
 ├─ TabScreen.tsx       # 하단 탭(기록·마이페이지) 공통 셸: 헤더 + 스크롤 목록
 ├─ AppBottomSheet.tsx  # gorhom BottomSheet를 감싼 범용 래퍼 (src/bottomsheets/의 화면별 시트가 이걸 씀)
 ├─ BottomNav.tsx       # 하단 탭 바(홈/기록/마이페이지) — MainRouter가 렌더링
+├─ DevChip.tsx         # 개발 빌드 전용 주황 칩 버튼 (화면 상태 강제용) — __DEV__ 게이팅은 쓰는 쪽에서
 ├─ chat/                # 홈 화면 하단시트에 들어가는 AI 챗봇 대화 UI
 │  ├─ ChatConversation.tsx  # 대화 흐름 전체를 관리하는 컨테이너 (이걸 import해서 쓰면 됨)
 │  ├─ ChatInput.tsx         # 하단 입력창
@@ -156,5 +157,5 @@ const locationInfo: LocationInfo | null = coords
 
 `src/screens/record/RecordTab.tsx`가 303줄까지 커져서 분리한 것들입니다.
 
-- **`RouteHistoryList`**: `filter`("recent" | "favorite")를 props로 받아 `GET /api/user/routes`를 직접 호출하고, 카드 목록(지도 썸네일 + 모드 라벨 + 거리/시간 + 즐겨찾기 별)을 렌더링합니다. 카드를 누르면 `routeHistoryToWalkRoute`(`src/utils/routeHistory.ts`)로 변환한 뒤 `onSelectRoute` 콜백을 호출해 6a(산책 전)로 다시 들어갈 수 있게 합니다.
+- **`RouteHistoryList`**: `filter`("recent" | "favorite")를 props로 받아 `GET /api/user/routes`를 직접 호출하고, 카드 목록(지도 썸네일 + 모드 라벨 + 거리/시간 + 즐겨찾기 별)을 렌더링합니다. 카드를 누르면 `routeHistoryToWalkRoute`(`src/utils/routeHistory.ts`)로 변환한 뒤 `onSelectRoute` 콜백을 호출해 6a(산책 전)로 다시 들어갈 수 있게 합니다. 같은 경로로 여러 번 걸어 서버에 중복 저장된 기록은 `dedupeRouteHistories`(`src/utils/routeHistory.ts`)로 카드 하나로 합치고, "최근에 걸은 순"으로 정렬합니다. 저장된 경로를 골라 다시 산책하는 건 서버에 아무 기록도 남기지 않으므로(챗봇 플로우에서만 RouteHistory가 생성됨), `MainRouter`가 산책 종료 시 `markRouteWalked`(`src/utils/recentRouteUsage.ts`)로 route id별 마지막 산책 시각을 이 기기에 저장하고, 정렬은 서버 `created_at`과 이 로컬 시각 중 나중 값을 씁니다 — 그 경로로 다시 걸으면 목록 맨 위로 올라옵니다.
 - **`HistoryPlaceLabel`**: 카드 안에서 좌표(`origin_lat`/`origin_lon` 등)를 역지오코딩(`src/utils/reverseGeocode.ts`)해서 실제 장소명을 보여줍니다. 이름만으로 구분 안 되는 같은 모드(예: "순환 코스"끼리)를 구분하기 위한 용도입니다.
