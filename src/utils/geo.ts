@@ -38,6 +38,17 @@ export function isLoopRoute(coords: WalkRouteResponse['coordinates']): boolean {
 }
 
 /**
+ * route 배열의 순서만 뒤집는다(좌표 자체는 그대로) — 순환 코스 진행 방향 선택(WalkPrepScreen의
+ * 방향 전환 버튼)용. 아직 산책을 시작하기 전, 진행률이 0인 상태에서만 쓴다 — 산책 도중에 방향을
+ * 바꾸는 기능은 진행률 계산이 꼬이는 문제가 있어 빼고, 방향은 산책 시작 전에만 고르게 했다.
+ */
+export function reverseRoute(
+  coords: WalkRouteResponse['coordinates'],
+): WalkRouteResponse['coordinates'] {
+  return [...coords].reverse();
+}
+
+/**
  * 점 p([위도, 경도])를 선분 a→b에 사영한다. 위경도를 선분 시작점 위도 기준 평면으로 근사 투영하되
  * 경도축에 cos(위도) 보정을 적용해(서울에서 경도 1°는 위도 1°의 약 0.79배 거리) 사영 비율 t(0~1)와
  * 투영점, 투영점까지의 거리(km)를 구한다. mapMatchRoute.ts의 pointToSegmentKm와 동일한 좌표 모델.

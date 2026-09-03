@@ -1,7 +1,10 @@
 import React from 'react';
 import { StatusBar, StyleSheet, Text, View } from 'react-native';
 
-const BG = '#0D0D0D';
+// App.tsx의 LoadingScreen(브랜드 스플래시 다음에 뜨는 로딩 화면)도 같은 배경색을 써서
+// 두 화면 전환이 색 변화 없이 자연스럽게 이어지도록 export한다.
+export const BRAND_SPLASH_BG = '#0D0D0D';
+const BG = BRAND_SPLASH_BG;
 
 export function BrandSplashScreen() {
   return (

@@ -77,9 +77,11 @@ export function WalkFlow({
         routeResult={routeResult}
         currentLocation={currentLocation}
         snapPending={routeSnapPending}
-        onStart={() => {
+        onStart={coordinates => {
           walkingStartedRef.current = true;
-          frozenRouteRef.current = routeResult;
+          // 방향 전환 안 했으면(같은 배열 참조) routeResult를 그대로 써서 불필요한 객체를 안 만든다.
+          frozenRouteRef.current =
+            coordinates === routeResult.coordinates ? routeResult : { ...routeResult, coordinates };
           setStage('walking');
         }}
         onBack={() =>

@@ -74,7 +74,7 @@ it('"산책 시작" 이후 부모가 경로를 교체해도 walking 화면은 �
   const r2 = mkRoute(2);
   const renderer = mount(r1);
 
-  ReactTestRenderer.act(() => calls.prep.onStart());
+  ReactTestRenderer.act(() => calls.prep.onStart(r1.coordinates));
   expect(calls.walk).toBeDefined();
   expect(calls.walk.routeResult).toBe(r1);
 
@@ -90,4 +90,16 @@ it('"산책 시작" 이후 부모가 경로를 교체해도 walking 화면은 �
     );
   });
   expect(calls.walk.routeResult).toBe(r1);
+});
+
+it('산책 준비 화면에서 순환 코스 방향을 반대로 골랐으면(onStart에 다른 좌표 배열) 그 좌표로 산책이 시작된다', () => {
+  const r1 = mkRoute(1);
+  const reversedCoords = [...r1.coordinates].reverse();
+  mount(r1);
+
+  ReactTestRenderer.act(() => calls.prep.onStart(reversedCoords));
+  expect(calls.walk.routeResult.coordinates).toBe(reversedCoords);
+  // 좌표만 바뀌고 나머지 필드(총 거리·모드 등)는 원본 routeResult 그대로 유지된다.
+  expect(calls.walk.routeResult.total_km).toBe(r1.total_km);
+  expect(calls.walk.routeResult.mode).toBe(r1.mode);
 });
