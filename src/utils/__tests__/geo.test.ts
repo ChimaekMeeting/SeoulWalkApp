@@ -4,6 +4,7 @@ import {
   isLoopRoute,
   polylineLengthKm,
   projectOntoRoute,
+  reverseRoute,
   segmentProjection,
   sliceRouteAtDistanceKm,
   zoomLevelForBounds,
@@ -41,6 +42,17 @@ describe('isLoopRoute', () => {
   it('좌표가 2개 미만이면 false', () => {
     expect(isLoopRoute([])).toBe(false);
     expect(isLoopRoute([[37.5, 127.0]])).toBe(false);
+  });
+});
+
+describe('reverseRoute', () => {
+  it('좌표 순서를 뒤집는다(좌표값 자체는 그대로)', () => {
+    expect(reverseRoute(NS_ROUTE)).toEqual([...NS_ROUTE].reverse());
+  });
+  it('원본 배열을 변형하지 않는다', () => {
+    const copy = [...NS_ROUTE];
+    reverseRoute(NS_ROUTE);
+    expect(NS_ROUTE).toEqual(copy);
   });
 });
 

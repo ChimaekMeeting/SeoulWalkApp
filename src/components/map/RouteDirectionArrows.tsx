@@ -2,6 +2,18 @@ import React from 'react';
 import Mapbox from '@rnmapbox/maps';
 import { WalkRouteResponse } from '../../types/prewalk';
 import { routeCoordinatesToLineString } from '../../utils/geo';
+import { colors } from '../../theme/tokens';
+
+interface Props {
+  route: WalkRouteResponse['coordinates'];
+  /**
+   * 'large'면 화살표를 더 크고 촘촘하게, 테두리(halo)를 진하게 그린다 — WalkPrepScreen의 작은
+   * 미리보기 지도(밝은 streets 스타일)에서 기본 크기가 잘 안 보인다는 피드백에 따른 것.
+   * 색 자체는 default와 같은 흰 글자+검정 테두리 — halo만 더 굵고 불투명해서 밝은 지도 위에서도
+   * 잘 보인다. 기본은 'default'.
+   */
+  size?: 'default' | 'large';
+}
 
 /**
  * 경로 선을 따라 일정 간격으로 화살표(▶) 기호를 찍는다. Mapbox GL이 symbolPlacement: 'line'일
@@ -13,8 +25,9 @@ import { routeCoordinatesToLineString } from '../../utils/geo';
  * 출발점과 도착점이 겹쳐서 마커만으로는 방향을 알 수 없는 경우, 산책을 시작하기도 전(진행률 0%)에도
  * 이 화살표만으로 어느 쪽으로 걸어야 하는지 바로 알 수 있어야 한다.
  */
-export function RouteDirectionArrows({ route }: { route: WalkRouteResponse['coordinates'] }) {
+export function RouteDirectionArrows({ route, size = 'default' }: Props) {
   if (route.length < 2) return null;
+  const large = size === 'large';
 
   return (
     <Mapbox.ShapeSource id="route-direction-source" shape={routeCoordinatesToLineString(route)}>
@@ -22,12 +35,12 @@ export function RouteDirectionArrows({ route }: { route: WalkRouteResponse['coor
         id="route-direction-arrows"
         style={{
           symbolPlacement: 'line',
-          symbolSpacing: 60,
+          symbolSpacing: large ? 40 : 60,
           textField: '▶',
-          textSize: 14,
+          textSize: large ? 22 : 14,
           textColor: '#FFFFFF',
-          textHaloColor: 'rgba(17,17,17,0.65)',
-          textHaloWidth: 1.5,
+          textHaloColor: large ? colors.ink : 'rgba(17,17,17,0.65)',
+          textHaloWidth: large ? 2 : 1.5,
           textRotationAlignment: 'map',
           textPitchAlignment: 'map',
           textKeepUpright: false,

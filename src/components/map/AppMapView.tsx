@@ -46,6 +46,13 @@ interface OverviewMapViewProps extends AppMapViewCommonProps {
   mode: 'overview';
   /** 코스를 선택했을 때만 전달. state.route_result.coordinates를 그대로 넘기면 된다. */
   previewRoute?: WalkRouteResponse['coordinates'];
+  /**
+   * previewRoute 위에 진행 방향 화살표(RouteDirectionArrows)를 같이 그린다. 기본 꺼짐 —
+   * WalkPrepScreen이 켜서 순환·편도 모두 진행 방향을 보여주는 용도.
+   */
+  showDirectionArrows?: boolean;
+  /** previewRoute 선을 점선 대신 실선으로 그린다. 기본은 점선(기존 동작 유지). */
+  previewRouteSolid?: boolean;
 }
 
 interface WalkMapViewProps extends AppMapViewCommonProps {
@@ -201,7 +208,15 @@ export function AppMapView(props: AppMapViewProps) {
           </>
         )}
         {!isWalk && props.previewRoute && props.previewRoute.length > 0 && (
-          <RouteLayer data={routeCoordinatesToLineString(props.previewRoute)} dashed />
+          <>
+            <RouteLayer
+              data={routeCoordinatesToLineString(props.previewRoute)}
+              dashed={!props.previewRouteSolid}
+            />
+            {props.showDirectionArrows && (
+              <RouteDirectionArrows route={props.previewRoute} size="large" />
+            )}
+          </>
         )}
 
         <Mapbox.UserLocation visible animated showsUserHeadingIndicator={isWalk} />

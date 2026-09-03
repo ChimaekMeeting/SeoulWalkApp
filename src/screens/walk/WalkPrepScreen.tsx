@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import React, { useMemo, useState } from 'react';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { RouteMapView } from '../../components/map';
 import { Button } from '../../components/Button';
@@ -9,14 +9,16 @@ import { StatRow } from '../../components/StatRow';
 import { LocationInfo, WalkRouteResponse } from '../../types/prewalk';
 import { estimateDurationMinutes, estimateKcal } from '../../utils/walkEstimate';
 import { WALK_MODE_LABEL } from '../../utils/walkMode';
-import { colors, radii, spacing } from '../../theme/tokens';
+import { isLoopRoute, reverseRoute } from '../../utils/geo';
+import { colors, radii, shadows, spacing } from '../../theme/tokens';
 
 interface Props {
   routeResult: WalkRouteResponse;
   currentLocation: LocationInfo | null;
   /** 도로 스냅(Map Matching)이 아직 진행 중이면 시작 버튼 대신 스냅 바를 띄운다 — 산책 중 경로 교체를 없애기 위함. */
   snapPending: boolean;
-  onStart: () => void;
+  /** 방향 전환 버튼으로 고른 최종 좌표(반전 안 했으면 routeResult.coordinates 그대로)를 넘긴다. */
+  onStart: (coordinates: WalkRouteResponse['coordinates']) => void;
   onBack: () => void;
 }
 
@@ -35,6 +37,17 @@ export function WalkPrepScreen({
   const [devForceSnap, setDevForceSnap] = useState(false);
   const snapping = snapPending || devForceSnap;
 
+  // 순환 코스 진행 방향 선택 — 편도는 시작·끝이 고정이라 버튼 자체를 안 보여준다. 산책을
+  // 시작하기 전에만 고를 수 있게 해서(산책 중엔 안 바뀜) 진행률 계산이 방향과 무관하게 단순하다.
+  const isLoop = useMemo(() => isLoopRoute(routeResult.coordinates), [routeResult.coordinates]);
+  const [reversed, setReversed] = useState(false);
+  const previewRoute = useMemo(
+    () => (reversed ? reverseRoute(routeResult.coordinates) : routeResult.coordinates),
+    [reversed, routeResult.coordinates],
+  );
+
+  const handleStart = () => onStart(previewRoute);
+
   return (
     <SafeAreaView style={styles.safe} edges={['left', 'right', 'bottom']}>
       <ScreenHeader title="산책 준비" onBack={onBack} plain align="center" />
@@ -43,10 +56,25 @@ export function WalkPrepScreen({
         <RouteMapView
           mode="overview"
           currentLocation={currentLocation}
-          previewRoute={routeResult.coordinates}
+          previewRoute={previewRoute}
+          previewRouteSolid
+          showDirectionArrows
           fitRouteOnMount
           style={styles.map}
         />
+
+        {isLoop ? (
+          <View style={styles.directionOverlay} pointerEvents="box-none">
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="순환 경로 진행 방향 전환"
+              style={styles.directionButton}
+              onPress={() => setReversed(v => !v)}
+            >
+              <Text style={styles.directionButtonText}>⇄ 방향 전환</Text>
+            </Pressable>
+          </View>
+        ) : null}
       </View>
 
       <View style={styles.infoCard}>
@@ -76,7 +104,7 @@ export function WalkPrepScreen({
           <Text style={styles.snapBarText}>경로를 도로에 맞추는 중…</Text>
         </View>
       ) : (
-        <Button label="▶ 산책 시작" onPress={onStart} style={styles.startButton} />
+        <Button label="▶ 산책 시작" onPress={handleStart} style={styles.startButton} />
       )}
     </SafeAreaView>
   );
@@ -96,6 +124,25 @@ const styles = StyleSheet.create({
   },
   map: {
     flex: 1,
+  },
+  directionOverlay: {
+    position: 'absolute',
+    left: spacing.sm,
+    bottom: spacing.sm,
+  },
+  directionButton: {
+    paddingHorizontal: spacing.md,
+    height: 40,
+    borderRadius: 999,
+    backgroundColor: colors.card,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...shadows.map,
+  },
+  directionButtonText: {
+    color: colors.ink,
+    fontSize: 13,
+    fontWeight: '700',
   },
   infoCard: {
     marginHorizontal: spacing.lg,

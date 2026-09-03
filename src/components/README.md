@@ -84,7 +84,7 @@ ChatConversation (컨테이너, src/api/prewalk.ts로 백엔드와 통신)
 
 메인 화면(경로안내 없음)과 산책중 화면(경로안내 있음) 둘 다 `AppMapView` 하나로 처리합니다 — `mode`만 바꿔서 씁니다. 좌표 타입은 새로 만들지 않고 `src/types/prewalk.ts`의 backend 스키마(`LocationInfo`, `WalkRouteResponse`)를 그대로 씁니다.
 
-**기본 사용 — 메인화면(경로안내 없음)**: 베이스맵 + 현재 위치(파란 점)만 보여줍니다. 코스를 선택했을 때만 `previewRoute`로 점선 미리보기 경로를 얹을 수 있습니다.
+**기본 사용 — 메인화면(경로안내 없음)**: 베이스맵 + 현재 위치(파란 점)만 보여줍니다. 코스를 선택했을 때만 `previewRoute`로 점선 미리보기 경로를 얹을 수 있습니다(점선이 눈에 잘 안 띄면 `previewRouteSolid`로 실선으로). 출발·도착 마커(`RouteEndpointMarkers`)는 이 모드엔 안 그립니다 — `WalkPrepScreen`(산책 준비)·`WalkCompleteScreen`(완료 화면)의 작은 미리보기 지도에는 배지가 오히려 복잡해 보여서, walk 모드(실제 산책 중)에서만 표시합니다. `showDirectionArrows`(기본 꺼짐)를 켜면 방향 화살표(`RouteDirectionArrows`, `size="large"`로 밝은 지도에서도 잘 보이게)만 얹을 수 있습니다 — `WalkPrepScreen`이 순환·편도 모두 켜서 진행 방향을 보여줍니다.
 
 ```tsx
 import { AppMapView } from '../components/map';
@@ -93,10 +93,12 @@ import { AppMapView } from '../components/map';
   mode="overview"
   currentLocation={locationInfo} // 없으면 서울시청 기본 좌표로 표시됨
   previewRoute={selectedCourse?.route_result?.coordinates} // 코스 선택 전에는 생략 가능
+  previewRouteSolid // 선택 — 점선 대신 실선으로
+  showDirectionArrows // 선택 — 진행 방향을 보여줄 때만
 />;
 ```
 
-**산책중 화면(경로안내)**: 전체 경로 라인 + 실시간 GPS 위치를 따라가는 카메라(줌인·기울임)를 보여줍니다. `routeProgressKm`(경로 시작점부터의 진행 거리)을 같이 넘기면 지나온 구간(원래 경로색)/남은 구간(옅은 회색)을 다른 색으로 나눠 그리고, 방향 화살표(`RouteDirectionArrows`)와 출발·도착 마커(`RouteEndpointMarkers`)도 자동으로 함께 표시됩니다 — 순환 코스에서 시작·끝·진행 방향이 헷갈리지 않도록 하기 위함입니다(순환 코스는 시작점≈끝점이라 마커 두 개 대신 "출발·도착" 하나로 합쳐서 보여줍니다).
+**산책중 화면(경로안내)**: 전체 경로 라인 + 실시간 GPS 위치를 따라가는 카메라(줌인·기울임)를 보여줍니다. `routeProgressKm`(경로 시작점부터의 진행 거리)을 같이 넘기면 지나온 구간(원래 경로색)/남은 구간(옅은 회색)을 다른 색으로 나눠 그리고, 방향 화살표(`RouteDirectionArrows`)와 출발·도착 마커(`RouteEndpointMarkers`)도 자동으로 함께 표시됩니다 — 순환 코스에서 시작·끝·진행 방향이 헷갈리지 않도록 하기 위함입니다(순환 코스는 시작점≈끝점이라 마커 두 개 대신 "출발·도착" 하나로 합쳐서 보여줍니다). 순환 코스 진행 방향은 `WalkPrepScreen`(산책 준비 화면)에서 시작 전에만 고르고 — `route`는 산책 중엔 안 바뀝니다.
 
 ```tsx
 import { AppMapView } from '../components/map';
@@ -141,7 +143,8 @@ const locationInfo: LocationInfo | null = coords
 | 지도 스타일 | streets (밝은 기본 지도) | dark (야간용) |
 | 카메라 | 최초 1회만 현재 위치로 이동, 이후 자유 팬/줌 | `followUserLocation`으로 계속 사용자 위치를 따라가며 근접·기울임 |
 | 경로 라인 | `previewRoute` 있을 때만, 점선 | `route` 항상, 실선 (`routeProgressKm` 넘기면 지나온/남은 구간 이색) |
-| 방향 화살표·출발도착 마커 | 없음 | `route` 있으면 항상 표시 |
+| 출발도착 마커 | 없음 | `route` 있으면 항상 표시 |
+| 방향 화살표 | `showDirectionArrows` 켰을 때만 | `route` 있으면 항상 표시 |
 | 커스텀 POI 마커 | 없음 (지도 스타일 자체에 건물/상호 정보 포함) | 없음 |
 
 ## 4. `my/` — 내 정보 탭 전용
