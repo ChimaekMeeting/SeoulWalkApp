@@ -10,8 +10,10 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { postSurvey } from '../api/survey';
 import { surveyCompletedStorage } from '../auth/onboardingStorage';
-import { surveyQuestions } from '../config/surveyQuestions';
+import { SURVEY_TAGS } from '../config/surveyOptions';
+import { DistanceOption } from '../types/survey';
 import { Button } from '../components/Button';
+import { DistanceSelector } from '../components/DistanceSelector';
 import { ErrorBanner } from '../components/ErrorBanner';
 import { colors, radii, spacing } from '../theme/tokens';
 
@@ -19,23 +21,13 @@ const { width: SCREEN_W } = Dimensions.get('window');
 const CHIP_GAP = spacing.sm;
 const CHIP_W = (SCREEN_W - spacing.xxl * 2 - CHIP_GAP * 2) / 3;
 
-type Distance = 'slow' | 'normal' | 'fast';
-
-const DISTANCE_OPTIONS: { value: Distance; label: string; sub: string }[] = [
-  { value: 'slow',   label: '~2km',   sub: '가볍게' },
-  { value: 'normal', label: '2~4km',  sub: '적당히' },
-  { value: 'fast',   label: '4km+',   sub: '활발하게' },
-];
-
-const ALL_OPTIONS = surveyQuestions.flatMap(q => q.options);
-
 interface Props {
   onDone: () => void;
 }
 
 export function SurveyScreen({ onDone }: Props) {
   const [selectedTags, setSelectedTags] = useState<Set<string>>(new Set());
-  const [distance, setDistance] = useState<Distance | null>(null);
+  const [distance, setDistance] = useState<DistanceOption | null>(null);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -91,7 +83,7 @@ export function SurveyScreen({ onDone }: Props) {
         </View>
 
         <View style={styles.tagGrid}>
-          {ALL_OPTIONS.map(option => {
+          {SURVEY_TAGS.map(option => {
             const selected = selectedTags.has(option.tagValue);
             return (
               <Pressable
@@ -108,25 +100,7 @@ export function SurveyScreen({ onDone }: Props) {
         </View>
 
         <Text style={styles.sectionLabel}>선호 거리</Text>
-        <View style={styles.distanceRow}>
-          {DISTANCE_OPTIONS.map(opt => {
-            const selected = distance === opt.value;
-            return (
-              <Pressable
-                key={opt.value}
-                onPress={() => setDistance(opt.value)}
-                style={[styles.distanceBtn, selected && styles.distanceBtnSelected]}
-              >
-                <Text style={[styles.distanceLabel, selected && styles.distanceLabelSelected]}>
-                  {opt.label}
-                </Text>
-                <Text style={[styles.distanceSub, selected && styles.distanceSubSelected]}>
-                  {opt.sub}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
+        <DistanceSelector value={distance} onChange={setDistance} style={styles.distanceSelector} />
 
         <ErrorBanner message={errorMsg} />
       </ScrollView>
@@ -203,41 +177,8 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     marginBottom: spacing.md,
   },
-  distanceRow: {
-    flexDirection: 'row',
-    gap: spacing.sm,
+  distanceSelector: {
     marginBottom: spacing.xxl,
-  },
-  distanceBtn: {
-    flex: 1,
-    paddingVertical: spacing.md,
-    borderRadius: radii.lg,
-    borderWidth: 1.5,
-    borderColor: colors.line,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.card,
-  },
-  distanceBtnSelected: {
-    backgroundColor: colors.ink,
-    borderColor: colors.ink,
-  },
-  distanceLabel: {
-    color: colors.ink,
-    fontSize: 15,
-    fontWeight: '800',
-  },
-  distanceLabelSelected: {
-    color: colors.card,
-  },
-  distanceSub: {
-    color: colors.inkMuted,
-    fontSize: 12,
-    fontWeight: '500',
-    marginTop: 2,
-  },
-  distanceSubSelected: {
-    color: 'rgba(255,255,255,0.7)',
   },
   footer: {
     paddingHorizontal: spacing.xxl,

@@ -48,6 +48,75 @@ export function reverseRoute(
   return [...coords].reverse();
 }
 
+// 순환 코스를 산책 기록에서 다시 시작할 때, 저장된 출발점은 그 경로를 처음 만든 위치에 묶여
+// 있어 지금 서 있는 곳과 멀 수 있다. 닫힌 폴리라인이라 둘레·형상은 그대로 두고 시작 인덱스만
+// 돌리면 "현재 위치에서 가장 가까운 경로 지점"을 출발점으로 삼을 수 있다.
+export const LOOP_ANCHOR_MAX_KM = 0.12; // 현재 위치가 경로에서 이보다 멀면(=경로 위에 없음) 재정렬 안 함
+export const LOOP_ANCHOR_MIN_SHIFT_KM = 0.02; // 새 출발점이 기존 출발점과 이보다 가까우면 이득이 없어 그대로 둠
+
+/** base(닫힘 끝점을 뺀 고리 정점열)를 startIdx부터 한 바퀴 도는 열린 좌표열로 만든다. */
+function rotateLoopVertices(
+  base: WalkRouteResponse['coordinates'],
+  startIdx: number,
+): WalkRouteResponse['coordinates'] {
+  const out: WalkRouteResponse['coordinates'] = [];
+  for (let k = 0; k < base.length; k++) out.push(base[(startIdx + k) % base.length]);
+  return out;
+}
+
+/**
+ * 순환 코스(coords)를 현재 위치(point, [위도, 경도])에서 가장 가까운 경로 지점이 출발점이 되도록
+ * 시작 인덱스를 돌린다. 코스 둘레·형상·total_km는 그대로다. 아래 경우엔 원본을 그대로 돌려준다
+ * (참조 동일):
+ *  - 편도 코스(isLoopRoute=false) — 돌릴 수 없다.
+ *  - 현재 위치가 경로에서 LOOP_ANCHOR_MAX_KM 넘게 떨어짐 — 경로 위에 있지 않으므로 재정렬해도
+ *    소용없다(이 경우는 "현재 위치→출발점 접근선"으로 따로 다룬다).
+ *  - 새 출발점이 기존 출발점과 LOOP_ANCHOR_MIN_SHIFT_KM 이내 — 재정렬 이득이 없다.
+ *
+ * 산책을 시작하기 전(진행률 0, 도로 스냅 전)에만 쓴다 — 산책 중 경로가 바뀌면 진행률 트래커
+ * 기준이 흔들린다. reverseRoute(방향 전환)보다 먼저 적용해야 방향 선택이 새 출발점 기준으로 된다.
+ */
+export function anchorLoopToPoint(
+  coords: WalkRouteResponse['coordinates'],
+  point: [number, number],
+): WalkRouteResponse['coordinates'] {
+  if (!isLoopRoute(coords) || coords.length < 4) return coords;
+
+  // 시작점≈끝점의 중복 끝점을 뺀 순수 고리 정점열.
+  const base = coords.slice(0, -1);
+  const m = base.length;
+
+  let bestSeg = 0;
+  let bestDistanceKm = Infinity;
+  let bestPoint: [number, number] = base[0];
+  for (let i = 0; i < m; i++) {
+    const { distanceKm, point: proj } = segmentProjection(point, base[i], base[(i + 1) % m]);
+    if (distanceKm < bestDistanceKm) {
+      bestDistanceKm = distanceKm;
+      bestSeg = i;
+      bestPoint = proj;
+    }
+  }
+
+  if (bestDistanceKm > LOOP_ANCHOR_MAX_KM) return coords;
+  if (haversineDistanceKm(bestPoint, base[0]) <= LOOP_ANCHOR_MIN_SHIFT_KM) return coords;
+
+  // 투영점이 구간 끝 정점에 사실상 붙어 있으면 그 정점부터 돌리고(중복점 방지), 아니면 투영점을
+  // 새 출발 정점으로 삽입한다(둘레는 한 구간을 같은 직선상에서 둘로 쪼개는 것이라 보존된다).
+  const VERTEX_EPS_KM = 0.001; // 1m
+  const nextIdx = (bestSeg + 1) % m;
+  let rotated: WalkRouteResponse['coordinates'];
+  if (haversineDistanceKm(bestPoint, base[nextIdx]) <= VERTEX_EPS_KM) {
+    rotated = rotateLoopVertices(base, nextIdx);
+  } else if (haversineDistanceKm(bestPoint, base[bestSeg]) <= VERTEX_EPS_KM) {
+    rotated = rotateLoopVertices(base, bestSeg);
+  } else {
+    rotated = [bestPoint, ...rotateLoopVertices(base, nextIdx)];
+  }
+  rotated.push(rotated[0]); // 고리를 출발점으로 정확히 닫는다.
+  return rotated;
+}
+
 /**
  * 점 p([위도, 경도])를 선분 a→b에 사영한다. 위경도를 선분 시작점 위도 기준 평면으로 근사 투영하되
  * 경도축에 cos(위도) 보정을 적용해(서울에서 경도 1°는 위도 1°의 약 0.79배 거리) 사영 비율 t(0~1)와

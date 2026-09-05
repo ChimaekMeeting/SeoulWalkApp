@@ -13,6 +13,7 @@ src/components/
 ├─ AppBottomSheet.tsx  # gorhom BottomSheet를 감싼 범용 래퍼 (src/bottomsheets/의 화면별 시트가 이걸 씀)
 ├─ BottomNav.tsx       # 하단 탭 바(홈/기록/마이페이지) — MainRouter가 렌더링
 ├─ DevChip.tsx         # 개발 빌드 전용 주황 칩 버튼 (화면 상태 강제용) — __DEV__ 게이팅은 쓰는 쪽에서
+├─ DistanceSelector.tsx # 선호 거리(~2 / 2~4 / 4km+) 버튼 3개 — 설문 화면·마이페이지 공용
 ├─ chat/                # 홈 화면 하단시트에 들어가는 AI 챗봇 대화 UI
 │  ├─ ChatConversation.tsx  # 대화 흐름 전체를 관리하는 컨테이너 (이걸 import해서 쓰면 됨)
 │  ├─ ChatInput.tsx         # 하단 입력창
@@ -29,7 +30,7 @@ src/components/
 │  └─ index.ts
 ├─ my/                   # '마이페이지' 탭(MyPageScreen)에서만 쓰는 컴포넌트
 │  ├─ ProfileCard.tsx          # 상단 프로필 요약 카드 (아바타 + 닉네임 + 이메일)
-│  ├─ MyPreferenceSection.tsx  # 산책 취향 태그 선택 섹션 (토글 시 즉시 저장)
+│  ├─ MyPreferenceSection.tsx  # 산책 취향 태그(편안·안전·자연) + 선호 거리 (변경 시 즉시 저장)
 │  ├─ MyPreferenceItem.tsx     # 취향 태그 버튼 1개
 │  ├─ SettingRow.tsx           # 설정 메뉴 한 줄 (라벨 + '>' 화살표, danger·showChevron 옵션)
 │  └─ DevMenu.tsx              # 개발 빌드 전용 디버그 버튼 (프로덕션에선 null)
@@ -152,7 +153,7 @@ const locationInfo: LocationInfo | null = coords
 `MyPageScreen.tsx` 하나에서만 쓰는, 재사용 범위가 좁은 컴포넌트들입니다.
 
 - **`ProfileCard`**: 닉네임/이메일을 받아 아바타 + 이름 + 카카오 이메일 카드를 그립니다.
-- **`MyPreferenceSection`**: `src/data/onboarding.ts`의 `PREFERENCE_TAGS`를 `MyPreferenceItem`(태그 버튼)으로 나열하고, 토글할 때마다 `postSurvey`로 즉시 저장합니다(실패 시 롤백).
+- **`MyPreferenceSection`**: `src/config/surveyOptions.ts`의 `SURVEY_TAGS`를 `MyPreferenceItem`(태그 버튼)으로 나열하고 `<DistanceSelector>`로 선호 거리를 받습니다. 태그·거리 중 하나만 바뀌어도 둘 다 함께 `postSurvey`로 즉시 저장합니다(실패 시 롤백). 설문 화면과 같은 `/api/user/survey`를 씁니다.
 - **`SettingRow`**: 설정 메뉴의 각 행. `danger`로 빨간 텍스트(로그아웃), `showChevron={false}`로 오른쪽 화살표를 끕니다.
 - **`DevMenu`**: `__DEV__`일 때만 렌더되는 디버그 버튼 모음(토큰 강제 만료, 설문 다시 보기). 프로덕션에선 `null`.
 

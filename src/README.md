@@ -13,8 +13,7 @@ src/
 ├── auth/         # 토큰·사용자 정보 로컬 저장소 + 카카오 로그인 훅 + 앱 부트스트랩 상태
 ├── bottomsheets/ # 바텀시트(gorhom) 화면별 설정 (스냅포인트 계산 등)
 ├── components/   # 여러 화면에서 재사용하는 UI 컴포넌트
-├── config/       # 환경 변수·지도 설정·설문 질문 config
-├── data/         # 정적 데이터 (태그 목록, 목업 JSON)
+├── config/       # 환경 변수·지도 설정·설문 선택지 config
 ├── hooks/        # 위치·앱 상태(포그라운드/백그라운드) 관련 커스텀 훅
 ├── navigation/   # MainRouter 내부 탭 전환 타입 + react-navigation 컨테이너 ref
 ├── screens/      # 앱의 각 화면 컴포넌트
@@ -88,7 +87,7 @@ Home (메인 화면)
 
 ## 4. components/
 
-여러 화면에서 재사용하는 UI 컴포넌트를 기능별 하위 폴더(`chat/` `map/` `my/` `record/`)로 나눠 담습니다. 특정 화면에만 쓰이는 컴포넌트도 화면 파일이 커지면 이 폴더로 분리합니다. 최상위엔 공통 프리미티브(`Button` `ErrorBanner` `StatRow` `ScreenHeader` `PermissionPrompt` `TabScreen`)와 `AppBottomSheet.tsx`(gorhom `BottomSheet`를 감싼 범용 래퍼, 아래 5번 참고)가 있습니다.
+여러 화면에서 재사용하는 UI 컴포넌트를 기능별 하위 폴더(`chat/` `map/` `my/` `record/`)로 나눠 담습니다. 특정 화면에만 쓰이는 컴포넌트도 화면 파일이 커지면 이 폴더로 분리합니다. 최상위엔 공통 프리미티브(`Button` `ErrorBanner` `StatRow` `ScreenHeader` `PermissionPrompt` `TabScreen` `DistanceSelector`)와 `AppBottomSheet.tsx`(gorhom `BottomSheet`를 감싼 범용 래퍼, 아래 5번 참고)가 있습니다.
 
 → **상세 문서:** [`src/components/README.md`](./components/README.md)
 
@@ -253,7 +252,7 @@ const { authState, userId, error, signIn, signOut } = useKakaoAuth();
 src/config/
 ├── env.ts              # process.env에서 환경 변수를 읽어 단일 객체로 내보냄
 ├── mapConfig.ts        # Mapbox 지도 스타일 URL 상수
-└── surveyQuestions.ts  # 설문 화면 태그 목록 + 카테고리 구조
+└── surveyOptions.ts    # 설문·마이페이지 공유 선택지 (태그 3개 + 선호 거리)
 ```
 
 **`env.ts`** — `EXPO_PUBLIC_` prefix 환경 변수를 중앙 관리합니다. 환경 변수를 직접 `process.env`로 읽지 말고 이 파일을 import해서 쓰세요.
@@ -263,33 +262,19 @@ import { env } from '../config/env';
 // env.API_BASE_URL / env.MAPBOX_PUBLIC_ACCESS_TOKEN / env.DEBUG_FIXED_LOCATION 등
 ```
 
-**`surveyQuestions.ts`** — 설문에 표시할 태그를 카테고리별로 분류합니다. 태그 문자열은 직접 하드코딩하지 않고 `src/data/onboarding.ts`의 `PREFERENCE_TAGS`에서 타입(`PreferenceTag`)을 파생해 사용합니다. `tagValue`에 오타가 있으면 `tsc`가 즉시 에러를 냅니다.
+**`surveyOptions.ts`** — 산책 취향 설문(`SurveyScreen`)과 마이페이지 '내 산책 취향'(`MyPreferenceSection`)이 공유하는 선택지입니다. 두 화면 모두 같은 `/api/user/survey`로 저장합니다.
+
+- `SURVEY_TAGS` — 태그 3개(편안한 길·안전한 길·자연이 많은 길).
+- `DISTANCE_OPTIONS` + `<DistanceSelector>` — 선호 거리 3버킷.
+- 백엔드의 태그 → 가중치(`weights_*`) 매핑이 확정되지 않아 `tagValue`는 라벨과 같은 문자열을 그대로 보냅니다. 확정되면 `tagValue`만 백엔드 키에 맞추면 됩니다.
 
 ```ts
-// 태그 추가/수정은 이 파일만 건드리면 됩니다
-import { surveyQuestions } from '../config/surveyQuestions';
-const allTags = surveyQuestions.flatMap(q => q.options);
+import { SURVEY_TAGS, DISTANCE_OPTIONS } from '../config/surveyOptions';
 ```
 
 ---
 
-## 9. data/
-
-```
-src/data/
-└── onboarding.ts    # PREFERENCE_TAGS — 취향 태그 문자열 배열 (as const)
-```
-
-**`PREFERENCE_TAGS`** 는 백엔드 `TAG_WEIGHT_MAP`의 키와 1:1 대응하는 문자열 목록입니다. `as const`로 선언되어 있어 `typeof PREFERENCE_TAGS[number]`로 리터럴 유니온 타입을 파생할 수 있습니다. 이 배열이 태그 문자열의 **Single Source of Truth**입니다.
-
-- `src/config/surveyQuestions.ts`가 이 타입을 import해 설문 config의 타입 안전성을 보장합니다.
-- `src/components/my/MyPreferenceSection.tsx`가 이 배열을 직접 import해 전부 렌더링합니다.
-
-태그를 추가하거나 이름을 바꾸려면 백엔드 `TAG_WEIGHT_MAP`과 이 파일을 함께 수정해야 합니다.
-
----
-
-## 10. hooks/
+## 9. hooks/
 
 ```
 src/hooks/
@@ -313,7 +298,7 @@ EXPO_PUBLIC_DEBUG_FIXED_LOCATION=37.5665,126.9780
 
 ---
 
-## 11. navigation/
+## 10. navigation/
 
 ```
 src/navigation/
@@ -339,7 +324,7 @@ type TabName = 'home' | 'record' | 'me';
 
 ---
 
-## 12. theme/
+## 11. theme/
 
 ```
 src/theme/
@@ -361,7 +346,7 @@ import { colors, spacing, radii } from '../theme/tokens';
 
 ---
 
-## 13. types/
+## 12. types/
 
 백엔드 스키마를 그대로 반영하는 타입과 앱 내부 공유 타입을 담습니다.
 
@@ -379,7 +364,7 @@ src/types/
 
 ---
 
-## 14. utils/
+## 13. utils/
 
 순수 함수 모음입니다. React에 의존하지 않고 단독으로 테스트 가능합니다.
 
@@ -404,12 +389,11 @@ src/utils/
 
 ---
 
-## 15. 주의할 점
+## 14. 주의할 점
 
 **건드리기 전에 확인이 필요한 영역**
 
 - **`src/api/client.ts`** — 인터셉터 로직을 수정하면 모든 API 호출의 인증 흐름이 바뀝니다. refresh token 요청 방식(현재 Authorization 헤더)은 쿼리 파라미터로 되돌리지 마세요 (서버가 인식 불가).
 - **`src/auth/AppBootstrap.tsx`의 `computeTargetScreen()`** — 화면 우선순위 판단 함수입니다. 조건 순서를 바꾸면 화면 흐름 자체가 바뀝니다(예: `showBrandSplash`는 항상 최우선이어야 함).
-- **`src/data/onboarding.ts`** — `PREFERENCE_TAGS` 문자열은 백엔드 `TAG_WEIGHT_MAP` 키와 정확히 일치해야 합니다. 이름을 바꾸거나 추가하려면 백엔드와 반드시 동기화하세요.
-- **`src/config/surveyQuestions.ts`** — `tagValue`는 `PreferenceTag` 타입으로 강제되므로 `PREFERENCE_TAGS`에 없는 문자열을 넣으면 `tsc`에서 에러가 납니다. 의도된 동작입니다.
+- **`src/config/surveyOptions.ts`** — 설문·마이페이지 공유 선택지(태그 3개 + 선호 거리). 백엔드 태그 → 가중치 매핑이 확정되면 `tagValue`를 백엔드 키에 맞추고, `targetKmToDistanceOption`의 km 경계도 실제 값에 맞춰야 합니다.
 - **`__DEV__` 버튼 (`MyPageScreen.tsx`)** — 프로덕션 빌드에는 포함되지 않습니다. 버튼을 추가할 때는 반드시 `{__DEV__ && ( ... )}` 블록 안에 넣으세요.
