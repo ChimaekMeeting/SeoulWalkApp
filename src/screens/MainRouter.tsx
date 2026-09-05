@@ -13,6 +13,7 @@ import { useAppStateChange } from '../hooks/useAppStateChange';
 import { useAndroidBackHandler } from '../hooks/useAndroidBackHandler';
 import { debugLog } from '../utils/logger';
 import { snapWalkRoute } from '../utils/mapMatchRoute';
+import { anchorLoopToPoint } from '../utils/geo';
 import { markRouteWalked } from '../utils/recentRouteUsage';
 import { LocationInfo, WalkRouteResponse } from '../types/prewalk';
 import { colors } from '../theme/tokens';
@@ -156,7 +157,20 @@ export function MainRouter({
     }
 
     walkOriginTabRef.current = route.name === 'record' ? 'record' : 'home';
-    setActiveRoute(selected);
+
+    // 순환 코스를 기록에서 다시 시작하는 경우처럼 저장된 출발점이 현재 위치와 멀면, 닫힌 경로를
+    // 돌려 현재 위치에서 가장 가까운 지점을 출발점으로 삼는다(편도이거나 경로에서 멀면 원본 유지).
+    // 도로 스냅·방향 전환보다 먼저 — 이후 로직이 모두 이 좌표를 기준으로 돌게 한다.
+    const anchoredCoords = anchorLoopToPoint(selected.coordinates, [
+      current.latitude,
+      current.longitude,
+    ]);
+    const anchored =
+      anchoredCoords === selected.coordinates
+        ? selected
+        : { ...selected, coordinates: anchoredCoords };
+
+    setActiveRoute(anchored);
     setRouteSnapPending(true);
     go({ name: 'realWalk' });
 
@@ -165,21 +179,21 @@ export function MainRouter({
     // 가드 타임아웃: 스냅이 너무 늦으면 원본으로 진행하도록 pending을 푼다.
     // const snapStartedAt = Date.now(); // [스냅 진단]
     const guard = new Promise<WalkRouteResponse>(resolve =>
-      setTimeout(() => resolve(selected), SNAP_GUARD_MS),
+      setTimeout(() => resolve(anchored), SNAP_GUARD_MS),
     );
-    Promise.race([snapWalkRoute(selected), guard])
+    Promise.race([snapWalkRoute(anchored), guard])
       .then(snapped => {
         // [스냅 진단] 스냅이 가드 전에 끝났는지 / 경로가 바뀌었는지
         // const elapsedMs = Date.now() - snapStartedAt;
         // debugLog('snap', 'race settled', {
         //   elapsedMs,
         //   guardHit: elapsedMs >= SNAP_GUARD_MS - 50,
-        //   routeChanged: snapped !== selected,
-        //   beforeNodes: selected.coordinates.length,
+        //   routeChanged: snapped !== anchored,
+        //   beforeNodes: anchored.coordinates.length,
         //   afterNodes: snapped.coordinates.length,
         // });
-        if (snapped !== selected) {
-          setActiveRoute(prev => (prev === selected ? snapped : prev));
+        if (snapped !== anchored) {
+          setActiveRoute(prev => (prev === anchored ? snapped : prev));
         }
       })
       .finally(() => setRouteSnapPending(false));

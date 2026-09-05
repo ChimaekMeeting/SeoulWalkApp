@@ -1,4 +1,5 @@
 import {
+  anchorLoopToPoint,
   computeRouteBounds,
   haversineDistanceKm,
   isLoopRoute,
@@ -53,6 +54,54 @@ describe('reverseRoute', () => {
     const copy = [...NS_ROUTE];
     reverseRoute(NS_ROUTE);
     expect(NS_ROUTE).toEqual(copy);
+  });
+});
+
+describe('anchorLoopToPoint', () => {
+  // 약 180m×220m 사각 순환 코스(시작점=끝점).
+  const SQUARE: WalkRouteResponse['coordinates'] = [
+    [37.5, 127.0],
+    [37.5, 127.002],
+    [37.502, 127.002],
+    [37.502, 127.0],
+    [37.5, 127.0],
+  ];
+
+  it('편도 코스는 그대로 반환한다(참조 동일)', () => {
+    expect(anchorLoopToPoint(NS_ROUTE, [37.502, 127.0])).toBe(NS_ROUTE);
+  });
+
+  it('현재 위치가 기존 출발점 근처면 그대로 반환한다', () => {
+    expect(anchorLoopToPoint(SQUARE, [37.5001, 127.0])).toBe(SQUARE);
+  });
+
+  it('현재 위치가 경로에서 멀면(>120m) 그대로 반환한다', () => {
+    expect(anchorLoopToPoint(SQUARE, [37.51, 127.01])).toBe(SQUARE);
+  });
+
+  it('가까운 정점으로 출발점을 돌린다 — 둘레·순환 유지', () => {
+    const r = anchorLoopToPoint(SQUARE, [37.5021, 127.002]); // 3번째 정점 북쪽 ~11m
+    expect(r).not.toBe(SQUARE);
+    expect(r[0]).toEqual([37.502, 127.002]);
+    expect(r[r.length - 1]).toEqual(r[0]);
+    expect(isLoopRoute(r)).toBe(true);
+    expect(polylineLengthKm(r)).toBeCloseTo(polylineLengthKm(SQUARE), 5);
+  });
+
+  it('정점 사이(구간 중간)에서는 투영점을 새 출발점으로 삽입하고 둘레를 보존한다', () => {
+    const r = anchorLoopToPoint(SQUARE, [37.501, 127.0021]); // 오른쪽 변 중간 근처
+    expect(r).not.toBe(SQUARE);
+    expect(r[0][0]).toBeCloseTo(37.501, 3);
+    expect(r[0][1]).toBeCloseTo(127.002, 4);
+    expect(r[r.length - 1]).toEqual(r[0]);
+    expect(isLoopRoute(r)).toBe(true);
+    expect(polylineLengthKm(r)).toBeCloseTo(polylineLengthKm(SQUARE), 4);
+  });
+
+  it('원본 배열을 변형하지 않는다', () => {
+    const copy = JSON.parse(JSON.stringify(SQUARE));
+    anchorLoopToPoint(SQUARE, [37.5021, 127.002]);
+    expect(SQUARE).toEqual(copy);
   });
 });
 
