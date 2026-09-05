@@ -38,7 +38,7 @@ export function RouteEndpointMarkers({ route }: Props) {
         id="route-endpoints-circle"
         style={{
           circleRadius: 9,
-          circleColor: ['match', ['get', 'kind'], 'end', colors.coral, colors.accent],
+          circleColor: ['match', ['get', 'kind'], 'end', colors.coral, colors.ink],
           circleStrokeWidth: 2,
           circleStrokeColor: '#FFFFFF',
         }}

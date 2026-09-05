@@ -1,11 +1,10 @@
 export const colors = {
-  // ── 앱 전역 UI (흑백 계열) ──
+  // ── 앱 전역 UI (모노톤) ──
   ink: '#111111', // 제목·본문·기본(primary) 버튼 배경
   black: '#111111', // 구 이름 — ink와 동일, 신규 코드는 ink 사용 (src/components/chat/ 하위호환)
   inkMuted: '#9e9e9e', // 보조 텍스트·비활성 라벨
   inkFaint: '#5c5c5c', // 탭/카드의 더 옅은 라벨
-  ink2: '#5f6f6c', // ScreenHeader 우측 보조 텍스트
-  ink3: '#91a09c', // 아이콘·이메일 등 흐린 텍스트
+  ink3: '#8a8a8a', // 아이콘·이메일 등 흐린 텍스트
   card: '#ffffff', // 카드·화면 배경
   surfaceAlt: '#f5f5f5', // 뱃지 등 옅은 배경
   line: '#e0e0e0', // 기본 보더
@@ -18,15 +17,14 @@ export const colors = {
   dangerBorder: '#f5c6c6',
 
   // ── 배경·지도 미리보기 ──
-  bgSoft: '#eef8f4',
-  mapPreviewBg: '#f2fbf7',
+  bgSoft: '#f2f2f2',
+  mapPreviewBg: '#f5f5f5',
 
-  // ── 채팅 UI (src/components/chat/ · AppBottomSheet, 민트 계열) ──
-  accent: '#0f8f74',
-  mintDeep: '#0f8f74',
-  coral: '#e4834d',
+  // ── 강조 ──
+  coral: '#e4834d', // 지도 도착 지점 마커 (유일한 포인트 컬러)
+
+  // ── 채팅 UI (src/components/chat/) ──
   containerBackground: '#f4f3ef',
-  line2: '#d6e4dd',
 } as const;
 
 export const spacing = {

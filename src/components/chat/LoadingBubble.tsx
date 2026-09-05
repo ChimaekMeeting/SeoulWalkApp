@@ -9,7 +9,7 @@ export function LoadingBubble({ text }: { text: string }) {
       </View>
       <View style={styles.chatBubble}>
         <Text style={styles.chatText}>{text}</Text>
-        <ActivityIndicator size="small" color={colors.mintDeep} />
+        <ActivityIndicator size="small" color={colors.ink} />
       </View>
     </View>
   );
