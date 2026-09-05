@@ -6,8 +6,9 @@ import { WalkPrepScreen } from './WalkPrepScreen';
 import { WalkInProgressScreen } from './WalkInProgressScreen';
 import { WalkEndConfirmModal } from './WalkEndConfirmModal';
 import { WalkCompleteScreen } from './WalkCompleteScreen';
+import { WalkRatingScreen } from './WalkRatingScreen';
 
-type Stage = 'prep' | 'walking' | 'complete';
+type Stage = 'prep' | 'walking' | 'complete' | 'rating';
 
 interface Props {
   routeResult: WalkRouteResponse;
@@ -19,7 +20,7 @@ interface Props {
 }
 
 /**
- * 6a(산책 전) → 6b(산책 중) → 6c(종료 확인) → 6d(완료)를 묶는 미니 플로우.
+ * 6a(산책 전) → 6b(산책 중) → 6c(종료 확인) → 6d(완료) → 6e(별점)를 묶는 미니 플로우.
  * 아직 실제 네비게이션 스택이 없어 로컬 상태로 화면을 전환한다 —
  * 나중에 진짜 네비게이션이 생기면 이 컴포넌트 하나만 그 자리에 꽂으면 된다.
  */
@@ -64,6 +65,10 @@ export function WalkFlow({
     }
     if (stage === 'walking') {
       if (!endConfirmVisible && !goalModalVisible) setEndConfirmVisible(true);
+      return true;
+    }
+    if (stage === 'rating') {
+      setStage('complete');
       return true;
     }
     exitFromComplete();
@@ -133,16 +138,28 @@ export function WalkFlow({
     );
   }
 
+  if (stage === 'complete') {
+    return (
+      <WalkCompleteScreen
+        routeResult={walkRoute}
+        currentLocation={currentLocation}
+        routeProgressKm={snapshot?.routeProgressKm ?? 0}
+        actualDistanceKm={snapshot?.actualDistanceKm}
+        elapsedMs={snapshot?.elapsedMs ?? 0}
+        steps={snapshot?.steps}
+        routeId={walkRoute.id ?? undefined}
+        onNext={() => setStage('rating')}
+      />
+    );
+  }
+
   return (
-    <WalkCompleteScreen
-      routeResult={walkRoute}
-      currentLocation={currentLocation}
-      routeProgressKm={snapshot?.routeProgressKm ?? 0}
-      actualDistanceKm={snapshot?.actualDistanceKm}
-      elapsedMs={snapshot?.elapsedMs ?? 0}
-      steps={snapshot?.steps}
-      routeId={walkRoute.id ?? undefined}
-      onHome={exitFromComplete}
+    <WalkRatingScreen
+      onSubmit={ratings => {
+        // TODO: 서버 전송 엔드포인트가 정해지면 배선. 지금은 개발 로그만 남기고 홈으로.
+        console.log('[WalkFlow] 별점:', { routeId: walkRoute.id ?? null, ...ratings });
+        exitFromComplete();
+      }}
     />
   );
 }

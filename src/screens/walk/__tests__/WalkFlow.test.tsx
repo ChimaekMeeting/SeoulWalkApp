@@ -26,7 +26,18 @@ jest.mock('../WalkCompleteScreen', () => ({
     return null;
   },
 }));
-jest.mock('../WalkEndConfirmModal', () => ({ WalkEndConfirmModal: () => null }));
+jest.mock('../WalkRatingScreen', () => ({
+  WalkRatingScreen: (p: any) => {
+    calls.rating = p;
+    return null;
+  },
+}));
+jest.mock('../WalkEndConfirmModal', () => ({
+  WalkEndConfirmModal: (p: any) => {
+    if (p.visible) calls.endModal = p;
+    return null;
+  },
+}));
 jest.mock('../../../hooks/useAndroidBackHandler', () => ({ useAndroidBackHandler: () => {} }));
 
 import { WalkFlow } from '../WalkFlow';
@@ -102,4 +113,38 @@ it('산책 준비 화면에서 순환 코스 방향을 반대로 골랐으면(on
   // 좌표만 바뀌고 나머지 필드(총 거리·모드 등)는 원본 routeResult 그대로 유지된다.
   expect(calls.walk.routeResult.total_km).toBe(r1.total_km);
   expect(calls.walk.routeResult.mode).toBe(r1.mode);
+});
+
+it('완료 화면의 "산책로 평가하기"는 곧장 나가지 않고 별점 화면을 거친 뒤 onExitToHome을 부른다', () => {
+  const onExit = jest.fn();
+  const r1 = mkRoute(1);
+  ReactTestRenderer.act(() => {
+    ReactTestRenderer.create(
+      <WalkFlow
+        routeResult={r1}
+        currentLocation={null}
+        routeSnapPending={false}
+        onExitToHome={onExit}
+      />,
+    );
+  });
+
+  ReactTestRenderer.act(() => calls.prep.onStart(r1.coordinates));
+  ReactTestRenderer.act(() =>
+    calls.walk.onRequestEnd({ endReason: 'user_ended_before_destination', elapsedMs: 1000 }),
+  );
+  ReactTestRenderer.act(() => calls.endModal.onConfirm());
+  expect(calls.complete).toBeDefined();
+
+  // "산책로 평가하기" → 홈이 아니라 별점 화면으로.
+  ReactTestRenderer.act(() => calls.complete.onNext());
+  expect(onExit).not.toHaveBeenCalled();
+  expect(calls.rating).toBeDefined();
+
+  // 별점 제출 → 그제서야 홈으로.
+  ReactTestRenderer.act(() =>
+    calls.rating.onSubmit({ nature: 5, safety: 4, comfort: 3, overall: 4 }),
+  );
+  expect(onExit).toHaveBeenCalledTimes(1);
+  expect(onExit.mock.calls[0][0]).toMatchObject({ reason: 'ended_early' });
 });

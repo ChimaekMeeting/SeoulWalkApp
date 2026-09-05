@@ -41,3 +41,18 @@ export interface WalkExitEvent {
   /** 걷기 시작~종료 실측 시간(ms). 통계·UI 용도. */
   elapsedMs?: number;
 }
+
+/**
+ * 산책 완료 후 사용자가 코스에 매기는 별점(각 1~5). 완료 화면(6d) 다음의 별점 화면(6e)에서 수집한다.
+ * TODO: 서버 전송 엔드포인트가 정해지면 배선한다 — 현재는 WalkFlow에서 로컬 로깅만.
+ */
+export interface WalkRatings {
+  /** 자연을 가까이 느끼며 걸을 수 있어 좋았는지 */
+  nature: number;
+  /** 걷는 내내 안전하다고 느껴 좋았는지 */
+  safety: number;
+  /** 몸도 마음도 편하게 걸을 수 있어 좋았는지 */
+  comfort: number;
+  /** 산책로 전체 만족도 */
+  overall: number;
+}

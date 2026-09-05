@@ -23,6 +23,12 @@ import type { RootScreenName } from '../types/navigation';
 
 type PermissionStatus = 'checking' | PermissionState;
 
+// 설문 완료 여부 최초 조회(로컬 캐시가 없을 때만 탐)에 쓰는 타임아웃. client.ts 기본값(20초,
+// Cloud Run 콜드스타트 최악치 대비)보다 짧게 잡는다 — 사람이 로딩 화면에서 버틸 수 있는 한계는
+// 그보다 훨씬 짧고(NN/g 기준 ~10초가 주의력 유지 한계), 실제 콜드스타트는 보통 8~10초 안에 끝난다.
+// 이 시간 안에 응답이 없으면 일단 Home으로 통과시키고 백그라운드에서 계속 재시도한다.
+const SURVEY_CHECK_TIMEOUT_MS = 8000;
+
 const EMPTY_SNAPSHOT: PermissionSnapshot = {
   location: 'undetermined',
   pedometer: 'undetermined',
@@ -198,9 +204,12 @@ export function AppBootstrapProvider({ children }: { children: React.ReactNode }
     let cancelled = false;
 
     // 설문(산책 취향) 완료 여부 확인.
-    //  - 별도 timeout을 지정하지 않고 client.ts의 공통 정책(기본 20초, Cloud Run 콜드스타트 대비)을 그대로 쓴다.
+    //  - 온보딩 플래그와 동일하게, 로컬 완료 캐시(surveyCompletedStorage)가 있으면 서버 응답을
+    //    기다리지 않고 곧장 'completed'로 통과시킨다 — 한 번 완료가 확인된 기기에서까지 매번
+    //    콜드스타트를 기다리며 로딩 화면에 머물 이유가 없다. 서버 조회는 로컬 캐시가 없을 때
+    //    (최초 설문 전·재설치 등)만 필요하고, 이때만 아래 타임아웃/재시도가 적용된다.
     //  - 조회 실패(네트워크 오류·타임아웃)를 'pending'(미완료)으로 처리하지 않는다 — 그게 "재시작마다
-    //    설문 재노출" 버그의 핵심이었다. 실패 시엔 로컬 완료 캐시가 있으면 'completed', 없으면 'unknown'.
+    //    설문 재노출" 버그의 핵심이었다. 실패 시엔 'unknown'으로 두고 백그라운드에서 재시도한다.
     //  - 최초 1회는 결과가 나올 때까지 Loading을 유지하고, 실패하면 Home으로 내보낸 뒤 백그라운드에서
     //    재시도해 서버와 상태를 맞춘다(서버가 실제로 'pending'을 주면 computeTargetScreen이 설문으로 보냄).
     const applyServerData = (data: SurveyStatusResponse) => {
@@ -215,22 +224,25 @@ export function AppBootstrapProvider({ children }: { children: React.ReactNode }
     };
 
     const resolveSurvey = async () => {
+      const locallyCompleted = await surveyCompletedStorage.get().catch(() => false);
+      if (cancelled) return;
+      if (locallyCompleted) {
+        setSurveyStatus('completed');
+        return;
+      }
+
       try {
-        const { data } = await getSurvey();
+        const { data } = await getSurvey({ timeout: SURVEY_CHECK_TIMEOUT_MS });
         if (cancelled) return;
         applyServerData(data);
         return;
       } catch (e) {
         if (cancelled) return;
-        const locallyCompleted = await surveyCompletedStorage.get().catch(() => false);
-        if (cancelled) return;
         console.warn(
-          `[App] GET /api/user/survey failed → ${
-            locallyCompleted ? 'completed(로컬 캐시)' : 'unknown'
-          }, 백그라운드 재시도:`,
+          '[App] GET /api/user/survey failed → unknown, 백그라운드 재시도:',
           (e as { message?: string })?.message ?? e,
         );
-        setSurveyStatus(locallyCompleted ? 'completed' : 'unknown');
+        setSurveyStatus('unknown');
       }
 
       // 백그라운드 재시도: 이미 Home(또는 completed)인 상태로 서버 상태를 다시 맞춘다.

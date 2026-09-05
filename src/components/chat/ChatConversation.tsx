@@ -584,7 +584,7 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: colors.mintDeep,
+    borderColor: colors.ink,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
   },
@@ -592,7 +592,7 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   retryButtonText: {
-    color: colors.mintDeep,
+    color: colors.ink,
     fontSize: 13,
     fontWeight: '800',
   },

@@ -65,7 +65,7 @@ const styles = StyleSheet.create({
     borderTopRightRadius: radii.xl,
   },
   handleIndicator: {
-    backgroundColor: colors.line2,
+    backgroundColor: colors.line,
     width: 38,
     height: 4,
   },
