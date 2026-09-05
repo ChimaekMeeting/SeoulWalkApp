@@ -20,7 +20,8 @@ src/screens/
    ├─ WalkPrepScreen.tsx        # 6a. 산책 시작 전 경로 미리보기
    ├─ WalkInProgressScreen.tsx  # 6b. 산책 진행 중 실시간 화면
    ├─ WalkEndConfirmModal.tsx   # 6c. 산책 종료 확인 모달
-   └─ WalkCompleteScreen.tsx    # 6d. 산책 완료 요약
+   ├─ WalkCompleteScreen.tsx    # 6d. 산책 완료 요약
+   └─ WalkRatingScreen.tsx      # 6e. 코스 별점(자연친화·안전·편안함·총점)
 ```
 
 ---
@@ -81,7 +82,7 @@ Home (앱 셸 — MainRouter.tsx)
 
 ## 3. WalkFlow (산책 전/중/후, `walk/` 폴더)
 
-`WalkFlow.tsx`는 산책 관련 4개 화면(기획 문서 기준 6a~6d)을 하나의 로컬 상태 머신으로 묶습니다 (`stage: 'prep' | 'walking' | 'complete'`).
+`WalkFlow.tsx`는 산책 관련 5개 화면(기획 문서 기준 6a~6e)을 하나의 로컬 상태 머신으로 묶습니다 (`stage: 'prep' | 'walking' | 'complete' | 'rating'`).
 
 ```
 WalkPrepScreen (6a)
@@ -94,7 +95,10 @@ WalkEndConfirmModal (6c)  ← 6b 위에 겹쳐서 뜨는 모달
    │ onConfirm                 │ onCancel → 6b로 복귀(모달만 닫힘)
    ▼
 WalkCompleteScreen (6d)
-   │ onHome
+   │ "산책로 평가하기" → onNext → stage: 'rating'
+   ▼
+WalkRatingScreen (6e)  ← 안드로이드 뒤로가기는 6d로 복귀
+   │ onSubmit(별점)
    ▼
 onExitToHome (MainRouter가 activeRoute를 비우고 'home' 탭으로 복귀)
 ```
@@ -102,6 +106,7 @@ onExitToHome (MainRouter가 activeRoute를 비우고 'home' 탭으로 복귀)
 - **`WalkPrepScreen` (6a)**: 받은 경로를 지도에 미리 보여주고 거리/예상 시간/칼로리를 계산해 표시. 도로 스냅이 진행 중이면(`snapPending`) "산책 시작" 버튼을 잠근다 — 산책 시작 후 경로 좌표가 바뀌면 진행률 트래커 기준이 흔들리므로 스냅을 시작 전에 끝낸다. "산책 시작" → `stage: 'walking'`(이때 경로를 얼린다). 뒤로가기(`onBack`)는 `WalkFlow` 밖으로 나가 바로 `onExitToHome` 호출.
 - **`WalkInProgressScreen` (6b)**: `useWatchLocation` + `useWalkProgress` 훅으로 경로 진행률을 계산(`WalkProgressTracker`, `src/utils/walkProgress.ts`), 만보계(`Pedometer.watchStepCount`)로 걸음 수 측정. 진행률 분모는 `polylineLengthKm(coordinates)`(백엔드 `total_km` 아님). 지도(`RouteMapView`)엔 `routeProgressKm`을 넘겨 지나온/남은 구간을 다른 색으로, 방향 화살표·출발·도착 마커도 표시. 종착점 geofence로 완료가 확정되면(`state === 'complete'`) `onGoalReached` 1회. 종료 버튼 → 스냅샷(`routeProgressKm`/`routeProgressRatio`/`actualDistanceKm`/`endReason`)을 `onRequestEnd`로 올림.
 - **`WalkEndConfirmModal` (6c)**: 종료/완료 확인 모달(재사용). `onConfirm`을 눌러야 `stage: 'complete'`로.
-- **`WalkCompleteScreen` (6d)**: 완주/중간 종료 구분 없이 항상 "산책 완료! 🎉 축하합니다!" — "걸은 만큼 인정"이 방침이라 종료 방식을 화면에서 안 나눈다. 거리(`routeProgressKm`)/시간/걸음 수 요약, 즐겨찾기 토글. "홈으로" → `onHome` → `onExitToHome`. 단 `WalkFlow`는 스냅샷의 `endReason`으로 세션 리셋 사유만 `completed`/`ended_early`로 구분(챗봇 세션 처리용, UI엔 안 보임).
+- **`WalkCompleteScreen` (6d)**: 완주/중간 종료 구분 없이 항상 "산책 완료! 🎉 축하합니다!" — "걸은 만큼 인정"이 방침이라 종료 방식을 화면에서 안 나눈다. 거리(`routeProgressKm`)/시간/걸음 수 요약, 즐겨찾기 토글. "산책로 평가하기" → `onNext` → `stage: 'rating'`(홈으로 바로 안 가고 별점 화면을 먼저 거친다). 단 `WalkFlow`는 스냅샷의 `endReason`으로 세션 리셋 사유만 `completed`/`ended_early`로 구분(챗봇 세션 처리용, UI엔 안 보임).
+- **`WalkRatingScreen` (6e)**: 방금 걸은 산책로가 얼마나 마음에 들었는지 별점 4개(자연·안전·편안함·전체 만족도, 각 1~5)로 확인한다. 재사용 컴포넌트 `src/components/StarRating.tsx`. 4개를 모두 매겨야 "완료"가 활성화되고, 누르면 `onSubmit(WalkRatings)` → `onExitToHome`. 안드로이드 뒤로가기는 6d로 되돌아간다. 서버 전송 엔드포인트는 아직 미정 — `WalkFlow`가 개발 로그만 남긴다(`WalkRatings` 타입 주석의 TODO).
 
 > **`WalkInProgressScreen`의 진행률 계산 상세**는 `src/README.md`의 "14. utils/" 항목과 `src/utils/walkProgress.ts`의 클래스 주석을 참고하세요.

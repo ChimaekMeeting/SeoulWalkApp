@@ -21,7 +21,8 @@ interface Props {
   steps?: number | null;
   /** WalkRouteResponse에 아직 route id가 없어 optional — 없으면 즐겨찾기 비활성. */
   routeId?: number;
-  onHome: () => void;
+  /** 완료 요약을 확인하고 다음(산책로 평가) 화면으로 넘어갈 때. */
+  onNext: () => void;
 }
 
 // 완주 여부(종착점 도착 / 중간 종료)와 무관하게 완료 화면은 동일하게 보여준다 —
@@ -34,7 +35,7 @@ export function WalkCompleteScreen({
   elapsedMs,
   steps: measuredSteps,
   routeId,
-  onHome,
+  onNext,
 }: Props) {
   const [isFavorite, setIsFavorite] = useState(routeResult.is_favorite ?? false);
   const [favoritePending, setFavoritePending] = useState(false);
@@ -93,7 +94,7 @@ export function WalkCompleteScreen({
         />
       </View>
 
-      <Button label="홈으로" onPress={onHome} style={styles.homeButton} />
+      <Button label="산책로 평가하기" onPress={onNext} style={styles.nextButton} />
     </SafeAreaView>
   );
 }
@@ -150,7 +151,7 @@ const styles = StyleSheet.create({
   favoriteButtonText: {
     fontSize: 14,
   },
-  homeButton: {
+  nextButton: {
     marginTop: 'auto',
     marginBottom: spacing.lg,
   },
