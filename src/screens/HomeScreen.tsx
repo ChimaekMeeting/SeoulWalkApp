@@ -38,6 +38,8 @@ interface HomeScreenProps {
   onRetryLocation: () => void;
   /** 대화/메시지 요청 직전 최신 좌표 확보용 (retryLocation 그대로) */
   onRefreshLocation: () => Promise<Coordinates | null>;
+  /** 값이 바뀌면 홈 지도가 현재 위치 추적을 다시 켠다(산책 종료·포그라운드 복귀 시 MainRouter가 증가). */
+  mapRecenterKey: number;
 }
 
 export type HomeScreenHandle = {
@@ -61,6 +63,7 @@ export const HomeScreen = forwardRef<HomeScreenHandle, HomeScreenProps>(function
     locationError,
     onRetryLocation,
     onRefreshLocation,
+    mapRecenterKey,
   }: HomeScreenProps,
   ref,
 ) {
@@ -153,6 +156,7 @@ export const HomeScreen = forwardRef<HomeScreenHandle, HomeScreenProps>(function
           currentLocation={currentLocation}
           previewRoute={activeRoute?.coordinates ?? undefined}
           bottomPadding={mapBottomPadding}
+          recenterKey={mapRecenterKey}
         />
       </View>
 
