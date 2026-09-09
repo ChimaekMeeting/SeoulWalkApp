@@ -20,8 +20,9 @@ export const colors = {
   bgSoft: '#f2f2f2',
   mapPreviewBg: '#f5f5f5',
 
-  // ── 강조 ──
-  coral: '#e4834d', // 지도 도착 지점 마커 (유일한 포인트 컬러)
+  // ── 강조 (지도 마커에만 쓰는 포인트 컬러) ──
+  forest: '#2f9e44', // 지도 출발 지점 마커
+  coral: '#e4834d', // 지도 도착 지점 마커
 
   // ── 채팅 UI (src/components/chat/) ──
   containerBackground: '#f4f3ef',

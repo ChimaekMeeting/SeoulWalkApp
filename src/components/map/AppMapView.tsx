@@ -53,6 +53,13 @@ interface OverviewMapViewProps extends AppMapViewCommonProps {
   showDirectionArrows?: boolean;
   /** previewRoute 선을 점선 대신 실선으로 그린다. 기본은 점선(기존 동작 유지). */
   previewRouteSolid?: boolean;
+  /**
+   * 값이 바뀔 때마다 현재 위치 추적을 다시 켠다 — 사용자가 팬해둔 상태를 풀고
+   * followUserLocation을 잠깐 껐다 켜서 카메라를 현재 위치로 되돌린다. 산책을 마치고
+   * 홈으로 돌아왔을 때·앱이 포그라운드로 복귀했을 때처럼 "지금 위치로 다시 맞춰라"를
+   * 명시적으로 알리는 용도. 매 GPS 갱신마다 따라다니게 하려는 게 아니다.
+   */
+  recenterKey?: number;
 }
 
 interface WalkMapViewProps extends AppMapViewCommonProps {
@@ -140,11 +147,27 @@ export function AppMapView(props: AppMapViewProps) {
     }, WALK_RECENTER_DELAY_MS);
     return () => clearTimeout(timer);
   }, [isWalk, walkInteractionNonce]);
+  // overview 추적 재개: recenterKey가 바뀌면(산책 종료 후 홈 복귀·앱 포그라운드 복귀 등
+  // "지금 위치로 다시 맞춰라" 신호) 사용자가 팬해둔 상태를 풀고 followUserLocation을 잠깐 껐다
+  // 켜서 카메라를 현재 위치로 되돌린다. 지도가 산책 중 display:none이었거나 이미
+  // followUserLocation=true인 상태에선 @rnmapbox가 좌표만 바뀌어선 카메라를 안 옮기므로
+  // (walk 모드 주석 참고) 이 토글이 필요하다. 매 GPS 갱신마다 따라다니게 하는 게 아니라,
+  // 이 신호가 온 순간에만 재추적을 건다. 초기값 0에선 아무것도 하지 않는다.
+  const recenterKey = props.mode === 'overview' ? props.recenterKey : undefined;
+  const [overviewFollowPaused, setOverviewFollowPaused] = useState(false);
+  useEffect(() => {
+    if (isWalk || !recenterKey) return;
+    setUserInteracted(false);
+    setOverviewFollowPaused(true);
+    const timer = setTimeout(() => setOverviewFollowPaused(false), 150);
+    return () => clearTimeout(timer);
+  }, [isWalk, recenterKey]);
+
   // 경로 미리보기(previewRoute)나 지정 중심(centerOverride)이 있으면 그게 우선이라 추적하지 않는다.
   const hasPreviewRoute =
     props.mode === 'overview' && !!props.previewRoute && props.previewRoute.length > 0;
   const overviewFollowsUser =
-    !isWalk && !props.centerOverride && !hasPreviewRoute && !userInteracted;
+    !isWalk && !props.centerOverride && !hasPreviewRoute && !userInteracted && !overviewFollowPaused;
 
   return (
     <View style={[{ flex: 1 }, props.style]}>

@@ -109,6 +109,12 @@ export function MainRouter({
   const [chatSessionKey, setChatSessionKey] = useState(0);
   const resetChatSession = () => setChatSessionKey(key => key + 1);
 
+  // 값이 바뀌면 홈 지도가 현재 위치 추적을 다시 켠다. 홈 탭으로 (재)진입할 때·앱이 포그라운드로
+  // 복귀할 때처럼 "그동안 이동했을 수 있으니 지금 위치로 다시 맞춰라" 신호로만 올린다 —
+  // 챗봇이 메시지마다 부르는 좌표 갱신엔 반응하지 않게(카메라가 계속 따라다니지 않게) 분리.
+  const [mapRecenterKey, setMapRecenterKey] = useState(0);
+  const recenterHomeMap = useCallback(() => setMapRecenterKey(k => k + 1), []);
+
   // 앱이 30분 넘게 백그라운드/비활성 상태였다가 다시 돌아오면 대화를 리셋한다.
   // 단, realWalk 진행 중에는 산책 상태를 보존해야 하므로 리셋하지 않는다.
   const backgroundedAtRef = useRef<number | null>(null);
@@ -125,14 +131,28 @@ export function MainRouter({
         resetChatSession();
       }
       backgroundedAtRef.current = null;
-      // 백그라운드 동안 사용자가 이동했을 수 있으니 현재 위치를 다시 잡는다(지도 파란 점 + 다음 대화 출발지).
-      if (route.name !== 'realWalk') retryLocation();
+      // 백그라운드 동안 사용자가 이동했을 수 있으니 현재 위치를 다시 잡고(지도 파란 점 + 다음 대화 출발지),
+      // 홈 지도 카메라도 새 위치로 되돌린다.
+      if (route.name !== 'realWalk') {
+        retryLocation();
+        recenterHomeMap();
+      }
     },
   });
 
-  const go = (next: Route | TabName) => {
-    setRoute(typeof next === 'string' ? TAB_ROUTES[next] : next);
-  };
+  const go = useCallback(
+    (next: Route | TabName) => {
+      const nextRoute = typeof next === 'string' ? TAB_ROUTES[next] : next;
+      // 다른 화면(다른 탭·산책 플로우)에 있다가 홈 탭으로 돌아올 때마다, 그동안 이동했을 수 있으니
+      // 현재 위치를 다시 잡고(다음 대화 출발지) 홈 지도 카메라도 현재 위치로 되돌린다.
+      if (nextRoute.name === 'home' && route.name !== 'home') {
+        retryLocation();
+        recenterHomeMap();
+      }
+      setRoute(nextRoute);
+    },
+    [route.name, retryLocation, recenterHomeMap],
+  );
 
   // 경로 카드를 눌러 산책을 시작하기 직전, 캐시가 아닌 최신 상태를 다시 확인한다.
   // 1) OS 위치 권한 — 세션 중 설정에서 껐다면 여기서 걸러지고(ensureWalkable→false)
@@ -224,7 +244,7 @@ export function MainRouter({
       return true;
     }
     return false;
-  }, [route.name, recordFilter]);
+  }, [route.name, recordFilter, go]);
   useAndroidBackHandler(handleAndroidBack, route.name !== 'realWalk');
 
   const activeTab = route.name as TabName;
@@ -247,6 +267,7 @@ export function MainRouter({
             locationError={locationError}
             onRetryLocation={retryLocation}
             onRefreshLocation={retryLocation}
+            mapRecenterKey={mapRecenterKey}
           />
         </View>
         {route.name === 'realWalk' && activeRoute ? (
@@ -267,13 +288,12 @@ export function MainRouter({
               setRouteSnapPending(false);
               // prep에서 취소(cancelled_before_start)한 경우엔 들어온 탭으로 되돌린다.
               // 실제로 걷고 나온 경우(완주·조기종료)엔 새 세션이므로 홈으로.
+              // 홈으로 돌아가는 경우 go()가 현재 위치 재획득 + 지도 카메라 복귀를 처리한다.
               go(
                 event.reason === 'cancelled_before_start'
                   ? walkOriginTabRef.current
                   : 'home',
               );
-              // 산책 중 이동한 위치로 홈 지도/다음 대화 출발지를 맞춘다.
-              retryLocation();
             }}
           />
         ) : null}
