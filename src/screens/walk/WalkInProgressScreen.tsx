@@ -5,6 +5,7 @@ import { Pedometer } from 'expo-sensors';
 import { RouteMapView } from '../../components/map';
 import { Button } from '../../components/Button';
 import { DevChip } from '../../components/DevChip';
+import { DevLocationChips } from '../../components/DevLocationChips';
 import { WalkRouteResponse } from '../../types/prewalk';
 import { WalkEndSnapshot } from '../../types/walk';
 import { useWatchLocation } from '../../hooks/useWatchLocation';
@@ -130,6 +131,9 @@ export function WalkInProgressScreen({
               <DevChip label="이탈" onPress={dev.offRoute} />
               <DevChip label="GPS 재개" onPress={dev.resume} />
               <DevChip label="0%로 초기화" onPress={dev.reset} />
+              {/* 실제 GPS를 경로 위 25/50/75% 지점으로 덮어써 이탈·재매칭을 확인한다.
+                  위 seek/이탈 칩을 누른 뒤라면 dev.resume으로 GPS 반영을 먼저 켜야 반응한다. */}
+              <DevLocationChips routeCoords={routeResult.coordinates} />
               {originalRouteCoordinates && originalRouteCoordinates.length > 1 ? (
                 <DevChip
                   label={showOriginalRoute ? '원본 경로 숨기기' : '원본 경로 보기'}

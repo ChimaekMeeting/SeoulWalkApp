@@ -117,6 +117,49 @@ export function anchorLoopToPoint(
   return rotated;
 }
 
+// 저장된 경로를 산책 기록에서 다시 시작할 때, 경로 앞부분 노드들이 지금 서 있는 곳보다 뒤에
+// 있을 수 있다(편도 경로를 중간부터 다시 걷거나, anchorLoopToPoint로 시작점을 돌린 뒤에도 남은
+// 어긋남 등). anchorLoopToPoint가 "인덱스만 돌려" 둘레를 보존하는 것과 달리, 이건 현재 위치가
+// 경로 위에 있으면 그 지점까지의 앞부분을 실제로 잘라낸다 — 지도엔 발밑부터 선이 그려지고
+// total_km 등 거리값도 잘린 비율만큼 줄인다.
+export const ROUTE_TRIM_MAX_OFFROUTE_KM = 0.08; // 현재 위치가 경로에서 이보다 멀면(경로 위에 없음) 자르지 않음
+export const ROUTE_TRIM_MIN_KM = 0.05; // 잘려나갈 앞부분이 이보다 짧으면 이득이 없어 원본 유지
+export const ROUTE_TRIM_MIN_REMAINING_KM = 0.1; // 자르고 남는 경로가 이보다 짧아지면(거의 끝점 — 오매칭) 자르지 않음
+
+/**
+ * route 폴리라인에서 현재 위치(point, [위도, 경도])가 경로 위에 있으면, 시작점부터 현재 위치
+ * 투영 지점까지의 앞부분을 잘라내고 { 잘린 좌표열, 잘린 비율(0~1) }을 돌려준다. 잘린 비율로
+ * total_km 같은 거리값을 비례 축소하면 된다(폴리라인은 직선 현, total_km는 실도로라 스케일이
+ * 달라 절대 km를 빼는 대신 비율로 줄인다). 아래 경우엔 원본을 그대로 돌려준다
+ * (참조 동일, trimmedFraction=0):
+ *  - 좌표가 2개 미만.
+ *  - 현재 위치가 경로에서 ROUTE_TRIM_MAX_OFFROUTE_KM 넘게 떨어짐(경로 위에 없음).
+ *  - 잘려나갈 앞부분이 ROUTE_TRIM_MIN_KM 미만(이득 없음 — 새로 만든 경로의 출발점 GPS 흔들림 등).
+ *  - 자르고 남는 길이가 ROUTE_TRIM_MIN_REMAINING_KM 미만(거의 끝점 — 잘못된 매칭 방지).
+ *
+ * 산책을 시작하기 전(진행률 0, 도로 스냅 전)에만 쓴다 — 산책 중 경로가 바뀌면 진행률 트래커
+ * 기준이 흔들린다. anchorLoopToPoint·reverseRoute 다음에 적용한다.
+ */
+export function trimRouteToPoint(
+  route: WalkRouteResponse['coordinates'],
+  point: [number, number],
+): { coordinates: WalkRouteResponse['coordinates']; trimmedFraction: number } {
+  const noTrim = { coordinates: route, trimmedFraction: 0 };
+  if (!Array.isArray(route) || route.length < 2) return noTrim;
+
+  const totalKm = polylineLengthKm(route);
+  const { distanceAlongRouteKm, distanceToRouteKm } = projectOntoRoute(point, route);
+
+  if (!Number.isFinite(distanceToRouteKm) || distanceToRouteKm > ROUTE_TRIM_MAX_OFFROUTE_KM) {
+    return noTrim;
+  }
+  if (distanceAlongRouteKm < ROUTE_TRIM_MIN_KM) return noTrim;
+  if (totalKm - distanceAlongRouteKm < ROUTE_TRIM_MIN_REMAINING_KM) return noTrim;
+
+  const { after } = sliceRouteAtDistanceKm(route, distanceAlongRouteKm);
+  return { coordinates: after, trimmedFraction: distanceAlongRouteKm / totalKm };
+}
+
 /**
  * 점 p([위도, 경도])를 선분 a→b에 사영한다. 위경도를 선분 시작점 위도 기준 평면으로 근사 투영하되
  * 경도축에 cos(위도) 보정을 적용해(서울에서 경도 1°는 위도 1°의 약 0.79배 거리) 사영 비율 t(0~1)와
@@ -233,6 +276,20 @@ export function sliceRouteAtDistanceKm(
 }
 
 /**
+ * route 폴리라인에서 시작점부터 전체 길이의 fraction(0~1) 지점에 해당하는 좌표를 보간해 돌려준다.
+ * 개발용 GPS 오버라이드(경로 위 25/50/75% 지점으로 위치 이동)에서 쓴다. 좌표가 없으면 null.
+ */
+export function pointAlongRouteFraction(
+  route: WalkRouteResponse['coordinates'],
+  fraction: number,
+): [number, number] | null {
+  if (!Array.isArray(route) || route.length === 0) return null;
+  const clamped = Math.max(0, Math.min(1, fraction));
+  const { before } = sliceRouteAtDistanceKm(route, polylineLengthKm(route) * clamped);
+  return before[before.length - 1] ?? route[0];
+}
+
+/**
  * backend LocationInfo(lat/lon)를 Mapbox가 요구하는 [lng, lat] 순서로 변환한다.
  * lat/lon 중 하나라도 없으면 null을 반환한다.
  */
@@ -255,6 +312,54 @@ export function routeCoordinatesToLineString(
     geometry: {
       type: 'LineString',
       coordinates: coords.map(([lat, lon]) => [lon, lat]),
+    },
+  };
+}
+
+/** a→b 방위각(정북 0°, 시계방향). 두 점이 같으면 0. */
+export function bearingDeg(a: [number, number], b: [number, number]): number {
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLon = toRad(b[1] - a[1]);
+  const lat1 = toRad(a[0]);
+  const lat2 = toRad(b[0]);
+  const y = Math.sin(dLon) * Math.cos(lat2);
+  const x =
+    Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
+  if (x === 0 && y === 0) return 0;
+  return ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
+}
+
+/**
+ * route 폴리라인에서 시작점부터 distanceKm 지점의 좌표와, 그 지점 진행 방향으로 ▶를 돌릴 회전각
+ * rot(= bearing - 90; ▶가 동쪽을 가리키므로 이 각으로 돌리면 진행 방향을 가리킨다)을 담은 GeoJSON
+ * point feature. RouteDirectionFlow가 화살표 하나를 경로 위에서 흐르게 할 때 프레임마다 distanceKm를
+ * 바꿔 호출한다. distanceKm는 [0, 경로 길이]로 클램프된다. 좌표가 2개 미만이면 null.
+ */
+export function directionArrowAt(
+  route: WalkRouteResponse['coordinates'],
+  distanceKm: number,
+): GeoJSON.Feature<GeoJSON.Point> | null {
+  if (!Array.isArray(route) || route.length < 2) return null;
+
+  const segLen = route.slice(1).map((p, i) => haversineDistanceKm(route[i], p));
+  const total = segLen.reduce((sum, d) => sum + d, 0);
+  const target = Math.max(0, Math.min(distanceKm, total));
+
+  let seg = 0;
+  let segStartKm = 0;
+  while (seg < segLen.length - 1 && segStartKm + segLen[seg] < target) {
+    segStartKm += segLen[seg];
+    seg += 1;
+  }
+  const frac = segLen[seg] > 0 ? (target - segStartKm) / segLen[seg] : 0;
+  const a = route[seg];
+  const b = route[seg + 1];
+  return {
+    type: 'Feature',
+    properties: { rot: bearingDeg(a, b) - 90 },
+    geometry: {
+      type: 'Point',
+      coordinates: [a[1] + (b[1] - a[1]) * frac, a[0] + (b[0] - a[0]) * frac],
     },
   };
 }
