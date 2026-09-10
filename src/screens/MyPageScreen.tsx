@@ -4,6 +4,7 @@ import { TabScreen } from '../components/TabScreen';
 import { ProfileCard } from '../components/my/ProfileCard';
 import { DevMenu } from '../components/my/DevMenu';
 import { MyPreferenceSection } from '../components/my/MyPreferenceSection';
+import { MapAppearanceSection } from '../components/my/MapAppearanceSection';
 import { SettingRow } from '../components/my/SettingRow';
 
 interface MyPageScreenProps {
@@ -24,6 +25,8 @@ export function MyPageScreen({
       <ProfileCard nickname={nickname} email={email} />
 
       <MyPreferenceSection />
+
+      <MapAppearanceSection />
 
       <SettingRow
         label="신체 활동 및 위치 권한 수정"
