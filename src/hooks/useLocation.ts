@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import * as Location from 'expo-location';
 import { Coordinates } from '../types/location';
-import { DEBUG_FIXED_COORDS } from '../config/debugLocation';
+import { useDevLocationOverride } from './useDevLocationOverride';
 import { debugLog } from '../utils/logger';
 
 /**
@@ -87,11 +87,14 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 }
 
 export function useLocation({ enabled = true }: Options = {}): UseLocationResult {
-  const [coords, setCoords] = useState<Coordinates | null>(DEBUG_FIXED_COORDS);
-  const [isLoading, setIsLoading] = useState(DEBUG_FIXED_COORDS == null && enabled);
+  // 개발용 GPS 오버라이드(경로 위 임의 지점 등). 값이 있으면 실제 GPS 대신 이 좌표를 쓴다.
+  // 프로덕션에선 항상 null(오버라이드 setter가 no-op).
+  const debugOverride = useDevLocationOverride();
+  const [coords, setCoords] = useState<Coordinates | null>(debugOverride);
+  const [isLoading, setIsLoading] = useState(debugOverride == null && enabled);
   const [error, setError] = useState<LocationErrorReason>(null);
   const [status, setStatus] = useState<LocationStatus>(
-    DEBUG_FIXED_COORDS != null ? 'current' : enabled ? 'loading' : 'initial',
+    debugOverride != null ? 'current' : enabled ? 'loading' : 'initial',
   );
   const [autoRetryAttempt, setAutoRetryAttempt] = useState(0);
 
@@ -112,14 +115,14 @@ export function useLocation({ enabled = true }: Options = {}): UseLocationResult
   }, []);
 
   const performFetch = useCallback(async (): Promise<Coordinates | null> => {
-    if (DEBUG_FIXED_COORDS) {
+    if (debugOverride) {
       if (mountedRef.current) {
-        setCoords(DEBUG_FIXED_COORDS);
+        setCoords(debugOverride);
         setIsLoading(false);
         setError(null);
         setStatus('current');
       }
-      return DEBUG_FIXED_COORDS;
+      return debugOverride;
     }
 
     if (!enabled) {
@@ -243,19 +246,20 @@ export function useLocation({ enabled = true }: Options = {}): UseLocationResult
       inFlightRef.current = false;
       inFlightPromiseRef.current = null;
     }
-  }, [enabled]);
+  }, [enabled, debugOverride]);
 
   // performFetch를 감싸 "이미 진행 중이면 그 Promise를 그대로 돌려준다". 이렇게 해야 retry()를
   // await 했을 때(대화 시작·메시지 전송 직전) 중복 조회 없이 진행 중 조회 결과를 받을 수 있다.
   const fetchCoords = useCallback((): Promise<Coordinates | null> => {
-    if (inFlightRef.current && inFlightPromiseRef.current) {
+    // 개발용 오버라이드 중이면 진행 중인 실제 GPS 조회를 기다리지 않고 즉시 오버라이드를 반영한다.
+    if (!debugOverride && inFlightRef.current && inFlightPromiseRef.current) {
       debugLog('useLocation', 'dedupe: awaiting in-flight request');
       return inFlightPromiseRef.current;
     }
     const promise = performFetch();
     inFlightPromiseRef.current = promise;
     return promise;
-  }, [performFetch]);
+  }, [performFetch, debugOverride]);
 
   useEffect(() => {
     fetchCoords();
@@ -271,7 +275,7 @@ export function useLocation({ enabled = true }: Options = {}): UseLocationResult
   // GPS 콜드스타트가 뒤늦게 잡히면 지도가 현재 위치로 옮겨가도록 한다.
   // (last known을 이미 확보한 경우는 그 좌표를 쓰므로 여기서 재시도하지 않는다 — 5분 이내 캐시만 seed됨.)
   useEffect(() => {
-    if (DEBUG_FIXED_COORDS || !enabled) return;
+    if (debugOverride || !enabled) return;
     if (status !== 'error') return; // 로딩 중·최신 확보·last known 확보면 재시도 안 함
     if (error === 'permission_denied') return; // 권한 문제는 재시도 무의미
     if (autoRetryAttempt >= MAX_AUTO_RETRIES) return;
@@ -287,7 +291,7 @@ export function useLocation({ enabled = true }: Options = {}): UseLocationResult
       fetchCoords();
     }, delayMs);
     return () => clearTimeout(timer);
-  }, [status, error, autoRetryAttempt, enabled, fetchCoords]);
+  }, [status, error, autoRetryAttempt, enabled, fetchCoords, debugOverride]);
 
   const retry = useCallback(() => {
     setAutoRetryAttempt(0);

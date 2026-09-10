@@ -1,13 +1,17 @@
 import {
   anchorLoopToPoint,
+  bearingDeg,
   computeRouteBounds,
+  directionArrowAt,
   haversineDistanceKm,
   isLoopRoute,
+  pointAlongRouteFraction,
   polylineLengthKm,
   projectOntoRoute,
   reverseRoute,
   segmentProjection,
   sliceRouteAtDistanceKm,
+  trimRouteToPoint,
   zoomLevelForBounds,
 } from '../geo';
 import { WalkRouteResponse } from '../../types/prewalk';
@@ -236,5 +240,101 @@ describe('sliceRouteAtDistanceKm', () => {
     const { before, after } = sliceRouteAtDistanceKm(NS_ROUTE, NS_LEN / 2);
     expect(polylineLengthKm(before)).toBeCloseTo(NS_LEN / 2, 2);
     expect(polylineLengthKm(after)).toBeCloseTo(NS_LEN / 2, 2);
+  });
+});
+
+describe('trimRouteToPoint', () => {
+  it('현재 위치가 경로 중간에 있으면 앞부분을 잘라내고 잘린 비율을 준다', () => {
+    const { coordinates, trimmedFraction } = trimRouteToPoint(NS_ROUTE, NS_ROUTE[1]);
+    expect(coordinates).not.toBe(NS_ROUTE);
+    expect(trimmedFraction).toBeCloseTo(0.5, 2);
+    expect(coordinates[0][0]).toBeCloseTo(NS_ROUTE[1][0], 4);
+    expect(coordinates[coordinates.length - 1]).toEqual(NS_ROUTE[NS_ROUTE.length - 1]);
+    expect(polylineLengthKm(coordinates)).toBeCloseTo(NS_LEN / 2, 3);
+  });
+
+  it('현재 위치가 시작점 근처면 원본을 그대로 반환한다(참조 동일)', () => {
+    const r = trimRouteToPoint(NS_ROUTE, NS_ROUTE[0]);
+    expect(r.coordinates).toBe(NS_ROUTE);
+    expect(r.trimmedFraction).toBe(0);
+  });
+
+  it('현재 위치가 경로에서 멀면(경로 위에 없음) 그대로 반환한다', () => {
+    const r = trimRouteToPoint(NS_ROUTE, [37.502, 127.01]); // 약 800m 동쪽
+    expect(r.coordinates).toBe(NS_ROUTE);
+    expect(r.trimmedFraction).toBe(0);
+  });
+
+  it('자르고 남는 길이가 너무 짧으면(거의 끝점) 그대로 반환한다', () => {
+    const r = trimRouteToPoint(NS_ROUTE, NS_ROUTE[2]);
+    expect(r.coordinates).toBe(NS_ROUTE);
+    expect(r.trimmedFraction).toBe(0);
+  });
+
+  it('좌표가 2개 미만이면 그대로 반환한다', () => {
+    expect(trimRouteToPoint([], [37.5, 127.0]).coordinates).toEqual([]);
+    const single: WalkRouteResponse['coordinates'] = [[37.5, 127.0]];
+    expect(trimRouteToPoint(single, [37.5, 127.0]).coordinates).toBe(single);
+  });
+
+  it('원본 배열을 변형하지 않는다', () => {
+    const copy = JSON.parse(JSON.stringify(NS_ROUTE));
+    trimRouteToPoint(NS_ROUTE, NS_ROUTE[1]);
+    expect(NS_ROUTE).toEqual(copy);
+  });
+});
+
+describe('bearingDeg', () => {
+  it('정북/정동/정남/정서를 각각 0/90/180/270°로 준다', () => {
+    expect(bearingDeg([37.5, 127.0], [37.6, 127.0])).toBeCloseTo(0, 0);
+    expect(bearingDeg([37.5, 127.0], [37.5, 127.1])).toBeCloseTo(90, 0);
+    expect(bearingDeg([37.5, 127.0], [37.4, 127.0])).toBeCloseTo(180, 0);
+    expect(bearingDeg([37.5, 127.0], [37.5, 126.9])).toBeCloseTo(270, 0);
+  });
+});
+
+describe('directionArrowAt', () => {
+  it('distanceKm 지점 좌표와 rot(= 진행 방향 bearing - 90)을 준다', () => {
+    // 정동으로 뻗는 직선(bearing 90) → rot ≈ 0.
+    const east: WalkRouteResponse['coordinates'] = [
+      [37.5, 127.0],
+      [37.5, 127.0 + 0.0114], // 위도 37.5에서 경도 0.0114° ≈ 1km
+    ];
+    const f = directionArrowAt(east, 0.5)!;
+    expect(f.properties!.rot).toBeCloseTo(0, 0);
+    // GeoJSON은 [lon, lat] 순서. 중간 지점이라 위도 유지, 경도는 시작과 끝 사이.
+    expect(f.geometry.coordinates[1]).toBeCloseTo(37.5, 5);
+    expect(f.geometry.coordinates[0]).toBeGreaterThan(127.0);
+    expect(f.geometry.coordinates[0]).toBeLessThan(127.0 + 0.0114);
+  });
+
+  it('distanceKm가 커질수록 화살표가 경로를 따라 앞으로 이동한다', () => {
+    const line: WalkRouteResponse['coordinates'] = [
+      [37.5, 127.0],
+      [37.55, 127.0],
+    ];
+    const near = directionArrowAt(line, 0.5)!.geometry.coordinates[1];
+    const far = directionArrowAt(line, 100)!.geometry.coordinates[1]; // 경로 길이 초과 → 끝점으로 클램프
+    expect(far).toBeGreaterThan(near);
+    expect(far).toBeCloseTo(37.55, 5);
+  });
+
+  it('좌표 2개 미만이면 null', () => {
+    expect(directionArrowAt([[37.5, 127.0]], 0.1)).toBeNull();
+  });
+});
+
+describe('pointAlongRouteFraction', () => {
+  it('fraction 0/1은 시작·끝점, 0.5는 중간 지점을 보간한다', () => {
+    expect(pointAlongRouteFraction(NS_ROUTE, 0)).toEqual(NS_ROUTE[0]);
+    expect(pointAlongRouteFraction(NS_ROUTE, 1)).toEqual(NS_ROUTE[NS_ROUTE.length - 1]);
+    const mid = pointAlongRouteFraction(NS_ROUTE, 0.5)!;
+    expect(haversineDistanceKm(NS_ROUTE[0], mid)).toBeCloseTo(NS_LEN / 2, 3);
+  });
+
+  it('범위를 벗어난 fraction은 0~1로 클램프하고, 빈 경로는 null', () => {
+    expect(pointAlongRouteFraction(NS_ROUTE, -1)).toEqual(NS_ROUTE[0]);
+    expect(pointAlongRouteFraction(NS_ROUTE, 2)).toEqual(NS_ROUTE[NS_ROUTE.length - 1]);
+    expect(pointAlongRouteFraction([], 0.5)).toBeNull();
   });
 });
