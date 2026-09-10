@@ -2,14 +2,17 @@ import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ErrorBanner } from '../components/ErrorBanner';
+import { Spinner } from '../components/Spinner';
 import { colors, radii, spacing } from '../theme/tokens';
 
 interface Props {
   onLogin: () => void;
   error?: string | null;
+  /** 로그인 절차 진행 중 — 버튼을 스피너로 바꾸고 다시 눌리지 않게 한다 */
+  pending?: boolean;
 }
 
-export function LoginScreen({ onLogin, error }: Props) {
+export function LoginScreen({ onLogin, error, pending = false }: Props) {
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right', 'bottom']}>
       <View style={styles.body}>
@@ -24,13 +27,20 @@ export function LoginScreen({ onLogin, error }: Props) {
 
           <Pressable
             onPress={onLogin}
+            disabled={pending}
             style={({ pressed }) => [
               styles.kakaoButton,
-              pressed && styles.buttonPressed,
+              (pending || pressed) && styles.buttonPressed,
             ]}
           >
-            <Text style={styles.kakaoIcon}>💬</Text>
-            <Text style={styles.kakaoButtonText}>카카오로 시작하기</Text>
+            {pending ? (
+              <Spinner size={22} color={colors.card} />
+            ) : (
+              <>
+                <Text style={styles.kakaoIcon}>💬</Text>
+                <Text style={styles.kakaoButtonText}>카카오로 시작하기</Text>
+              </>
+            )}
           </Pressable>
         </View>
       </View>
