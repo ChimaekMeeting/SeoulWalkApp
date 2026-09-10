@@ -12,6 +12,75 @@ import {
 import { RouteLayer } from './RouteLayer';
 import { RouteEndpointMarkers } from './RouteEndpointMarkers';
 import { RouteDirectionArrows } from './RouteDirectionArrows';
+import { RouteDirectionFlow } from './RouteDirectionFlow';
+import { useMapAppearance } from '../../hooks/useMapAppearance';
+
+// dark-v11 스타일의 poi-label(가게 이름) 레이어는 라이트(streets-v12)와 비교해 두 가지가 다르다.
+// 둘 다 실제 style.json을 내려받아 비교해서 확인한 값 — 배경·도로·물 등 나머지 다크 테마 자체는
+// 그대로 두고 이 레이어(poi-label)만 골라서 streets-v12와 맞춘다.
+//  1) 필터: filterrank <= step(zoom,0,16,1,17,2) + N — dark는 N=1이라 아주 중요한 장소만 통과하고,
+//     streets는 N=3이라 훨씬 관대하다. 같은 줌에서 dark가 훨씬 적은 가게 이름만 보이던 원인.
+//  2) 표시: dark는 iconImage가 빈 문자열(아이콘 없음) + 단색 회색 텍스트라 라벨이 있어도 눈에 잘
+//     안 띈다. streets는 카테고리별 색 아이콘(maki 스프라이트) + 카테고리별 색 텍스트를 쓴다.
+//     dark-v11 스프라이트에도 같은 maki 아이콘들이 들어있는 걸 확인했으므로(스프라이트 자체는
+//     공유, 아이콘을 안 쓰기로 한 스타일 선택이었을 뿐) 그대로 가져다 써도 깨지지 않는다.
+const POI_LABEL_FILTER: NonNullable<React.ComponentProps<typeof Mapbox.SymbolLayer>['filter']> = [
+  '<=',
+  ['get', 'filterrank'],
+  ['+', ['step', ['zoom'], 0, 16, 1, 17, 2], 3],
+];
+// streets-v12의 poi-label iconImage/iconOpacity 그대로 — 라이트/다크 공통. textHalo(테두리)는
+// 일부러 안 건드린다 — 원래 dark-v11 자체 halo(거의 배경색과 같은 진한 색)가 그대로 적용되어
+// 글자에 흰 테두리가 지지 않는다(흰 테두리를 줬더니 오히려 거슬린다는 피드백).
+const POI_LABEL_ICON_STYLE: React.ComponentProps<typeof Mapbox.SymbolLayer>['style'] = {
+  iconImage: [
+    'case',
+    ['has', 'maki_beta'],
+    ['coalesce', ['image', ['get', 'maki_beta']], ['image', ['get', 'maki']]],
+    ['image', ['get', 'maki']],
+  ],
+  iconOpacity: [
+    'step',
+    ['zoom'],
+    ['step', ['get', 'sizerank'], 0, 5, 1],
+    17,
+    ['step', ['get', 'sizerank'], 0, 13, 1],
+  ],
+};
+// streets-v12의 poi-label textColor 원본(라이트 배경용으로 밝기가 맞춰진 값) 그대로.
+const POI_LABEL_TEXT_COLOR_LIGHT: NonNullable<
+  React.ComponentProps<typeof Mapbox.SymbolLayer>['style']
+>['textColor'] = [
+  'match',
+  ['get', 'class'],
+  'food_and_drink', 'hsl(40, 95%, 43%)',
+  'park_like', 'hsl(110, 70%, 28%)',
+  'education', 'hsl(30, 50%, 43%)',
+  'medical', 'hsl(0, 70%, 58%)',
+  'sport_and_leisure', 'hsl(190, 60%, 48%)',
+  ['store_like', 'food_and_drink_stores'], 'hsl(210, 70%, 58%)',
+  ['commercial_services', 'motorist', 'lodging'], 'hsl(260, 70%, 63%)',
+  ['arts_and_entertainment', 'historic', 'landmark'], 'hsl(320, 70%, 63%)',
+  'hsl(210, 20%, 46%)',
+];
+// 위 라이트 값과 같은 색상(hue)·채도를 유지하되 명도(L)를 10~15p 낮춘 다크 전용 버전 — 검정
+// 배경 위에서 라이트용 밝은 채도가 너무 튀어 보인다는 피드백으로 톤을 가라앉혔다. 검정 배경에서도
+// 읽히도록 최소 22% 밑으로는 내리지 않았다.
+const POI_LABEL_TEXT_COLOR_DARK: NonNullable<
+  React.ComponentProps<typeof Mapbox.SymbolLayer>['style']
+>['textColor'] = [
+  'match',
+  ['get', 'class'],
+  'food_and_drink', 'hsl(40, 90%, 33%)',
+  'park_like', 'hsl(110, 65%, 22%)',
+  'education', 'hsl(30, 45%, 33%)',
+  'medical', 'hsl(0, 60%, 42%)',
+  'sport_and_leisure', 'hsl(190, 50%, 36%)',
+  ['store_like', 'food_and_drink_stores'], 'hsl(210, 60%, 42%)',
+  ['commercial_services', 'motorist', 'lodging'], 'hsl(260, 55%, 46%)',
+  ['arts_and_entertainment', 'historic', 'landmark'], 'hsl(320, 55%, 46%)',
+  'hsl(210, 15%, 38%)',
+];
 
 // 아직 안 걸은 구간(routeProgressKm 이후)을 지나온 구간과 다른 색으로 표시할 때 쓰는 "남은 길" 색.
 // 순환 코스에서 어디까지 걸었고 어느 방향으로 진행 중인지 지도만 보고 알 수 있게 하기 위함.
@@ -47,8 +116,10 @@ interface OverviewMapViewProps extends AppMapViewCommonProps {
   /** 코스를 선택했을 때만 전달. state.route_result.coordinates를 그대로 넘기면 된다. */
   previewRoute?: WalkRouteResponse['coordinates'];
   /**
-   * previewRoute 위에 진행 방향 화살표(RouteDirectionArrows)를 같이 그린다. 기본 꺼짐 —
-   * WalkPrepScreen이 켜서 순환·편도 모두 진행 방향을 보여주는 용도.
+   * previewRoute 위에 출발/도착 마커(RouteEndpointMarkers)와 진행 방향을 흐르는 큰 화살표
+   * (RouteDirectionFlow)로 겹쳐 그린다. 기본 꺼짐 — WalkPrepScreen이 켠다. ▶ 심볼이 선 방향에
+   * 따라 위/아래로 애매해진다는 피드백에 따라, 출발점 부근을 천천히 오가는 화살표 하나 + 출발
+   * 마커 조합으로 "여기서 이쪽" 을 보여준다.
    */
   showDirectionArrows?: boolean;
   /** previewRoute 선을 점선 대신 실선으로 그린다. 기본은 점선(기존 동작 유지). */
@@ -84,6 +155,15 @@ export type AppMapViewProps = OverviewMapViewProps | WalkMapViewProps;
 
 export function AppMapView(props: AppMapViewProps) {
   const isWalk = props.mode === 'walk';
+  const { modes: mapAppearanceModes } = useMapAppearance();
+  const activeMapMode = isWalk ? mapAppearanceModes.walk : mapAppearanceModes.overview;
+  const poiLabelStyle = useMemo(
+    () => ({
+      ...POI_LABEL_ICON_STYLE,
+      textColor: activeMapMode === 'dark' ? POI_LABEL_TEXT_COLOR_DARK : POI_LABEL_TEXT_COLOR_LIGHT,
+    }),
+    [activeMapMode],
+  );
   const { lat, lon } = props.currentLocation ?? {};
   const walkZoomLevel = props.zoomLevel ?? mapConfig.walkCamera.zoomLevel;
   const overviewZoomLevel = props.zoomLevel ?? mapConfig.overviewCamera.zoomLevel;
@@ -173,7 +253,7 @@ export function AppMapView(props: AppMapViewProps) {
     <View style={[{ flex: 1 }, props.style]}>
       <Mapbox.MapView
         style={{ flex: 1 }}
-        styleURL={isWalk ? mapConfig.styles.walk : mapConfig.styles.overview}
+        styleURL={mapConfig.styleUrls[activeMapMode]}
         logoEnabled={false}
         attributionEnabled={false}
         localizeLabels={{ locale: 'ko' }}
@@ -207,6 +287,10 @@ export function AppMapView(props: AppMapViewProps) {
           />
         )}
 
+        {/* 다크 스타일의 가게 이름(POI) 밀도·눈에 띄는 정도를 라이트와 맞춘다 — 위 POI_LABEL_FILTER/
+            POI_LABEL_STYLE 설명 참고. 지도 배경·도로 등 다크 테마 자체는 그대로다. */}
+        <Mapbox.SymbolLayer id="poi-label" existing filter={POI_LABEL_FILTER} style={poiLabelStyle} />
+
         {isWalk && props.route.length > 0 && (
           <>
             {props.routeProgressKm != null ? (
@@ -237,7 +321,11 @@ export function AppMapView(props: AppMapViewProps) {
               dashed={!props.previewRouteSolid}
             />
             {props.showDirectionArrows && (
-              <RouteDirectionArrows route={props.previewRoute} size="large" />
+              <>
+                {/* 흐르는 화살표만으론 어디가 출발인지 헷갈린다 — "출발"(순환) / "출발"·"도착"(편도) 마커를 같이. */}
+                <RouteEndpointMarkers route={props.previewRoute} />
+                <RouteDirectionFlow route={props.previewRoute} />
+              </>
             )}
           </>
         )}

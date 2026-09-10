@@ -77,6 +77,7 @@ export function WalkCompleteScreen({
           mode="overview"
           currentLocation={currentLocation}
           previewRoute={routeResult.coordinates}
+          previewRouteSolid
           fitRouteOnMount
           showZoomControls={false}
           style={styles.routePreviewMap}
