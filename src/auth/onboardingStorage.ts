@@ -87,10 +87,12 @@ export const activityPromptStorage = {
 
 export const surveyCompletedStorage = {
   /**
-   * 설문(산책 취향) 완료 여부의 보조 캐시. 정답은 서버(GET /api/user/survey)지만, 앱 시작 시
-   * 설문 조회가 네트워크 오류·콜드스타트 타임아웃으로 실패했을 때 기존 사용자를 신규 사용자로
-   * 오판해 설문을 다시 띄우는 것을 막는 용도로만 쓴다. 값이 정확히 'true'일 때만 true.
+   * 이 기기에서 설문(산책 취향)을 끝낸 적이 있는지 여부. 앱 시작 시 이 값 하나로 설문
+   * 재노출을 판단한다 — 앱을 지웠다 재설치하면 SecureStore가 초기화돼 값이 사라지므로,
+   * 서버에 완료 기록이 있어도 재설치 후 한 번은 설문을 다시 보여준다.
    */
+  read: surveyCompletedFlag.read,
+  /** read를 boolean으로 축약(값이 정확히 'true'일 때만 true, 조회 실패도 false). */
   get: surveyCompletedFlag.get,
   /** 설문 완료를 로컬에 표시(서버 저장이 확인된 뒤 호출). 저장 성공 여부를 boolean으로 돌려준다. */
   markCompleted: surveyCompletedFlag.set,

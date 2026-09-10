@@ -15,19 +15,12 @@ import {
   readPermissionSnapshot,
   requestLocationPermission as requestLocationPermissionOS,
 } from './permissions';
-import { getSurvey, SurveyStatusResponse } from '../api/survey';
 import { navigationRef } from '../navigation/navigationRef';
 import { useAppStateChange } from '../hooks/useAppStateChange';
 import { debugLog } from '../utils/logger';
 import type { RootScreenName } from '../types/navigation';
 
 type PermissionStatus = 'checking' | PermissionState;
-
-// 설문 완료 여부 최초 조회(로컬 캐시가 없을 때만 탐)에 쓰는 타임아웃. client.ts 기본값(20초,
-// Cloud Run 콜드스타트 최악치 대비)보다 짧게 잡는다 — 사람이 로딩 화면에서 버틸 수 있는 한계는
-// 그보다 훨씬 짧고(NN/g 기준 ~10초가 주의력 유지 한계), 실제 콜드스타트는 보통 8~10초 안에 끝난다.
-// 이 시간 안에 응답이 없으면 일단 Home으로 통과시키고 백그라운드에서 계속 재시도한다.
-const SURVEY_CHECK_TIMEOUT_MS = 8000;
 
 const EMPTY_SNAPSHOT: PermissionSnapshot = {
   location: 'undetermined',
@@ -42,6 +35,8 @@ interface AppBootstrapState {
   authState: 'loading' | 'loggedIn' | 'loggedOut';
   userId: string | null | undefined;
   loginError: string | null;
+  /** 카카오 로그인 절차 진행 중 — 로그인 버튼 스피너·중복 탭 방지용 */
+  signingIn: boolean;
   signIn: () => void;
   signOut: () => void;
   onboardingDone: () => void;
@@ -83,9 +78,9 @@ export function computeTargetScreen(s: {
   showBrandSplash: boolean;
   onboardingStatus: 'checking' | 'seen' | 'unseen';
   authState: 'loading' | 'loggedIn' | 'loggedOut';
-  // 'loading' : 설문 완료 여부 확인 중 · 'completed' : 완료 · 'pending' : 서버가 명시적으로 미완료 반환
-  // 'unknown' : 네트워크 오류·타임아웃 등으로 확인 실패 — 이 상태로는 설문 화면으로 보내지 않는다
-  //             (일시적 실패로 기존 사용자를 신규 사용자처럼 다루면 안 되므로).
+  // 'loading' : 로컬 캐시 확인 중 · 'completed' : 이 기기에서 설문을 끝낸 적 있음 ·
+  // 'pending' : 로컬 캐시 없음(최초 설문 전·재설치 후) → 설문 화면으로.
+  // 'unknown' : (레거시) 이 상태로는 설문으로 보내지 않고 Home으로 흘려보낸다.
   surveyStatus: 'loading' | 'completed' | 'pending' | 'unknown';
   permissionStatus: PermissionStatus;
   activityStatus: PermissionStatus;
@@ -105,9 +100,8 @@ export function computeTargetScreen(s: {
   if (s.authState === 'loading' || (s.authState === 'loggedIn' && s.surveyStatus === 'loading')) {
     return 'Loading';
   }
-  // 서버가 "설문 미완료"라고 명시(pending)했을 때만 설문 화면으로. 'unknown'(조회 실패)은
-  // 여기서 걸러지지 않고 아래로 흘러 Home으로 간다 — AppBootstrapProvider가 백그라운드에서
-  // 재시도하며, 서버가 실제로 pending을 주면 그때 이 분기가 다시 잡는다.
+  // 로컬 완료 캐시가 없을 때만(pending) 설문 화면으로. 'unknown'(캐시 조회 실패)은
+  // 여기서 걸러지지 않고 아래로 흘러 Home으로 간다 — 저장소 오류로 설문을 반복 노출하지 않기 위함.
   if (s.authState === 'loggedIn' && s.surveyStatus === 'pending') return 'Survey';
   if (s.authState === 'loggedIn' && isCheckingPermissions) return 'Loading';
   if (s.authState === 'loggedOut') return 'Login';
@@ -123,7 +117,7 @@ export function computeTargetScreen(s: {
 }
 
 export function AppBootstrapProvider({ children }: { children: React.ReactNode }) {
-  const { authState, userId, error, signIn, signOut } = useKakaoAuth();
+  const { authState, userId, error, signingIn, signIn, signOut } = useKakaoAuth();
   const [permissionStatus, setPermissionStatus] = useState<PermissionStatus>('checking');
   const [activityStatus, setActivityStatus] = useState<PermissionStatus>('checking');
   // 사용자가 걸음 수 권한 화면에서 "허용" 또는 "건너뛰기"를 한 번이라도 눌렀는지.
@@ -146,7 +140,8 @@ export function AppBootstrapProvider({ children }: { children: React.ReactNode }
   >('loading');
 
   useEffect(() => {
-    // 온보딩 열람 여부 · 걸음 수 권한 안내 완료 여부를 SecureStore에서 한 번 읽어 초기화한다.
+    // 온보딩 열람 여부 · 걸음 수 권한 안내 완료 여부 · 설문 완료 여부를 SecureStore에서
+    // 한 번 읽어 초기화한다. 셋 다 로그인과 무관한 로컬 플래그다.
     let cancelled = false;
 
     // 온보딩 플래그 조회: 저장소 오류는 최대 3회 재시도한다. 끝내 실패하면 'unseen'이 아니라
@@ -192,82 +187,28 @@ export function AppBootstrapProvider({ children }: { children: React.ReactNode }
         console.warn('[App] activity_prompt_done 조회 실패 → pending 폴백:', e);
         if (!cancelled) setActivityPromptStatus('pending');
       });
+
+    // 설문(산책 취향)을 이 기기에서 끝낸 적이 있는지. 온보딩 플래그와 같은 원리로 SecureStore에
+    // 저장되며, 앱을 지웠다 재설치하면 사라져 설문이 다시 뜬다. 서버의 survey_completed는 보지
+    // 않는다(재설치 = 다시 물어보기). "조회 실패"만 completed로 폴백해 저장소 오류로 설문이
+    // 반복 노출되는 걸 막는다. 로그인 직후 이 값을 기다리며 '불러오는 중' 화면이 깜빡이지
+    // 않도록, 로그인과 별개로 시작 시 한 번 읽는다.
+    surveyCompletedStorage.read().then(result => {
+      if (cancelled) return;
+      if (!result.ok) {
+        console.warn('[App] survey_completed 캐시 조회 실패 → completed 폴백:', result.error);
+        setSurveyStatus('completed');
+        return;
+      }
+      setSurveyStatus(result.value ? 'completed' : 'pending');
+    });
+
     const timer = setTimeout(() => setShowBrandSplash(false), 2000);
     return () => {
       cancelled = true;
       clearTimeout(timer);
     };
   }, []);
-
-  useEffect(() => {
-    if (authState !== 'loggedIn') return;
-    let cancelled = false;
-
-    // 설문(산책 취향) 완료 여부 확인.
-    //  - 온보딩 플래그와 동일하게, 로컬 완료 캐시(surveyCompletedStorage)가 있으면 서버 응답을
-    //    기다리지 않고 곧장 'completed'로 통과시킨다 — 한 번 완료가 확인된 기기에서까지 매번
-    //    콜드스타트를 기다리며 로딩 화면에 머물 이유가 없다. 서버 조회는 로컬 캐시가 없을 때
-    //    (최초 설문 전·재설치 등)만 필요하고, 이때만 아래 타임아웃/재시도가 적용된다.
-    //  - 조회 실패(네트워크 오류·타임아웃)를 'pending'(미완료)으로 처리하지 않는다 — 그게 "재시작마다
-    //    설문 재노출" 버그의 핵심이었다. 실패 시엔 'unknown'으로 두고 백그라운드에서 재시도한다.
-    //  - 최초 1회는 결과가 나올 때까지 Loading을 유지하고, 실패하면 Home으로 내보낸 뒤 백그라운드에서
-    //    재시도해 서버와 상태를 맞춘다(서버가 실제로 'pending'을 주면 computeTargetScreen이 설문으로 보냄).
-    const applyServerData = (data: SurveyStatusResponse) => {
-      console.log('[App] GET /api/user/survey 응답:', data);
-      // 마이그레이션 기간: survey_completed가 아직 false여도 저장된 태그가 있으면 완료로 본다.
-      const completed = Boolean(
-        data.survey_completed || (data.selected_tags?.length ?? 0) > 0,
-      );
-      setSurveyStatus(completed ? 'completed' : 'pending');
-      // markCompleted(set)는 내부에서 실패를 잡아 boolean만 돌려주므로 reject되지 않는다.
-      if (completed) surveyCompletedStorage.markCompleted();
-    };
-
-    const resolveSurvey = async () => {
-      const locallyCompleted = await surveyCompletedStorage.get().catch(() => false);
-      if (cancelled) return;
-      if (locallyCompleted) {
-        setSurveyStatus('completed');
-        return;
-      }
-
-      try {
-        const { data } = await getSurvey({ timeout: SURVEY_CHECK_TIMEOUT_MS });
-        if (cancelled) return;
-        applyServerData(data);
-        return;
-      } catch (e) {
-        if (cancelled) return;
-        console.warn(
-          '[App] GET /api/user/survey failed → unknown, 백그라운드 재시도:',
-          (e as { message?: string })?.message ?? e,
-        );
-        setSurveyStatus('unknown');
-      }
-
-      // 백그라운드 재시도: 이미 Home(또는 completed)인 상태로 서버 상태를 다시 맞춘다.
-      for (let attempt = 1; attempt <= 3 && !cancelled; attempt++) {
-        await new Promise<void>(resolve => setTimeout(() => resolve(), attempt * 3000));
-        if (cancelled) return;
-        try {
-          const { data } = await getSurvey();
-          if (cancelled) return;
-          applyServerData(data);
-          return;
-        } catch (e) {
-          console.warn(
-            `[App] 설문 백그라운드 재시도 ${attempt}/3 실패:`,
-            (e as { message?: string })?.message ?? e,
-          );
-        }
-      }
-    };
-
-    resolveSurvey();
-    return () => {
-      cancelled = true;
-    };
-  }, [authState]);
 
   // 위치·걸음 수 권한을 OS에 한 번에 물어 3-state와 boolean 스냅샷을 함께 갱신한다.
   // 동시에 여러 곳(포그라운드 복귀 + 경로 생성 버튼 등)에서 불려도 실제 OS 조회는 1회만
@@ -305,12 +246,13 @@ export function AppBootstrapProvider({ children }: { children: React.ReactNode }
     return run;
   }, []);
 
-  // 로그인 직후 1회 + 앱이 백그라운드/비활성에서 포그라운드로 돌아올 때마다 두 권한 모두 재조회.
-  // (설정 앱에서 권한을 켜거나 끄고 돌아온 상황을 여기서 잡는다.)
+  // 시작 시 1회 + 앱이 백그라운드/비활성에서 포그라운드로 돌아올 때마다 두 권한 모두 재조회.
+  // 시작 시 미리 조회해 두면, 로그인 직후 permissionStatus가 아직 'checking'이라 '불러오는 중'
+  // 화면이 깜빡이는 걸 막는다(권한 상태 조회는 프롬프트를 띄우지 않는 단순 읽기라 로그인 전에
+  // 해도 안전). 포그라운드 복귀는 설정 앱에서 권한을 바꾸고 돌아온 상황을 잡는다.
   useEffect(() => {
-    if (authState !== 'loggedIn') return;
     refreshPermissions();
-  }, [authState, refreshPermissions]);
+  }, [refreshPermissions]);
 
   useAppStateChange({
     onForeground: () => {
@@ -393,6 +335,7 @@ export function AppBootstrapProvider({ children }: { children: React.ReactNode }
       authState,
       userId,
       loginError: error,
+      signingIn,
       signIn,
       signOut,
       onboardingDone: () => setOnboardingStatus('seen'),
@@ -448,6 +391,7 @@ export function AppBootstrapProvider({ children }: { children: React.ReactNode }
       authState,
       userId,
       error,
+      signingIn,
       signIn,
       signOut,
       permissionStatus,
