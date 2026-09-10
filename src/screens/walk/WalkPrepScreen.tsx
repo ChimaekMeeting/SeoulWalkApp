@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { RouteMapView } from '../../components/map';
 import { Button } from '../../components/Button';
 import { DevChip } from '../../components/DevChip';
+import { DevLocationChips } from '../../components/DevLocationChips';
 import { ScreenHeader } from '../../components/ScreenHeader';
 import { StatRow } from '../../components/StatRow';
 import { LocationInfo, WalkRouteResponse } from '../../types/prewalk';
@@ -95,6 +96,8 @@ export function WalkPrepScreen({
             label={devForceSnap ? '[DEV] 스냅 화면 해제' : '[DEV] 도로 스냅 화면 보기'}
             onPress={() => setDevForceSnap(v => !v)}
           />
+          {/* GPS를 경로 위 지점으로 옮긴 뒤 뒤로 나갔다 다시 들어오면 그 위치 기준으로 시작점이 재정렬된다. */}
+          <DevLocationChips routeCoords={routeResult.coordinates} />
         </View>
       ) : null}
 
@@ -163,6 +166,9 @@ const styles = StyleSheet.create({
     marginHorizontal: spacing.lg,
     marginBottom: spacing.sm,
     flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: spacing.sm,
   },
   snapBar: {
     height: 52,

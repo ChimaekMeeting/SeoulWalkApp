@@ -13,7 +13,7 @@ import { useAppStateChange } from '../hooks/useAppStateChange';
 import { useAndroidBackHandler } from '../hooks/useAndroidBackHandler';
 import { debugLog } from '../utils/logger';
 import { snapWalkRoute } from '../utils/mapMatchRoute';
-import { anchorLoopToPoint } from '../utils/geo';
+import { anchorLoopToPoint, isLoopRoute, trimRouteToPoint } from '../utils/geo';
 import { markRouteWalked } from '../utils/recentRouteUsage';
 import { LocationInfo, WalkRouteResponse } from '../types/prewalk';
 import { colors } from '../theme/tokens';
@@ -178,17 +178,41 @@ export function MainRouter({
 
     walkOriginTabRef.current = route.name === 'record' ? 'record' : 'home';
 
-    // 순환 코스를 기록에서 다시 시작하는 경우처럼 저장된 출발점이 현재 위치와 멀면, 닫힌 경로를
-    // 돌려 현재 위치에서 가장 가까운 지점을 출발점으로 삼는다(편도이거나 경로에서 멀면 원본 유지).
-    // 도로 스냅·방향 전환보다 먼저 — 이후 로직이 모두 이 좌표를 기준으로 돌게 한다.
-    const anchoredCoords = anchorLoopToPoint(selected.coordinates, [
-      current.latitude,
-      current.longitude,
-    ]);
+    // 저장된 출발점이 현재 위치와 멀면(순환 코스 기록 재시작 등) 현재 위치를 기준으로 경로를
+    // 맞춘다. 도로 스냅·방향 전환보다 먼저 — 이후 로직이 모두 이 좌표를 기준으로 돌게 한다.
+    // 1) 순환 코스: 닫힌 경로라 시작 인덱스만 돌려 현재 위치에서 가장 가까운 지점을 출발점으로.
+    const currentPoint: [number, number] = [current.latitude, current.longitude];
+    const anchoredCoords = anchorLoopToPoint(selected.coordinates, currentPoint);
+    // 2) 그래도 경로 앞부분이 현재 위치보다 뒤에 있으면(편도 기록 중간 재시작 등) 그 앞부분을
+    //    실제로 잘라내고 total_km도 잘린 비율만큼 줄인다.
+    const { coordinates: adjustedCoords, trimmedFraction } = trimRouteToPoint(
+      anchoredCoords,
+      currentPoint,
+    );
     const anchored =
-      anchoredCoords === selected.coordinates
+      adjustedCoords === selected.coordinates
         ? selected
-        : { ...selected, coordinates: anchoredCoords };
+        : {
+            ...selected,
+            coordinates: adjustedCoords,
+            total_km:
+              trimmedFraction > 0
+                ? selected.total_km * (1 - trimmedFraction)
+                : selected.total_km,
+          };
+
+    debugLog('startWalk', 'anchor+trim', {
+      isLoop: isLoopRoute(selected.coordinates),
+      nodes: selected.coordinates.length,
+      adjustedNodes: adjustedCoords.length,
+      current: currentPoint,
+      oldStart: selected.coordinates[0],
+      newStart: adjustedCoords[0],
+      anchored: anchoredCoords !== selected.coordinates,
+      trimmedFraction,
+      oldTotalKm: selected.total_km,
+      newTotalKm: anchored.total_km,
+    });
 
     setActiveRoute(anchored);
     setRouteSnapPending(true);
