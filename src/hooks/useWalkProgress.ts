@@ -1,7 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Coordinates } from '../types/location';
 import { WalkRouteResponse } from '../types/prewalk';
-import { WalkProgress, WalkProgressTracker, deriveProgress } from '../utils/walkProgress';
+import {
+  WalkProgress,
+  WalkProgressTracker,
+  deriveProgress,
+  scaleProgressToDisplayLength,
+} from '../utils/walkProgress';
 
 /** 개발 빌드에서만 채워진다(프로덕션에선 null). GPS 없이 진행률 상태를 강제해 화면을 확인하는 용도. */
 export interface WalkProgressDevControls {
@@ -29,11 +34,16 @@ export interface WalkProgressDevControls {
  *
  * 개발 빌드에선 dev 컨트롤이 함께 반환된다. 하나라도 누르면 실시간 GPS 반영이 멈추고(dev.reset으로 재개),
  * 강제한 상태가 유지된다.
+ *
+ * routeLengthKm: tracker가 투영·비율 계산에 쓰는 폴리라인 누적 길이(종착점 100% 도달 보장).
+ * displayLengthKm: 화면에 보이는 거리값(걸은/남은/목표)을 이 길이 기준으로 환산한다 — 보통 백엔드
+ *   total_km. 생략하면 폴리라인 길이 그대로 노출한다.
  */
 export function useWalkProgress(
   coords: Coordinates | null,
   routeCoords: WalkRouteResponse['coordinates'],
   routeLengthKm: number,
+  displayLengthKm?: number,
 ): { progress: WalkProgress; dev: WalkProgressDevControls | null } {
   const trackerRef = useRef<WalkProgressTracker | undefined>(undefined);
   if (!trackerRef.current) trackerRef.current = new WalkProgressTracker();
@@ -90,5 +100,10 @@ export function useWalkProgress(
     };
   }, [routeLengthKm]);
 
-  return { progress, dev };
+  // 트래커/deriveProgress는 폴리라인 길이 기준으로 진행률을 만든다. 화면에 보이는 거리값만
+  // displayLengthKm(백엔드 total_km) 기준으로 환산해 내보낸다 — 비율은 그대로 둔다.
+  return {
+    progress: scaleProgressToDisplayLength(progress, displayLengthKm ?? NaN),
+    dev,
+  };
 }

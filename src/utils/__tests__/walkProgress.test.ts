@@ -2,6 +2,7 @@ import {
   WalkProgressTracker,
   deriveProgress,
   resolveEndReason,
+  scaleProgressToDisplayLength,
   REQUIRED_DESTINATION_FIXES,
   REQUIRED_REMATCH_FIXES,
 } from '../walkProgress';
@@ -65,6 +66,44 @@ describe('deriveProgress', () => {
     const mid = deriveProgress(1.5, 3);
     expect(mid.routeProgressRatio).toBeCloseTo(0.5, 5);
     expect(mid.remainingRouteKm).toBeCloseTo(1.5, 5);
+  });
+});
+
+describe('scaleProgressToDisplayLength', () => {
+  it('비율은 그대로 두고 거리만 표시 길이 기준으로 환산한다', () => {
+    // 폴리라인 3.1km 위에서 절반 진행 → 비율 0.5.
+    const p = deriveProgress(1.55, 3.1);
+    expect(p.routeProgressRatio).toBeCloseTo(0.5, 5);
+
+    const scaled = scaleProgressToDisplayLength(p, 3.3);
+    expect(scaled.routeProgressRatio).toBeCloseTo(0.5, 5); // 비율 불변
+    expect(scaled.routeProgressKm).toBeCloseTo(1.65, 5); // 3.3 × 0.5
+    expect(scaled.remainingRouteKm).toBeCloseTo(1.65, 5); // 3.3 × 0.5
+    // 걸은 + 남은 = 목표(표시 길이).
+    expect(scaled.routeProgressKm + scaled.remainingRouteKm).toBeCloseTo(3.3, 5);
+  });
+
+  it('시작(0%)과 종착점(100%)에서 목표와 정확히 맞는다', () => {
+    const start = scaleProgressToDisplayLength(deriveProgress(0, 3.1), 3.3);
+    expect(start.routeProgressKm).toBeCloseTo(0, 5);
+    expect(start.remainingRouteKm).toBeCloseTo(3.3, 5);
+
+    const end = scaleProgressToDisplayLength(deriveProgress(3.1, 3.1), 3.3);
+    expect(end.routeProgressRatio).toBe(1);
+    expect(end.routeProgressKm).toBeCloseTo(3.3, 5);
+    expect(end.remainingRouteKm).toBeCloseTo(0, 5);
+  });
+
+  it('actualDistanceKm(실측 이동거리)는 환산하지 않는다', () => {
+    const p = deriveProgress(1.55, 3.1, 'tracking', 1.4);
+    expect(scaleProgressToDisplayLength(p, 3.3).actualDistanceKm).toBeCloseTo(1.4, 5);
+  });
+
+  it('표시 길이가 유효하지 않으면 원본을 그대로 돌려준다', () => {
+    const p = deriveProgress(1.55, 3.1);
+    expect(scaleProgressToDisplayLength(p, NaN)).toBe(p);
+    expect(scaleProgressToDisplayLength(p, 0)).toBe(p);
+    expect(scaleProgressToDisplayLength(p, -1)).toBe(p);
   });
 });
 

@@ -41,13 +41,20 @@ export function WalkInProgressScreen({
 
   // 진행률 분모는 백엔드 total_km가 아니라 tracker가 실제 투영에 쓰는 폴리라인의 누적 길이다
   // (직선 현 vs 실도로라 스케일이 달라 total_km로 나누면 종착점에서도 100%에 못 닿는다).
+  // 대신 화면에 보이는 거리값(걸은/남은 거리)은 useWalkProgress가 total_km 기준으로 되돌려 —
+  // "목표 total_km"와 "걸은 + 남은"이 항상 맞고, prep·완료 화면과도 일치한다.
   // routeResult는 WalkFlow가 walking 진입 시점에 얼린 값이라 산책 중 좌표가 바뀌지 않는다
   // (순환 코스 진행 방향은 WalkPrepScreen에서 시작 전에 고른다 — 산책 중엔 안 바뀐다).
   const routeLengthKm = useMemo(
     () => polylineLengthKm(routeResult.coordinates),
     [routeResult.coordinates],
   );
-  const { progress, dev } = useWalkProgress(coords, routeResult.coordinates, routeLengthKm);
+  const { progress, dev } = useWalkProgress(
+    coords,
+    routeResult.coordinates,
+    routeLengthKm,
+    routeResult.total_km,
+  );
 
   useEffect(() => {
     let subscription: { remove: () => void } | undefined;

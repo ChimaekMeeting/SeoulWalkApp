@@ -101,6 +101,29 @@ export function deriveProgress(
   };
 }
 
+/**
+ * 표시용 거리 환산 — 트래커가 만든 진행률의 거리 필드를 백엔드 total_km 기준으로 다시 계산한다.
+ *
+ * 투영·비율(routeProgressRatio)은 클라이언트 폴리라인 길이를 분모로 써야 종착점에서 100%에 닿는다
+ * (deriveProgress 주석 참고). 하지만 그 폴리라인은 도로 스냅이 안 된 구간이 직선 현이라 실제 도로보다
+ * 짧아서, 사용자에게 보이는 "목표 / 걸은 거리 / 남은 거리"는 total_km 기준이 더 정확하고 prep·완료
+ * 화면과도 일치한다. 그래서 비율은 그대로 두고 거리만 total_km × 비율로 바꾼다.
+ * actualDistanceKm(실측 이동거리, 걸음 수 추정용)는 환산하지 않는다.
+ * displayLengthKm가 유효하지 않으면(없음·NaN·0 이하) 원본을 그대로 돌려준다.
+ */
+export function scaleProgressToDisplayLength(
+  progress: WalkProgress,
+  displayLengthKm: number,
+): WalkProgress {
+  if (!Number.isFinite(displayLengthKm) || displayLengthKm <= 0) return progress;
+  const ratio = progress.routeProgressRatio;
+  return {
+    ...progress,
+    routeProgressKm: displayLengthKm * ratio,
+    remainingRouteKm: displayLengthKm * Math.max(1 - ratio, 0),
+  };
+}
+
 /** 종료 시점의 tracker 상태 + GPS 가용 여부로 종료 사유를 정한다. 순수 함수 — 테스트/화면 공용. */
 export function resolveEndReason(state: WalkProgressState, hasGps: boolean): WalkEndReason {
   if (state === 'complete') return 'destination_arrived';

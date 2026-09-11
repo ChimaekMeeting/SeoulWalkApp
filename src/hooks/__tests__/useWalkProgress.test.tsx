@@ -33,10 +33,10 @@ afterEach(() => updateSpy.mockRestore());
 
 type HookResult = ReturnType<typeof useWalkProgress>;
 
-function renderProbe(initial: Coordinates | null, strict = false) {
+function renderProbe(initial: Coordinates | null, strict = false, displayLengthKm?: number) {
   const box: { current: HookResult } = { current: null as never };
   function Probe({ coords }: { coords: Coordinates | null }) {
-    box.current = useWalkProgress(coords, ROUTE, LEN);
+    box.current = useWalkProgress(coords, ROUTE, LEN, displayLengthKm);
     return null;
   }
   const tree = (coords: Coordinates | null) =>
@@ -112,6 +112,24 @@ it('coords가 null이면 update를 호출하지 않고 초기 진행률을 반�
   expect(updateSpy).not.toHaveBeenCalled();
   expect(box.current.progress.routeProgressRatio).toBe(0);
   expect(box.current.progress.state).toBe('initializing');
+  unmount();
+});
+
+it('displayLengthKm를 주면 거리값을 그 길이 기준으로 환산해 내보낸다(비율은 불변)', () => {
+  const display = LEN * 1.2; // 폴리라인보다 20% 긴 백엔드 total_km 가정
+  const { box, unmount } = renderProbe(null, false, display);
+  // fix 없이 초기 상태: 0%.
+  expect(box.current.progress.routeProgressKm).toBe(0);
+  expect(box.current.progress.remainingRouteKm).toBeCloseTo(display, 6);
+
+  ReactTestRenderer.act(() => box.current.dev!.seek(0.5));
+  expect(box.current.progress.routeProgressRatio).toBeCloseTo(0.5, 5);
+  expect(box.current.progress.routeProgressKm).toBeCloseTo(display * 0.5, 5);
+  expect(box.current.progress.remainingRouteKm).toBeCloseTo(display * 0.5, 5);
+
+  ReactTestRenderer.act(() => box.current.dev!.complete());
+  expect(box.current.progress.routeProgressKm).toBeCloseTo(display, 5);
+  expect(box.current.progress.remainingRouteKm).toBeCloseTo(0, 5);
   unmount();
 });
 
