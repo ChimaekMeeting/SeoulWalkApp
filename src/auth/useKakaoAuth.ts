@@ -7,6 +7,7 @@ import {
   getProfile,
 } from '@react-native-seoul/kakao-login';
 import { client } from '../api/client';
+import { cachedResource } from '../hooks/useCachedResource';
 import { authStorage } from './authStorage';
 
 type AuthState = 'loading' | 'loggedIn' | 'loggedOut';
@@ -61,6 +62,8 @@ export function useKakaoAuth() {
 
   useEffect(() => {
     const sub = DeviceEventEmitter.addListener('auth:forceLogout', () => {
+      // 유저 단위로 캐시된 서버 데이터(경로 기록 등)가 다음 로그인 유저에게 잠깐 보이지 않게.
+      cachedResource.clearAll();
       setUserId(null);
       setAuthState('loggedOut');
     });
@@ -121,6 +124,7 @@ export function useKakaoAuth() {
     } catch (err: unknown) {
       console.error('[KakaoAuth] logout failed:', err);
     } finally {
+      cachedResource.clearAll();
       await Promise.all([
         authStorage.removeUserId(),
         authStorage.removeTokens(),
