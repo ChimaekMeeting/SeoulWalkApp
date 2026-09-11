@@ -266,7 +266,11 @@ export function AppMapView(props: AppMapViewProps) {
             followUserMode={Mapbox.UserTrackingMode.FollowWithHeading}
             followZoomLevel={walkZoomLevel}
             followPitch={mapConfig.walkCamera.pitch}
-            animationMode="flyTo"
+            // "flyTo"는 출발-가속-감속하는 관성 곡선이라 매 GPS 픽스(작은 이동량)마다 재생하면
+            // 거의 움직이지 않다가 오차가 쌓여 화면 밖으로 나갈 때쯤에야 한 번에 따라잡는 것처럼
+            // 보인다(실사용 피드백). "linearTo"는 등속으로 즉시 보간해 매 업데이트를 그대로
+            // 반영하므로 GPS를 따라 카메라가 계속 움직이는 게 자연스럽게 보인다.
+            animationMode="linearTo"
           />
         ) : (
           <Mapbox.Camera

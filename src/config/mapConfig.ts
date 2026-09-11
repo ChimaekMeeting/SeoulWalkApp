@@ -33,6 +33,9 @@ export const mapConfig = {
   },
   walkCamera: {
     zoomLevel: 17,
-    pitch: 60,
+    // FollowWithHeading는 나침반 원값을 스무딩 없이 그대로 카메라 bearing에 실시간 동기화한다
+    // (@rnmapbox가 이 트래킹 모드용 스무딩/데드존 옵션을 제공하지 않음). pitch가 높을수록(3D로
+    // 기울어질수록) 같은 회전각이라도 화면상 좌우로 크게 스윙해 보인다는 피드백으로 60→35로 낮춤.
+    pitch: 35,
   },
 };
