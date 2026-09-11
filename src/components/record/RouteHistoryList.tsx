@@ -1,8 +1,9 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo } from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { WalkMode, WalkRouteResponse } from '../../types/prewalk';
 import { RouteHistoryItem } from '../../types/routes';
 import { getRouteHistories, toggleFavoriteRoute } from '../../api/routes';
+import { useCachedResource } from '../../hooks/useCachedResource';
 import { estimateDurationMinutes } from '../../utils/walkEstimate';
 import { buildRouteThumbnailUrl } from '../../utils/routeThumbnail';
 import {
@@ -23,54 +24,45 @@ interface Props {
   onSelectRoute: (route: WalkRouteResponse) => void;
 }
 
-export function RouteHistoryList({ filter, onSelectRoute }: Props) {
-  const [histories, setHistories] = useState<RouteHistoryItem[]>([]);
-  const [usage, setUsage] = useState<RouteUsageMap>({});
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
+interface HistoryData {
+  histories: RouteHistoryItem[];
+  usage: RouteUsageMap;
+}
 
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    setError(false);
-    Promise.all([
-      getRouteHistories({
-        limit: 20,
-        is_favorite: filter === 'favorite' ? true : undefined,
-      }),
-      getRecentRouteUsage(),
-    ])
-      .then(([res, usageMap]) => {
-        if (cancelled) return;
-        setHistories(res.histories);
-        setUsage(usageMap);
-      })
-      .catch(() => {
-        if (!cancelled) setError(true);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [filter]);
+export function RouteHistoryList({ filter, onSelectRoute }: Props) {
+  // 서버 기록 + 로컬 재산책 시각을 한 번에. 콜드스타트로 느리거나 실패하면 훅이 재시도하고,
+  // 탭을 나갔다 들어오면 지난 목록을 즉시 보여준 뒤(세션 캐시) 뒤에서 갱신한다.
+  const { data, loading, error, mutate } = useCachedResource<HistoryData>({
+    key: `routeHistories:${filter}`,
+    fetcher: async () => {
+      const [res, usage] = await Promise.all([
+        getRouteHistories({
+          limit: 20,
+          is_favorite: filter === 'favorite' ? true : undefined,
+        }),
+        getRecentRouteUsage(),
+      ]);
+      return { histories: res.histories, usage };
+    },
+    logLabel: '[RouteHistoryList]',
+  });
 
   // 같은 경로로 여러 번 산책해 쌓인 중복 기록을 카드 하나로 합치고, 최근에 걸은
   // (서버 생성 시각 또는 로컬 재산책 시각 중 나중) 순으로 정렬한다.
   const visibleHistories = useMemo(
-    () => dedupeRouteHistories(histories, usage),
-    [histories, usage],
+    () => dedupeRouteHistories(data?.histories ?? [], data?.usage ?? {}),
+    [data],
   );
 
   const handleToggleFavorite = async (id: number) => {
+    if (!data) return;
     try {
       const updated = await toggleFavoriteRoute(id);
-      setHistories(prev =>
+      const histories =
         filter === 'favorite' && !updated.is_favorite
-          ? prev.filter(h => h.id !== id)
-          : prev.map(h => (h.id === id ? updated : h)),
-      );
+          ? data.histories.filter(h => h.id !== id)
+          : data.histories.map(h => (h.id === id ? updated : h));
+      mutate({ ...data, histories });
     } catch {
       // 무시: 다음 조회 때 실제 상태로 다시 맞춰짐
     }
