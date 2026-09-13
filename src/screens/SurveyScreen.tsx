@@ -19,7 +19,10 @@ import { colors, radii, spacing } from '../theme/tokens';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 const CHIP_GAP = spacing.sm;
-const CHIP_W = (SCREEN_W - spacing.xxl * 2 - CHIP_GAP * 2) / 3;
+// 한 줄에 SURVEY_TAGS 전부를 나눠 채운다 — 태그 개수가 바뀌어도 칸이 화면 폭에 맞게 자동으로
+// 넓어지거나 좁아진다(고정 3분할이었다면 태그가 줄었을 때 옆에 빈 공간이 남는다).
+const CHIP_W =
+  (SCREEN_W - spacing.xxl * 2 - CHIP_GAP * (SURVEY_TAGS.length - 1)) / SURVEY_TAGS.length;
 
 interface Props {
   onDone: () => void;

@@ -18,6 +18,8 @@ export function MyPreferenceItem({ label, value, onPress }: MyPreferenceItemProp
 
 const styles = StyleSheet.create({
   item: {
+    flex: 1,
+    alignItems: 'center',
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.lg,
     borderRadius: radii.lg,
