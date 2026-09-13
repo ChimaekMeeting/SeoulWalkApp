@@ -57,7 +57,7 @@ function prefsFromResponse(d: SurveyStatusResponse): Prefs {
 }
 
 /**
- * 마이페이지의 '내 산책 취향' 섹션 — 태그(편안·안전·자연)와 선호 거리를 바꾸면 즉시 서버에
+ * 마이페이지의 '내 산책 취향' 섹션 — 태그(편안·안전)와 선호 거리를 바꾸면 즉시 서버에
  * 저장한다. 설문 화면(SurveyScreen)과 같은 /api/user/survey 를 쓴다. 태그와 거리 중 하나만
  * 바뀌어도 둘 다 함께 POST 한다(한쪽만 보내 서버에서 다른 쪽이 지워지는 걸 막는다).
  *
