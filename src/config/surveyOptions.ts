@@ -16,7 +16,6 @@ interface SurveyTag {
 export const SURVEY_TAGS: SurveyTag[] = [
   { id: 'comfort', label: '편안한 길', tagValue: '편안한 길' },
   { id: 'safety', label: '안전한 길', tagValue: '안전한 길' },
-  { id: 'nature', label: '자연이 많은 길', tagValue: '자연이 많은 길' },
 ];
 
 interface DistanceChoice {
