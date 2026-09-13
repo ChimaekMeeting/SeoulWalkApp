@@ -1,5 +1,5 @@
 import { WalkRouteResponse } from '../types/prewalk';
-import { bearingDeg, haversineDistanceKm } from './geo';
+import { bearingDeg, haversineDistanceKm, projectOntoRoute } from './geo';
 
 // route 좌표(도로 스냅된 [위도, 경도] 폴리라인)의 방위각 변화만으로 턴 지점을 찾는다.
 // 백엔드에 maneuver/street-name API가 없으므로, "여기서 얼마나 꺾이는가"만 기하학적으로 계산해서
@@ -154,8 +154,10 @@ const TURN_KIND_LABEL: Record<Exclude<TurnKind, 'arrive'>, string> = {
   uturn: '유턴',
 };
 
-// 이 거리(km) 안이면 "OOm 앞" 대신 "지금"으로 표현한다.
-const TURN_IMMEDIATE_KM = 0.015; // 15m
+// 이 거리(km) 안이면 "OOm 앞" 대신 "지금"으로 표현한다. useTurnByTurn(포그라운드 최종 안내)과
+// turnByTurnBackgroundTask(백그라운드 알림)가 "지금 안내해야 하는 순간"을 판단할 때도 같이 쓴다 —
+// 두 곳에서 같은 숫자를 따로 정의하면 어긋날 수 있어 하나로 export.
+export const TURN_IMMEDIATE_KM = 0.015; // 15m
 
 /** "250m 앞 우회전" / "지금 좌회전" / "목적지 도착" 같은 안내 문구를 만든다. */
 export function formatTurnInstruction(kind: TurnKind, distanceToKm: number): string {
@@ -170,4 +172,35 @@ export function formatTurnInstruction(kind: TurnKind, distanceToKm: number): str
 /** steps 중 아직 지나지 않은(atKm이 routeProgressKm보다 큰) 첫 번째 턴. 없으면 null. */
 export function findNextTurnStep(steps: TurnStep[], routeProgressKm: number): TurnStep | null {
   return steps.find(step => step.atKm > routeProgressKm) ?? null;
+}
+
+export interface BackgroundAnnouncementDecision {
+  step: TurnStep | null;
+  distanceToKm: number;
+  /**
+   * true면 이번 GPS fix에서 알림·TTS를 내보내야 한다는 뜻 — 호출부(turnByTurnBackgroundTask)가
+   * 실제로 내보낸 뒤 lastAnnouncedAtKm을 step.atKm으로 갱신해야 다음 fix에서 다시 true가 되지 않는다.
+   */
+  shouldAnnounce: boolean;
+}
+
+/**
+ * 백그라운드 위치 태스크 전용 — WalkProgressTracker처럼 이력을 들고 있는 상태가 없어도 되는 용도라
+ * (진행률 바가 아니라 "다음 턴 알림" 판단용), 매 GPS fix를 독립적으로 route에 투영해 다음 턴까지
+ * 남은 거리를 구한다. lastAnnouncedAtKm(직전에 이미 알림을 보낸 턴의 atKm — 포그라운드 훅과
+ * activeWalkSession을 통해 공유)과 비교해 같은 턴을 두 번 알리지 않는다. 순수 함수라 Jest로 검증
+ * 가능 — TaskManager 콜백 자체(네이티브 위치 스트림 구독)는 여기서 다루지 않는다.
+ */
+export function decideBackgroundAnnouncement(
+  route: WalkRouteResponse['coordinates'],
+  current: [number, number],
+  lastAnnouncedAtKm: number | null,
+): BackgroundAnnouncementDecision {
+  const steps = buildTurnSteps(route);
+  const { distanceAlongRouteKm } = projectOntoRoute(current, route);
+  const step = findNextTurnStep(steps, distanceAlongRouteKm);
+  const distanceToKm = step ? Math.max(0, step.atKm - distanceAlongRouteKm) : 0;
+  const withinRange = step != null && distanceToKm <= TURN_IMMEDIATE_KM;
+  const alreadyAnnounced = step != null && lastAnnouncedAtKm === step.atKm;
+  return { step, distanceToKm, shouldAnnounce: withinRange && !alreadyAnnounced };
 }

@@ -1,10 +1,25 @@
 /**
  * useTurnByTurn: route가 바뀌지 않는 한 buildTurnSteps가 다시 계산되지 않는지, routeProgressKm이
- * 올라갈 때마다 다음 턴이 올바르게 갱신되는지, 턴 지점 근처에서 진동이 스텝당 한 번만 울리는지 검증.
+ * 올라갈 때마다 다음 턴이 올바르게 갱신되는지, 헤드업/최종 두 단계 음성 안내와 진동이 스텝당 한 번씩만
+ * 울리는지, backgroundEnabled가 켜지면 백그라운드 위치 태스크를 시작/정리하는지 검증.
  * useWalkProgress.test.tsx와 같은 Probe + react-test-renderer 패턴.
  */
+jest.mock('expo-location', () => ({
+  Accuracy: { BestForNavigation: 6 },
+  startLocationUpdatesAsync: jest.fn().mockResolvedValue(undefined),
+  stopLocationUpdatesAsync: jest.fn().mockResolvedValue(undefined),
+}));
+jest.mock('expo-speech', () => ({ speak: jest.fn() }));
+jest.mock('expo-task-manager', () => ({ defineTask: jest.fn() }));
+jest.mock('expo-notifications', () => ({ scheduleNotificationAsync: jest.fn() }));
+jest.mock('@react-native-async-storage/async-storage', () =>
+  require('@react-native-async-storage/async-storage/jest/async-storage-mock'),
+);
+
 import React from 'react';
 import { Vibration } from 'react-native';
+import * as Location from 'expo-location';
+import * as Speech from 'expo-speech';
 import ReactTestRenderer from 'react-test-renderer';
 import { useTurnByTurn } from '../useTurnByTurn';
 import * as turnByTurnUtils from '../../utils/turnByTurn';
@@ -19,33 +34,39 @@ const ROUTE: WalkRouteResponse['coordinates'] = [
 
 type HookResult = ReturnType<typeof useTurnByTurn>;
 
-function renderProbe(initialProgressKm: number) {
+function renderProbe(initialProgressKm: number, backgroundEnabled = false) {
   const box: { current: HookResult } = { current: null as never };
-  function Probe({ progressKm }: { progressKm: number }) {
-    box.current = useTurnByTurn(ROUTE, progressKm);
+  function Probe({ progressKm, bg }: { progressKm: number; bg: boolean }) {
+    box.current = useTurnByTurn(ROUTE, progressKm, bg);
     return null;
   }
   let renderer!: ReactTestRenderer.ReactTestRenderer;
   ReactTestRenderer.act(() => {
-    renderer = ReactTestRenderer.create(<Probe progressKm={initialProgressKm} />);
+    renderer = ReactTestRenderer.create(
+      <Probe progressKm={initialProgressKm} bg={backgroundEnabled} />,
+    );
   });
   return {
     box,
-    rerender: (progressKm: number) =>
-      ReactTestRenderer.act(() => renderer.update(<Probe progressKm={progressKm} />)),
+    rerender: (progressKm: number, bg = backgroundEnabled) =>
+      ReactTestRenderer.act(() => renderer.update(<Probe progressKm={progressKm} bg={bg} />)),
     unmount: () => ReactTestRenderer.act(() => renderer.unmount()),
   };
 }
 
 let buildSpy: jest.SpyInstance;
 let vibrateSpy: jest.SpyInstance;
+let speakSpy: jest.SpyInstance;
 beforeEach(() => {
   buildSpy = jest.spyOn(turnByTurnUtils, 'buildTurnSteps');
   vibrateSpy = jest.spyOn(Vibration, 'vibrate').mockImplementation(() => {});
+  speakSpy = jest.spyOn(Speech, 'speak').mockImplementation(() => {});
 });
 afterEach(() => {
   buildSpy.mockRestore();
   vibrateSpy.mockRestore();
+  speakSpy.mockRestore();
+  jest.clearAllMocks();
 });
 
 it('진행률이 오르면 다음 턴과 남은 거리가 갱신된다', () => {
@@ -74,20 +95,68 @@ it('route가 안 바뀌면 buildTurnSteps를 다시 호출하지 않는다', () 
   unmount();
 });
 
-it('턴 지점 15m 이내로 들어오면 한 번만 진동한다', () => {
-  const { rerender, unmount } = renderProbe(0.34); // 턴(atKm≈0.35)까지 약 10m
+it('150m 이내로 들어오면 헤드업 음성이 스텝당 한 번만 나온다', () => {
+  const { rerender, unmount } = renderProbe(0.19); // 턴(atKm≈0.35)까지 약 160m
+  expect(speakSpy).not.toHaveBeenCalled();
+
+  rerender(0.21); // 약 140m — 헤드업 범위 진입
+  expect(speakSpy).toHaveBeenCalledTimes(1);
+
+  rerender(0.22); // 아직 같은 턴, 계속 다가감 — 재발화 없음
+  expect(speakSpy).toHaveBeenCalledTimes(1);
+  unmount();
+});
+
+it('헤드업 이후 15m 이내로 들어오면 진동 + 최종 음성이 추가로 한 번 더 나온다', () => {
+  const { rerender, unmount } = renderProbe(0.1); // 멀리서 시작 — 아직 아무 것도 안 울림
+  expect(vibrateSpy).not.toHaveBeenCalled();
+  expect(speakSpy).not.toHaveBeenCalled();
+
+  rerender(0.21); // 헤드업 범위(150m) 진입 — 음성 1회
+  expect(speakSpy).toHaveBeenCalledTimes(1);
+  expect(vibrateSpy).not.toHaveBeenCalled();
+
+  rerender(0.34); // 최종 범위(15m) 진입 — 진동 + 음성 추가 1회
   expect(vibrateSpy).toHaveBeenCalledTimes(1);
+  expect(speakSpy).toHaveBeenCalledTimes(2);
 
   rerender(0.345); // 같은 턴에 더 가까워짐 — 다시 울리지 않음
   expect(vibrateSpy).toHaveBeenCalledTimes(1);
+  expect(speakSpy).toHaveBeenCalledTimes(2);
 
   rerender(0); // 다시 멀어져도(비정상 케이스) 이미 울린 스텝이면 재울림 없음
   expect(vibrateSpy).toHaveBeenCalledTimes(1);
   unmount();
 });
 
-it('모든 턴을 지나 다음 스텝이 없으면 진동하지 않는다', () => {
+it('모든 턴을 지나 다음 스텝이 없으면 진동·음성 모두 없다', () => {
   const { unmount } = renderProbe(10); // 경로 끝을 훨씬 지남
   expect(vibrateSpy).not.toHaveBeenCalled();
+  expect(speakSpy).not.toHaveBeenCalled();
+  unmount();
+});
+
+it('backgroundEnabled가 true면 마운트 시 백그라운드 위치 태스크를 시작하고, false로 꺼지거나 언마운트되면 중지한다', () => {
+  const startSpy = Location.startLocationUpdatesAsync as jest.Mock;
+  const stopSpy = Location.stopLocationUpdatesAsync as jest.Mock;
+
+  const { rerender, unmount } = renderProbe(0, true);
+  expect(startSpy).toHaveBeenCalledTimes(1);
+  expect(stopSpy).not.toHaveBeenCalled();
+
+  rerender(0.1, false); // 권한 철회 등으로 꺼짐 — 정리돼야 함
+  expect(stopSpy).toHaveBeenCalledTimes(1);
+
+  rerender(0.1, true); // 다시 켜짐 — 재시작
+  expect(startSpy).toHaveBeenCalledTimes(2);
+
+  unmount(); // 마운트 상태로 언마운트 — 한 번 더 정리
+  expect(stopSpy).toHaveBeenCalledTimes(2);
+});
+
+it('backgroundEnabled가 false면 백그라운드 위치 태스크를 시작하지 않는다', () => {
+  const startSpy = Location.startLocationUpdatesAsync as jest.Mock;
+  const { unmount } = renderProbe(0, false);
+  expect(startSpy).not.toHaveBeenCalled();
   unmount();
 });

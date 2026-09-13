@@ -1,10 +1,11 @@
 import {
   buildTurnSteps,
+  decideBackgroundAnnouncement,
   findNextTurnStep,
   formatTurnInstruction,
   TurnStep,
 } from '../turnByTurn';
-import { polylineLengthKm } from '../geo';
+import { haversineDistanceKm, polylineLengthKm } from '../geo';
 import { WalkRouteResponse } from '../../types/prewalk';
 
 const START: [number, number] = [37.5, 127.0];
@@ -130,3 +131,58 @@ describe('formatTurnInstruction', () => {
     expect(formatTurnInstruction('uturn', 1.2)).toBe('1.2km 앞 유턴');
   });
 });
+
+describe('decideBackgroundAnnouncement', () => {
+  // 북쪽 350m → 우회전 → 동쪽 300m. 턴은 atKm≈0.35 지점.
+  const ROUTE = buildPath(START, 0, [
+    [0, 0.35],
+    [90, 0.3],
+  ]);
+
+  it('턴에서 멀면 안내하지 않는다', () => {
+    const d = decideBackgroundAnnouncement(ROUTE, pointAt(ROUTE, 0.1), null);
+    expect(d.step?.kind).toBe('right');
+    expect(d.shouldAnnounce).toBe(false);
+  });
+
+  it('턴 15m 이내이고 아직 안내한 적 없으면 안내해야 한다', () => {
+    const d = decideBackgroundAnnouncement(ROUTE, pointAt(ROUTE, 0.345), null);
+    expect(d.step?.kind).toBe('right');
+    expect(d.shouldAnnounce).toBe(true);
+  });
+
+  it('같은 턴을 이미 안내했으면(lastAnnouncedAtKm 일치) 다시 안내하지 않는다', () => {
+    const first = decideBackgroundAnnouncement(ROUTE, pointAt(ROUTE, 0.345), null);
+    const already = decideBackgroundAnnouncement(
+      ROUTE,
+      pointAt(ROUTE, 0.348),
+      first.step!.atKm,
+    );
+    expect(already.shouldAnnounce).toBe(false);
+  });
+
+  it('모든 턴을 지나면(arrive만 남거나 그마저 지남) step이 null이 될 수 있다', () => {
+    const d = decideBackgroundAnnouncement(ROUTE, pointAt(ROUTE, 10), null);
+    expect(d.step).toBeNull();
+    expect(d.shouldAnnounce).toBe(false);
+    expect(d.distanceToKm).toBe(0);
+  });
+});
+
+/** route 위 시작점부터 km 지점의 좌표(선형 보간, km이 전체 길이를 넘으면 끝점 쪽으로 그대로
+ * 외삽 — decideBackgroundAnnouncement 테스트에서 "한참 지나침"을 표현하는 용도라 문제없다). */
+function pointAt(route: WalkRouteResponse['coordinates'], km: number): [number, number] {
+  let acc = 0;
+  for (let i = 0; i < route.length - 1; i++) {
+    const segLen = haversineDistanceKm(route[i], route[i + 1]);
+    if (acc + segLen >= km || i === route.length - 2) {
+      const t = segLen === 0 ? 0 : (km - acc) / segLen;
+      return [
+        route[i][0] + (route[i + 1][0] - route[i][0]) * t,
+        route[i][1] + (route[i + 1][1] - route[i][1]) * t,
+      ];
+    }
+    acc += segLen;
+  }
+  return route[route.length - 1];
+}
