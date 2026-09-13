@@ -32,6 +32,8 @@ type Props = {
   children: React.ReactNode;
   /** ChatConversation이 onPreviewHeightChange로 올려주는, 말풍선 미리보기 묶음의 실측 높이. */
   previewHeight: number;
+  /** ChatConversation이 onHeaderHeightChange로 올려주는, "Roudi" 헤더의 실측 높이. */
+  headerHeight: number;
   /** ChatInput 등 화면 하단에 떠 있는 요소가 차지하는 높이 — 중간 스냅 위치 계산에 반영한다. */
   bottomReservedHeight: number;
   onChangeIndex?: (index: number) => void;
@@ -41,7 +43,7 @@ type Props = {
 // 이 앱에 바텀시트 쓰는 곳이 지금은 여기 하나뿐이라, 나중에 다른 시트가 추가되면 이 폴더에
 // 그 시트 전용 설정을 같은 패턴으로 추가하면 된다.
 export const ChatBottomSheet = forwardRef<ChatBottomSheetHandle, Props>(function ChatBottomSheet(
-  { children, previewHeight, bottomReservedHeight, onChangeIndex },
+  { children, previewHeight, headerHeight, bottomReservedHeight, onChangeIndex },
   ref,
 ) {
   const sheetRef = useRef<AppBottomSheetHandle>(null);
@@ -52,10 +54,13 @@ export const ChatBottomSheet = forwardRef<ChatBottomSheetHandle, Props>(function
   const halfHeight = computeChatSheetHalfHeight({
     screenHeight: SCREEN_H,
     bottomReservedHeight,
+    headerHeight,
     previewHeight,
   });
 
-  const downHeight = computeChatSheetDownHeight(SCREEN_H);
+  // ChatInput 바(bottomReservedHeight)보다 항상 위에 손잡이가 보이고, "Roudi" 헤더(headerHeight)
+  // 까지는 보이도록 — 두 스냅 모두 같은 기준으로 계산해 입력창을 절대 안 가린다.
+  const downHeight = computeChatSheetDownHeight({ bottomReservedHeight, headerHeight });
 
   const snapPoints = useMemo(
     () => [downHeight, halfHeight, SCREEN_H - SHEET_TOP_UP],

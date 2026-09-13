@@ -85,6 +85,7 @@ export const HomeScreen = forwardRef<HomeScreenHandle, HomeScreenProps>(function
   const [chatSending, setChatSending] = useState(false);
   const [chatStarted, setChatStarted] = useState(false);
   const [previewHeight, setPreviewHeight] = useState(50);
+  const [headerHeight, setHeaderHeight] = useState(0);
 
   // 대화가 아직 시작되지 않았고(위치 좌표가 필요) 위치 오류가 있으면 입력을 막는다 —
   // 이유는 ChatConversation이 안내 버블 + 액션 버튼으로 보여준다. 대화가 한 번 시작된 뒤엔
@@ -125,6 +126,7 @@ export const HomeScreen = forwardRef<HomeScreenHandle, HomeScreenProps>(function
   const mapBottomPadding = computeChatSheetHalfHeight({
     screenHeight: SCREEN_H,
     bottomReservedHeight: chatBottomInset,
+    headerHeight,
     previewHeight,
   });
 
@@ -163,6 +165,7 @@ export const HomeScreen = forwardRef<HomeScreenHandle, HomeScreenProps>(function
       <ChatBottomSheet
         ref={sheetRef}
         previewHeight={previewHeight}
+        headerHeight={headerHeight}
         bottomReservedHeight={chatBottomInset}
         onChangeIndex={index => {
           sheetIndexRef.current = index;
@@ -177,6 +180,7 @@ export const HomeScreen = forwardRef<HomeScreenHandle, HomeScreenProps>(function
           onSendingChange={setChatSending}
           onStartedChange={setChatStarted}
           onPreviewHeightChange={setPreviewHeight}
+          onHeaderHeightChange={setHeaderHeight}
           bottomInset={chatBottomInset}
           locationLoading={locationLoading}
           locationError={locationError}
