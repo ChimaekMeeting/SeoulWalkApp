@@ -159,6 +159,5 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     gap: spacing.sm,
-    flexWrap: 'wrap',
   },
 });
