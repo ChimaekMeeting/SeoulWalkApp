@@ -1,10 +1,10 @@
-import React, { useMemo } from 'react';
+import React, { useCallback } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import { runOnJS } from 'react-native-reanimated';
+import { GestureDetector } from 'react-native-gesture-handler';
 import { TabScreen } from '../../components/TabScreen';
 import { HistoryFilter, RouteHistoryList } from '../../components/record/RouteHistoryList';
 import { WalkRouteResponse } from '../../types/prewalk';
+import { usePageSwipeGesture } from '../../hooks/usePageSwipeGesture';
 import { colors, spacing } from '../../theme/tokens';
 
 interface RecordTabProps {
@@ -23,32 +23,22 @@ const FILTERS: [HistoryFilter, string][] = [
   ['favorite', '즐겨찾기'],
 ];
 
-// 이 거리(px) 이상 수평 이동해야 필터 전환으로 인정한다.
-const SWIPE_DISTANCE_THRESHOLD = 60;
-
+// 화면(헤더·리스트 포함) 어디서 스와이프해도 필터가 전환된다 — 탭 전환 스와이프는 BottomNav
+// 위에서만 인식하므로(MainRouter) 이 영역과 겹치지 않는다.
 export function RecordTab({ filter, onFilterChange, onSelectRoute }: RecordTabProps) {
-  // 화면 전체(헤더·빈 공간 포함) 어디서 스와이프해도 필터가 전환되도록 TabScreen을 통째로 감싼다.
-  const swipe = useMemo(
-    () =>
-      Gesture.Pan()
-        // 명확히 수평일 때만 활성화 — 세로 스크롤(ScrollView)과 충돌하지 않게 한다.
-        .activeOffsetX([-20, 20])
-        .failOffsetY([-16, 16])
-        .onEnd(e => {
-          'worklet';
-          if (
-            Math.abs(e.translationX) < SWIPE_DISTANCE_THRESHOLD ||
-            Math.abs(e.velocityX) <= Math.abs(e.velocityY)
-          ) {
-            return;
-          }
-          const index = FILTER_ORDER.indexOf(filter);
-          const nextIndex = e.translationX < 0 ? index + 1 : index - 1;
-          const next = FILTER_ORDER[nextIndex];
-          if (next && next !== filter) runOnJS(onFilterChange)(next);
-        }),
-    [filter, onFilterChange],
+  const handleFilterIndexChange = useCallback(
+    (nextIndex: number) => {
+      const next = FILTER_ORDER[nextIndex];
+      if (next) onFilterChange(next);
+    },
+    [onFilterChange],
   );
+
+  const swipe = usePageSwipeGesture({
+    index: FILTER_ORDER.indexOf(filter),
+    pageCount: FILTER_ORDER.length,
+    onChange: handleFilterIndexChange,
+  });
 
   return (
     <GestureDetector gesture={swipe}>

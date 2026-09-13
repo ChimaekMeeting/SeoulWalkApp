@@ -8,9 +8,11 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { GestureDetector } from 'react-native-gesture-handler';
 import { useLocation } from '../hooks/useLocation';
 import { useAppStateChange } from '../hooks/useAppStateChange';
 import { useAndroidBackHandler } from '../hooks/useAndroidBackHandler';
+import { usePageSwipeGesture } from '../hooks/usePageSwipeGesture';
 import { debugLog } from '../utils/logger';
 import { snapWalkRoute } from '../utils/mapMatchRoute';
 import { anchorLoopToPoint, isLoopRoute, trimRouteToPoint } from '../utils/geo';
@@ -41,6 +43,16 @@ const TAB_ROUTES: Record<TabName, Route> = {
   record: { name: 'record' },
   me: { name: 'me' },
 };
+
+// 하단 탭 바(BottomNav) 위에서 좌우로 스와이프하면 이 순서대로 탭을 넘긴다(usePageSwipeGesture).
+// 기록 탭의 "최근 경로"/"즐겨찾기" 전환은 별개로, RecordTab이 화면 콘텐츠 영역에서 자체
+// 스와이프로 처리한다 — 두 스와이프가 서로 다른 화면 영역(탭 바 vs 콘텐츠)을 쓰므로 겹치지 않는다.
+//
+// 이 탭 전환 스와이프를 화면 콘텐츠가 아니라 BottomNav 위에서만 인식하는 이유: 지도(홈)·채팅
+// 시트(홈) 모두 그 자체 제스처가 있어서, 화면 전체를 스와이프 대상으로 삼으면 그것들과 경쟁해
+// 오작동한다(특히 채팅 시트의 내장 드래그가 항상 이겨버림). BottomNav는 탭 버튼 누르기 말곤
+// 아무 제스처가 없는 유일하게 안전한 영역이다.
+const TAB_ORDER: readonly TabName[] = ['home', 'record', 'me'];
 
 interface MainRouterProps {
   onLogout?: () => void;
@@ -274,69 +286,96 @@ export function MainRouter({
   const activeTab = route.name as TabName;
   const showNav = ['home', 'record', 'me'].includes(route.name);
 
+  // 현재 탭이 TAB_ORDER의 몇 번째인지. realWalk처럼 목록에 없는 라우트면 -1 — 이때는 스와이프
+  // 제스처를 꺼서(enabled: false) 관여하지 않는다.
+  const currentTabIndex = TAB_ORDER.indexOf(route.name as TabName);
+
+  const handleTabIndexChange = useCallback(
+    (nextIndex: number) => {
+      const next = TAB_ORDER[nextIndex];
+      if (next) go(next);
+    },
+    [go],
+  );
+
+  const tabSwipeGesture = usePageSwipeGesture({
+    index: currentTabIndex,
+    pageCount: TAB_ORDER.length,
+    onChange: handleTabIndexChange,
+    enabled: currentTabIndex !== -1,
+  });
+
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.card} />
       <View style={styles.appShell}>
-        {/* 다른 탭으로 이동했다 돌아와도 챗봇 대화 내역이 초기화되지 않도록, 언마운트하지 않고
-            숨기기만 한다(display:'none') — home 라우트가 아닐 때만 화면에서 감춘다. */}
-        <View style={[styles.fill, route.name !== 'home' && styles.hidden]}>
-          <HomeScreen
-            ref={homeScreenRef}
-            currentLocation={currentLocation}
-            activeRoute={activeRoute}
-            chatSessionKey={chatSessionKey}
-            onRouteReady={startWalk}
-            locationLoading={locationLoading}
-            locationError={locationError}
-            onRetryLocation={retryLocation}
-            onRefreshLocation={retryLocation}
-            mapRecenterKey={mapRecenterKey}
-          />
+        <View style={styles.fill}>
+          {/* 다른 탭으로 이동했다 돌아와도 챗봇 대화 내역이 초기화되지 않도록, 언마운트하지 않고
+              숨기기만 한다(display:'none') — home 라우트가 아닐 때만 화면에서 감춘다. */}
+          <View style={[styles.fill, route.name !== 'home' && styles.hidden]}>
+            <HomeScreen
+              ref={homeScreenRef}
+              currentLocation={currentLocation}
+              activeRoute={activeRoute}
+              chatSessionKey={chatSessionKey}
+              onRouteReady={startWalk}
+              locationLoading={locationLoading}
+              locationError={locationError}
+              onRetryLocation={retryLocation}
+              onRefreshLocation={retryLocation}
+              mapRecenterKey={mapRecenterKey}
+            />
+          </View>
+          {route.name === 'realWalk' && activeRoute ? (
+            <WalkFlow
+              routeResult={activeRoute}
+              currentLocation={currentLocation}
+              routeSnapPending={routeSnapPending}
+              onExitToHome={event => {
+                // 실제 산책을 시작했다면(조기종료·완주 무관) 새 prewalk 세션을 준비한다.
+                // prep에서 취소한 경우(cancelled_before_start)엔 기존 대화를 유지한다.
+                if (event.actualWalkingStarted) {
+                  resetChatSession();
+                  // 저장된 경로로 다시 걸었으면 기록 탭 "최근 경로" 정렬에 반영한다 —
+                  // 재산책은 서버에 아무 기록도 남기지 않으므로 로컬에 시각을 남긴다.
+                  if (activeRoute?.id != null) markRouteWalked(activeRoute.id);
+                }
+                setActiveRoute(null);
+                setRouteSnapPending(false);
+                // prep에서 취소(cancelled_before_start)한 경우엔 들어온 탭으로 되돌린다.
+                // 실제로 걷고 나온 경우(완주·조기종료)엔 새 세션이므로 홈으로.
+                // 홈으로 돌아가는 경우 go()가 현재 위치 재획득 + 지도 카메라 복귀를 처리한다.
+                go(
+                  event.reason === 'cancelled_before_start'
+                    ? walkOriginTabRef.current
+                    : 'home',
+                );
+              }}
+            />
+          ) : null}
+          {route.name === 'record' ? (
+            <RecordTab
+              filter={recordFilter}
+              onFilterChange={setRecordFilter}
+              onSelectRoute={startWalk}
+            />
+          ) : null}
+          {route.name === 'me' ? (
+            <MyPageScreen
+              onLogout={onLogout}
+              nickname={nickname}
+              email={email}
+              onResetSurvey={onResetSurvey}
+            />
+          ) : null}
         </View>
-        {route.name === 'realWalk' && activeRoute ? (
-          <WalkFlow
-            routeResult={activeRoute}
-            currentLocation={currentLocation}
-            routeSnapPending={routeSnapPending}
-            onExitToHome={event => {
-              // 실제 산책을 시작했다면(조기종료·완주 무관) 새 prewalk 세션을 준비한다.
-              // prep에서 취소한 경우(cancelled_before_start)엔 기존 대화를 유지한다.
-              if (event.actualWalkingStarted) {
-                resetChatSession();
-                // 저장된 경로로 다시 걸었으면 기록 탭 "최근 경로" 정렬에 반영한다 —
-                // 재산책은 서버에 아무 기록도 남기지 않으므로 로컬에 시각을 남긴다.
-                if (activeRoute?.id != null) markRouteWalked(activeRoute.id);
-              }
-              setActiveRoute(null);
-              setRouteSnapPending(false);
-              // prep에서 취소(cancelled_before_start)한 경우엔 들어온 탭으로 되돌린다.
-              // 실제로 걷고 나온 경우(완주·조기종료)엔 새 세션이므로 홈으로.
-              // 홈으로 돌아가는 경우 go()가 현재 위치 재획득 + 지도 카메라 복귀를 처리한다.
-              go(
-                event.reason === 'cancelled_before_start'
-                  ? walkOriginTabRef.current
-                  : 'home',
-              );
-            }}
-          />
+        {showNav ? (
+          // 탭 전환 스와이프는 여기(BottomNav)에서만 인식한다 — 지도·채팅 시트 등 화면 콘텐츠의
+          // 제스처와 절대 안 겹치는 유일한 영역이라서다 (TAB_ORDER 주석 참고).
+          <GestureDetector gesture={tabSwipeGesture}>
+            <BottomNav active={activeTab} onChange={go} />
+          </GestureDetector>
         ) : null}
-        {route.name === 'record' ? (
-          <RecordTab
-            filter={recordFilter}
-            onFilterChange={setRecordFilter}
-            onSelectRoute={startWalk}
-          />
-        ) : null}
-        {route.name === 'me' ? (
-          <MyPageScreen
-            onLogout={onLogout}
-            nickname={nickname}
-            email={email}
-            onResetSurvey={onResetSurvey}
-          />
-        ) : null}
-        {showNav ? <BottomNav active={activeTab} onChange={go} /> : null}
       </View>
     </SafeAreaView>
   );

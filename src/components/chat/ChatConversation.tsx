@@ -80,6 +80,9 @@ type Props = {
   // 대화가 길어져도 이 미리보기 묶음 자체의 크기는 바뀌지 않아, 중간 스냅이 항상 같은
   // 위치(말풍선이 잘리지 않는 위치)를 가리키게 된다.
   onPreviewHeightChange: (height: number) => void;
+  // "Roudi" 헤더만의 실측 높이를 부모(아래로 접기 스냅 계산)에 전달 — 시트를 완전히
+  // 접어도 이 헤더까지는 보이게 하기 위함.
+  onHeaderHeightChange?: (height: number) => void;
 };
 
 // 홈 바텀시트 안에 들어가는 채팅 대화 패널 (오버레이/배경 없이 시트가 컨테이너 역할)
@@ -99,6 +102,7 @@ export const ChatConversation = forwardRef(function ChatConversation(
     onRefreshLocation,
     bottomInset,
     onPreviewHeightChange,
+    onHeaderHeightChange,
   }: Props,
   ref: React.Ref<ChatConversationHandle>,
 ) {
@@ -391,6 +395,10 @@ export const ChatConversation = forwardRef(function ChatConversation(
     // 위쪽 padding(spacing.lg)만 더하면 "미리보기 영역이 실제로 차지하는 높이"가 된다.
     onPreviewHeightChange(headerHeight + previewGroupHeight + spacing.lg);
   }, [headerHeight, previewGroupHeight, onPreviewHeightChange]);
+
+  useEffect(() => {
+    onHeaderHeightChange?.(headerHeight);
+  }, [headerHeight, onHeaderHeightChange]);
 
   useImperativeHandle(ref, () => ({
     submitAnswer: (answer: string) => {
