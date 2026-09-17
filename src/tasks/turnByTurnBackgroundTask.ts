@@ -19,8 +19,10 @@ import { decideBackgroundAnnouncement, formatTurnInstruction } from '../utils/tu
  *
  * 알림(expo-notifications)은 백그라운드에서 가장 신뢰할 수 있는 채널이라 항상 보낸다. TTS
  * (expo-speech)는 best-effort로 같이 시도한다 — 안드로이드는 포그라운드 서비스가 JS를 살려두는
- * 동안 대체로 재생되지만, iOS는 백그라운드 실행 창이 짧아 보장되지 않는다. 두 알림(턴 알림/지속
- * 알림)은 턴이 바뀔 때만 갱신해 매 GPS fix마다 스팸이 되지 않게 한다.
+ * 동안 대체로 재생되지만, iOS는 백그라운드 실행 창이 짧아 보장되지 않는다. 지속 알림은 매 GPS
+ * fix마다 남은 거리로 다시 그려 잠금화면·알림창에서도 네이버지도처럼 진행 상황이 보이게 한다
+ * (sticky라 재예약해도 알림이 다시 튀어오르거나 소리 나지 않고 내용만 갱신된다). 턴 알림(사운드
+ * 있는 1회성 안내)만 턴이 바뀔 때 한 번 보낸다.
  */
 export const TURN_BY_TURN_LOCATION_TASK = 'turn-by-turn-location-task';
 
@@ -38,7 +40,7 @@ TaskManager.defineTask(TURN_BY_TURN_LOCATION_TASK, async ({ data, error }) => {
 
   const result = await activeWalkSession.read();
   if (!result.ok || !result.session) return;
-  const { route, lastAnnouncedAtKm, lastNotifiedAtKm } = result.session;
+  const { route, lastAnnouncedAtKm } = result.session;
 
   const decision = decideBackgroundAnnouncement(
     route,
@@ -47,19 +49,16 @@ TaskManager.defineTask(TURN_BY_TURN_LOCATION_TASK, async ({ data, error }) => {
   );
   if (!decision.step) return;
 
-  // 지속 알림 — 턴이 바뀐 경우에만 다시 그린다.
-  if (decision.step.atKm !== lastNotifiedAtKm) {
-    await Notifications.scheduleNotificationAsync({
-      identifier: ONGOING_NOTIFICATION_ID,
-      content: {
-        title: '산책 안내 중',
-        body: formatTurnInstruction(decision.step.kind, decision.distanceToKm),
-        sticky: true,
-      },
-      trigger: null,
-    }).catch(() => {});
-    await activeWalkSession.update({ lastNotifiedAtKm: decision.step.atKm });
-  }
+  // 지속 알림 — 매 GPS fix마다 남은 거리를 다시 그려 잠금화면에서도 진행 상황이 실시간으로 보이게 한다.
+  await Notifications.scheduleNotificationAsync({
+    identifier: ONGOING_NOTIFICATION_ID,
+    content: {
+      title: '산책 안내 중',
+      body: formatTurnInstruction(decision.step.kind, decision.distanceToKm),
+      sticky: true,
+    },
+    trigger: null,
+  }).catch(() => {});
 
   if (decision.shouldAnnounce) {
     const text = formatTurnInstruction(decision.step.kind, decision.distanceToKm);

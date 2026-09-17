@@ -72,7 +72,6 @@ export function useTurnByTurn(
     activeWalkSession.write({
       route,
       lastAnnouncedAtKm: null,
-      lastNotifiedAtKm: null,
       startedAt: Date.now(),
     });
     return () => {

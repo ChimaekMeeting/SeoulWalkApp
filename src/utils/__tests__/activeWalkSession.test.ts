@@ -29,13 +29,12 @@ describe('activeWalkSession', () => {
     await activeWalkSession.write({
       route: ROUTE,
       lastAnnouncedAtKm: null,
-      lastNotifiedAtKm: null,
       startedAt: 1000,
     });
     const result = await activeWalkSession.read();
     expect(result).toEqual({
       ok: true,
-      session: { route: ROUTE, lastAnnouncedAtKm: null, lastNotifiedAtKm: null, startedAt: 1000 },
+      session: { route: ROUTE, lastAnnouncedAtKm: null, startedAt: 1000 },
     });
   });
 
@@ -43,7 +42,6 @@ describe('activeWalkSession', () => {
     await activeWalkSession.write({
       route: ROUTE,
       lastAnnouncedAtKm: null,
-      lastNotifiedAtKm: null,
       startedAt: 1000,
     });
     await activeWalkSession.update({ lastAnnouncedAtKm: 0.5 });
@@ -61,7 +59,6 @@ describe('activeWalkSession', () => {
     await activeWalkSession.write({
       route: ROUTE,
       lastAnnouncedAtKm: null,
-      lastNotifiedAtKm: null,
       startedAt: 1000,
     });
     await activeWalkSession.clear();

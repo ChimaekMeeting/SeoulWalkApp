@@ -7,8 +7,6 @@ export interface ActiveWalkSession {
   route: WalkRouteResponse['coordinates'];
   /** 알림·TTS로 이미 안내한 턴의 atKm(중복 안내 방지). 포그라운드 훅과 백그라운드 태스크가 공유. */
   lastAnnouncedAtKm: number | null;
-  /** 지속 알림(포그라운드 서비스용)에 마지막으로 표시한 턴의 atKm — 턴이 안 바뀌면 다시 안 그린다. */
-  lastNotifiedAtKm: number | null;
   startedAt: number;
 }
 
@@ -42,7 +40,6 @@ export const activeWalkSession = {
         session: {
           route: parsed.route,
           lastAnnouncedAtKm: parsed.lastAnnouncedAtKm ?? null,
-          lastNotifiedAtKm: parsed.lastNotifiedAtKm ?? null,
           startedAt: parsed.startedAt,
         },
       };
