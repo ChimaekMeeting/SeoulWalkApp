@@ -47,8 +47,6 @@ export interface WalkExitEvent {
  * TODO: 서버 전송 엔드포인트가 정해지면 배선한다 — 현재는 WalkFlow에서 로컬 로깅만.
  */
 export interface WalkRatings {
-  /** 자연을 가까이 느끼며 걸을 수 있어 좋았는지 */
-  nature: number;
   /** 걷는 내내 안전하다고 느껴 좋았는지 */
   safety: number;
   /** 몸도 마음도 편하게 걸을 수 있어 좋았는지 */

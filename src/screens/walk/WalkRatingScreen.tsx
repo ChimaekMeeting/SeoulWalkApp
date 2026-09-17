@@ -12,13 +12,12 @@ interface Props {
 }
 
 const QUESTIONS: { key: keyof WalkRatings; label: string }[] = [
-  { key: 'nature', label: '자연을 가까이 느끼며 걸을 수 있어서 좋았나요?' },
   { key: 'safety', label: '걷는 내내 안전하다고 느낄 수 있어서 좋았나요?' },
   { key: 'comfort', label: '몸도 마음도 편하게 걸을 수 있어서 좋았나요?' },
   { key: 'overall', label: '전체적으로 얼마나 마음에 드셨나요?' },
 ];
 
-const EMPTY: WalkRatings = { nature: 0, safety: 0, comfort: 0, overall: 0 };
+const EMPTY: WalkRatings = { safety: 0, comfort: 0, overall: 0 };
 
 // 완료 화면(6d) → 이 화면(6e) → 홈. 네 항목을 모두 매겨야 "완료"가 활성화된다.
 export function WalkRatingScreen({ onSubmit }: Props) {

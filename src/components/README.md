@@ -30,7 +30,7 @@ src/components/
 │  └─ index.ts
 ├─ my/                   # '마이페이지' 탭(MyPageScreen)에서만 쓰는 컴포넌트
 │  ├─ ProfileCard.tsx          # 상단 프로필 요약 카드 (아바타 + 닉네임 + 이메일)
-│  ├─ MyPreferenceSection.tsx  # 산책 취향 태그(편안·안전·자연) + 선호 거리 (변경 시 즉시 저장)
+│  ├─ MyPreferenceSection.tsx  # 산책 취향 태그(편안·안전) + 선호 거리 (변경 시 즉시 저장)
 │  ├─ MyPreferenceItem.tsx     # 취향 태그 버튼 1개
 │  ├─ SettingRow.tsx           # 설정 메뉴 한 줄 (라벨 + '>' 화살표, danger·showChevron 옵션)
 │  └─ DevMenu.tsx              # 개발 빌드 전용 디버그 버튼 (프로덕션에선 null)

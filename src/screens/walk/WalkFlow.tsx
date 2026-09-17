@@ -71,9 +71,9 @@ export function WalkFlow({
       setStage('complete');
       return true;
     }
-    exitFromComplete();
+    // stage === 'complete': 별점을 매기기 전에는 뒤로가기로 홈에 나갈 수 없다 — 반드시 평가를 거쳐야 한다.
     return true;
-  }, [stage, endConfirmVisible, goalModalVisible, exitFromComplete, onExitToHome]);
+  }, [stage, endConfirmVisible, goalModalVisible, onExitToHome]);
   useAndroidBackHandler(handleAndroidBack);
 
   if (stage === 'prep') {
