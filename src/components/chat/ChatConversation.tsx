@@ -2,6 +2,7 @@ import React, {
   forwardRef,
   useEffect,
   useImperativeHandle,
+  useMemo,
   useRef,
   useState,
 } from 'react';
@@ -107,6 +108,17 @@ export const ChatConversation = forwardRef(function ChatConversation(
   ref: React.Ref<ChatConversationHandle>,
 ) {
   const [messages, setMessages] = useState<Message[]>([]);
+  // "코스 N" 라벨을 메시지 내 순번이 아니라 대화 전체 누적 순번으로 매기기 위한 오프셋.
+  // 백엔드가 라운드당 경로 1개만 배열 없이 내려주는 경우가 많아, 메시지별로 인덱스를
+  // 0부터 다시 매기면 모든 라운드가 "코스 1"로 보이기 때문(messages[i]에 대응하는 offset).
+  const routeOffsets = useMemo(() => {
+    let count = 0;
+    return messages.map(message => {
+      const offset = count;
+      if (message.from === 'routes') count += message.routes.length;
+      return offset;
+    });
+  }, [messages]);
   const [threadId, setThreadId] = useState<string | null>(null);
   const [phase, setPhase] = useState<ChatPhase>('idle');
   const [sending, setSending] = useState(false);
@@ -472,6 +484,7 @@ export const ChatConversation = forwardRef(function ChatConversation(
             <ChatBubble text="위치 정보를 확인하는 중이에요…" />
           ) : null}
           {messages.map((message, index) => {
+            const routeOffset = routeOffsets[index];
             const bubble =
               message.from === 'routes' ? (
                 <View style={styles.chatLine}>
@@ -483,7 +496,7 @@ export const ChatConversation = forwardRef(function ChatConversation(
                       <RouteCandidate
                         key={route.id ?? routeIndex}
                         route={route}
-                        index={routeIndex}
+                        index={routeOffset + routeIndex}
                         // 재추천 요청 중에는 카드 선택을 막는다 — 산책 시작과 intent 응답이
                         // 동시에 진행되어 오래된 경로로 산책이 시작되는 것을 방지. 응답이
                         // 오면 다시 풀리고, 이전에 추천된 카드도 계속 선택할 수 있다.
