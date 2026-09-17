@@ -38,7 +38,12 @@ jest.mock('../WalkEndConfirmModal', () => ({
     return null;
   },
 }));
-jest.mock('../../../hooks/useAndroidBackHandler', () => ({ useAndroidBackHandler: () => {} }));
+let backHandler: () => boolean = () => true;
+jest.mock('../../../hooks/useAndroidBackHandler', () => ({
+  useAndroidBackHandler: (fn: () => boolean) => {
+    backHandler = fn;
+  },
+}));
 
 import { WalkFlow } from '../WalkFlow';
 import { WalkRouteResponse } from '../../../types/prewalk';
@@ -143,8 +148,35 @@ it('완료 화면의 "산책로 평가하기"는 곧장 나가지 않고 별점 
 
   // 별점 제출 → 그제서야 홈으로.
   ReactTestRenderer.act(() =>
-    calls.rating.onSubmit({ nature: 5, safety: 4, comfort: 3, overall: 4 }),
+    calls.rating.onSubmit({ safety: 4, comfort: 3, overall: 4 }),
   );
   expect(onExit).toHaveBeenCalledTimes(1);
   expect(onExit.mock.calls[0][0]).toMatchObject({ reason: 'ended_early' });
+});
+
+it('완료 화면(6d)에서 안드로이드 뒤로가기를 눌러도 별점 없이 홈으로 나가지지 않는다', () => {
+  const onExit = jest.fn();
+  const r1 = mkRoute(1);
+  ReactTestRenderer.act(() => {
+    ReactTestRenderer.create(
+      <WalkFlow
+        routeResult={r1}
+        currentLocation={null}
+        routeSnapPending={false}
+        onExitToHome={onExit}
+      />,
+    );
+  });
+
+  ReactTestRenderer.act(() => calls.prep.onStart(r1.coordinates));
+  ReactTestRenderer.act(() =>
+    calls.walk.onRequestEnd({ endReason: 'user_ended_before_destination', elapsedMs: 1000 }),
+  );
+  ReactTestRenderer.act(() => calls.endModal.onConfirm());
+  expect(calls.complete).toBeDefined();
+
+  // 6d에서 뒤로가기 — 별점을 매기지 않았으므로 홈으로 나가지지 않는다.
+  ReactTestRenderer.act(() => backHandler());
+  expect(onExit).not.toHaveBeenCalled();
+  expect(calls.rating).toBeUndefined();
 });

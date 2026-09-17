@@ -264,7 +264,7 @@ import { env } from '../config/env';
 
 **`surveyOptions.ts`** — 산책 취향 설문(`SurveyScreen`)과 마이페이지 '내 산책 취향'(`MyPreferenceSection`)이 공유하는 선택지입니다. 두 화면 모두 같은 `/api/user/survey`로 저장합니다.
 
-- `SURVEY_TAGS` — 태그 3개(편안한 길·안전한 길·자연이 많은 길).
+- `SURVEY_TAGS` — 태그 2개(편안한 길·안전한 길).
 - `DISTANCE_OPTIONS` + `<DistanceSelector>` — 선호 거리 3버킷.
 - 백엔드의 태그 → 가중치(`weights_*`) 매핑이 확정되지 않아 `tagValue`는 라벨과 같은 문자열을 그대로 보냅니다. 확정되면 `tagValue`만 백엔드 키에 맞추면 됩니다.
 
