@@ -44,6 +44,18 @@ jest.mock('../../../hooks/useAndroidBackHandler', () => ({
     backHandler = fn;
   },
 }));
+// 실제 expo-location/expo-notifications를 끌어오면 이 orchestration 테스트가 네이티브 모듈
+// 부재로 깨진다 — WalkFlow는 이 훅의 결과만 prep/walking 화면에 나눠 내려줄 뿐이라 스텁으로 충분.
+const mockBgPermission = {
+  status: 'undetermined' as const,
+  granted: false,
+  refresh: jest.fn(),
+  request: jest.fn(),
+  openSettings: jest.fn(),
+};
+jest.mock('../../../hooks/useBackgroundLocationPermission', () => ({
+  useBackgroundLocationPermission: () => mockBgPermission,
+}));
 
 import { WalkFlow } from '../WalkFlow';
 import { WalkRouteResponse } from '../../../types/prewalk';
@@ -83,6 +95,18 @@ it('prep 단계에서는 WalkInProgressScreen(=tracker)이 마운트되지 않�
   expect(calls.prep).toBeDefined();
   expect(calls.prep.snapPending).toBe(true);
   expect(calls.walk).toBeUndefined();
+});
+
+it('백그라운드 위치 권한은 prep 화면에서 요청하고, 그 결과(granted)를 walking 화면까지 그대로 들고 간다', () => {
+  const r1 = mkRoute(1);
+  mount(r1);
+
+  expect(calls.prep.bgPermissionStatus).toBe('undetermined');
+  calls.prep.onAllowBackgroundLocation();
+  expect(mockBgPermission.request).toHaveBeenCalledTimes(1);
+
+  ReactTestRenderer.act(() => calls.prep.onStart(r1.coordinates));
+  expect(calls.walk.backgroundLocationGranted).toBe(mockBgPermission.granted);
 });
 
 it('"산책 시작" 이후 부모가 경로를 교체해도 walking 화면은 시작 시점 경로로 고정된다', () => {

@@ -2,6 +2,7 @@ import React, { useCallback, useRef, useState } from 'react';
 import { LocationInfo, WalkRouteResponse } from '../../types/prewalk';
 import { WalkEndSnapshot, WalkExitEvent } from '../../types/walk';
 import { useAndroidBackHandler } from '../../hooks/useAndroidBackHandler';
+import { useBackgroundLocationPermission } from '../../hooks/useBackgroundLocationPermission';
 import { WalkPrepScreen } from './WalkPrepScreen';
 import { WalkInProgressScreen } from './WalkInProgressScreen';
 import { WalkEndConfirmModal } from './WalkEndConfirmModal';
@@ -44,6 +45,12 @@ export function WalkFlow({
   // 경로를 지도에 겹쳐 스냅이 도보로에 제대로 붙었는지 대조하기 위해 보관한다.
   const [originalRouteCoords] = useState(() => routeResult.coordinates);
 
+  // 화면을 꺼도 턴바이턴 안내를 이어받을지("항상 허용" 위치 권한) — prep 화면에서 한 번 물어보고,
+  // 그 결과(granted 여부)를 walking 단계까지 그대로 들고 간다. 산책 중간에 새삼 권한을 묻지 않도록
+  // 여기(WalkFlow)에서 한 번만 상태를 들고 두 화면에 나눠 내려준다.
+  const bgPermission = useBackgroundLocationPermission();
+  const [bgPromptDismissed, setBgPromptDismissed] = useState(false);
+
   // 종착점 geofence 도달(endReason)로 완주/조기 종료를 구분한다. 세션 리셋 판단에는 영향 없고
   // (둘 다 actualWalkingStarted=true) 통계·분석용 구분이다.
   const completedRoute = snapshot?.endReason === 'destination_arrived';
@@ -82,6 +89,11 @@ export function WalkFlow({
         routeResult={routeResult}
         currentLocation={currentLocation}
         snapPending={routeSnapPending}
+        bgPermissionStatus={bgPermission.status}
+        bgPromptDismissed={bgPromptDismissed}
+        onAllowBackgroundLocation={bgPermission.request}
+        onOpenBackgroundLocationSettings={bgPermission.openSettings}
+        onDismissBackgroundPrompt={() => setBgPromptDismissed(true)}
         onStart={coordinates => {
           walkingStartedRef.current = true;
           // 방향 전환 안 했으면(같은 배열 참조) routeResult를 그대로 써서 불필요한 객체를 안 만든다.
@@ -105,6 +117,7 @@ export function WalkFlow({
         <WalkInProgressScreen
           routeResult={walkRoute}
           originalRouteCoordinates={originalRouteCoords}
+          backgroundLocationGranted={bgPermission.granted}
           onRequestEnd={s => {
             setSnapshot(s);
             setEndConfirmVisible(true);

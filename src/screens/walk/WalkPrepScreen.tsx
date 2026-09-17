@@ -2,11 +2,13 @@ import React, { useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { RouteMapView } from '../../components/map';
+import { BackgroundGuidancePrompt } from '../../components/BackgroundGuidancePrompt';
 import { Button } from '../../components/Button';
 import { DevChip } from '../../components/DevChip';
 import { DevLocationChips } from '../../components/DevLocationChips';
 import { ScreenHeader } from '../../components/ScreenHeader';
 import { StatRow } from '../../components/StatRow';
+import { BackgroundLocationStatus } from '../../hooks/useBackgroundLocationPermission';
 import { LocationInfo, WalkRouteResponse } from '../../types/prewalk';
 import { estimateDurationMinutes, estimateKcal } from '../../utils/walkEstimate';
 import { WALK_MODE_LABEL } from '../../utils/walkMode';
@@ -18,6 +20,13 @@ interface Props {
   currentLocation: LocationInfo | null;
   /** 도로 스냅(Map Matching)이 아직 진행 중이면 시작 버튼 대신 스냅 바를 띄운다 — 산책 중 경로 교체를 없애기 위함. */
   snapPending: boolean;
+  /** 백그라운드("항상 허용") 위치 권한 상태 — 산책 시작 전에 물어봐 walking 화면까지 이어지게 한다. */
+  bgPermissionStatus: BackgroundLocationStatus;
+  /** "나중에"를 눌렀는지 — 누르면 이 산책 준비 화면에서는 배너를 다시 안 띄운다. */
+  bgPromptDismissed: boolean;
+  onAllowBackgroundLocation: () => void;
+  onOpenBackgroundLocationSettings: () => void;
+  onDismissBackgroundPrompt: () => void;
   /** 방향 전환 버튼으로 고른 최종 좌표(반전 안 했으면 routeResult.coordinates 그대로)를 넘긴다. */
   onStart: (coordinates: WalkRouteResponse['coordinates']) => void;
   onBack: () => void;
@@ -27,6 +36,11 @@ export function WalkPrepScreen({
   routeResult,
   currentLocation,
   snapPending,
+  bgPermissionStatus,
+  bgPromptDismissed,
+  onAllowBackgroundLocation,
+  onOpenBackgroundLocationSettings,
+  onDismissBackgroundPrompt,
   onStart,
   onBack,
 }: Props) {
@@ -89,6 +103,17 @@ export function WalkPrepScreen({
           ]}
         />
       </View>
+
+      {bgPermissionStatus !== 'granted' && bgPermissionStatus !== 'checking' && !bgPromptDismissed ? (
+        <View style={styles.bgPromptCard}>
+          <BackgroundGuidancePrompt
+            needsSettings={bgPermissionStatus === 'denied'}
+            onAllow={onAllowBackgroundLocation}
+            onOpenSettings={onOpenBackgroundLocationSettings}
+            onDismiss={onDismissBackgroundPrompt}
+          />
+        </View>
+      ) : null}
 
       {__DEV__ ? (
         <View style={styles.devRow}>
@@ -160,6 +185,10 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '800',
     color: colors.ink,
+  },
+  bgPromptCard: {
+    marginHorizontal: spacing.lg,
+    marginTop: spacing.lg,
   },
   devRow: {
     marginTop: 'auto',
