@@ -19,7 +19,7 @@ src/components/
 │  ├─ ChatInput.tsx         # 하단 입력창
 │  ├─ ChatBubble.tsx        # 챗봇 말풍선
 │  ├─ MyBubble.tsx          # 사용자 말풍선
-│  ├─ LoadingBubble.tsx     # 챗봇 응답 대기 중 말풍선
+│  ├─ LoadingBubble.tsx     # 챗봇 응답 대기 중 말풍선 (진행 상태 문구가 순서대로 흘러감, steps prop)
 │  └─ RouteCandidate.tsx    # 챗봇이 찾아준 경로를 보여주는 카드
 ├─ map/                  # 지도 컴포넌트
 │  ├─ AppMapView.tsx        # mode="overview" | "walk" 공용 지도 (기본)
@@ -67,7 +67,7 @@ src/components/
 ChatConversation (컨테이너, src/api/prewalk.ts로 백엔드와 통신)
  ├─ MyBubble        # 사용자가 보낸 메시지
  ├─ ChatBubble       # 챗봇 텍스트 응답
- ├─ LoadingBubble    # 챗봇 응답 대기 중
+ ├─ LoadingBubble    # 챗봇 응답 대기 중 — 진행 상태 문구(steps)가 일정 간격으로 순서대로 바뀌며 보임
  └─ RouteCandidate   # state.route_result(배열)의 후보 1개를 카드로 보여줌 — 후보 개수만큼 렌더링됨
         │ onPress (카드 자체가 버튼 — 누르면 바로 그 후보가 선택됨)
         ▼
