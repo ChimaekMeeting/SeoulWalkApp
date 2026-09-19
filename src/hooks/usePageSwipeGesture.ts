@@ -3,7 +3,10 @@ import { Gesture } from 'react-native-gesture-handler';
 import { runOnJS } from 'react-native-reanimated';
 
 // 이 거리(px) 이상 수평 이동해야 스와이프로 인정한다.
-export const SWIPE_DISTANCE_THRESHOLD = 60;
+export const SWIPE_DISTANCE_THRESHOLD = 40;
+// 이동 거리가 위 기준에 못 미쳐도, 이만큼 빠르게(px/s) 튕기듯 스와이프하면 인정한다 —
+// 한 손으로 쥐고 엄지로 짧게 넘길 때 이동 거리는 작지만 속도는 빠른 경우를 구제하기 위함.
+export const SWIPE_VELOCITY_THRESHOLD = 800;
 
 interface UsePageSwipeGestureOptions {
   /** 현재 페이지 인덱스. */
@@ -36,12 +39,15 @@ export function usePageSwipeGesture({
       Gesture.Pan()
         .enabled(enabled)
         // 명확히 수평일 때만 활성화 — 세로 스크롤(ScrollView)과 충돌하지 않게 한다.
+        // 한 손 엄지 스와이프는 살짝 대각선으로 흔들리기 쉬워 failOffsetY를 넉넉히 준다.
         .activeOffsetX([-20, 20])
-        .failOffsetY([-16, 16])
+        .failOffsetY([-28, 28])
         .onEnd(e => {
           'worklet';
+          const distanceOk = Math.abs(e.translationX) >= distanceThreshold;
+          const flickOk = Math.abs(e.velocityX) >= SWIPE_VELOCITY_THRESHOLD;
           if (
-            Math.abs(e.translationX) < distanceThreshold ||
+            (!distanceOk && !flickOk) ||
             Math.abs(e.velocityX) <= Math.abs(e.velocityY)
           ) {
             return;
