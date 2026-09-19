@@ -5,7 +5,8 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { Linking, Pressable, Text, View, StyleSheet } from 'react-native';
+import { Linking, Pressable, View, StyleSheet } from 'react-native';
+import { Text } from '../Text';
 import { BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import { getInitMessage, getMessage } from '../../api/prewalk';
 import {

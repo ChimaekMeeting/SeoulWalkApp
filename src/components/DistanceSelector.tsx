@@ -1,5 +1,6 @@
 import React from 'react';
-import { Pressable, StyleProp, StyleSheet, Text, View, ViewStyle } from 'react-native';
+import { Pressable, StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
+import { Text } from './Text';
 import { DISTANCE_OPTIONS } from '../config/surveyOptions';
 import { DistanceOption } from '../types/survey';
 import { colors, radii, spacing } from '../theme/tokens';

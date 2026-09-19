@@ -1,5 +1,6 @@
 import React from 'react';
-import { StatusBar, StyleSheet, Text, View } from 'react-native';
+import { StatusBar, StyleSheet, View } from 'react-native';
+import { Text } from '../components/Text';
 
 const BG = '#0D0D0D';
 

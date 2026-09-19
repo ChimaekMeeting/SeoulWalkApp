@@ -1,4 +1,5 @@
-import { ActivityIndicator, Text, View, StyleSheet } from 'react-native';
+import { ActivityIndicator, View, StyleSheet } from 'react-native';
+import { Text } from '../Text';
 import { colors, spacing } from '../../theme/tokens';
 
 export function LoadingBubble({ text }: { text: string }) {
