@@ -1,5 +1,6 @@
 import React from 'react';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, View } from 'react-native';
+import { Text } from '../Text';
 import { spacing } from '../../theme/tokens';
 import { authStorage } from '../../auth/authStorage';
 

@@ -4,10 +4,10 @@ import {
   Pressable,
   StyleProp,
   StyleSheet,
-  Text,
   TextStyle,
   ViewStyle,
 } from 'react-native';
+import { Text } from './Text';
 import { colors, radii } from '../theme/tokens';
 
 type Variant = 'primary' | 'secondary';

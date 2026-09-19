@@ -1,5 +1,6 @@
 import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+import { Text } from './Text';
 import { colors, radii, spacing } from '../theme/tokens';
 
 /** 로그인·설문 등에서 쓰는 붉은 인라인 에러 박스. message가 없으면 아무것도 렌더하지 않는다. */

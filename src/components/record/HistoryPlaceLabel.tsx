@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { StyleSheet, Text } from 'react-native';
+import { StyleSheet } from 'react-native';
+import { Text } from '../Text';
 import { RouteHistoryItem } from '../../types/routes';
 import { peekCachedPlaceName, reverseGeocodePlaceName } from '../../utils/reverseGeocode';
 

@@ -1,5 +1,6 @@
 import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+import { Text } from './Text';
 import { MaterialIcons } from '@expo/vector-icons';
 import { TurnKind, TurnStep, formatTurnInstruction } from '../utils/turnByTurn';
 import { colors, radii, spacing } from '../theme/tokens';

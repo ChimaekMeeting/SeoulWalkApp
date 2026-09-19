@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, StyleSheet, View } from 'react-native';
+import { Text } from '../Text';
 import { WalkMode, WalkRouteResponse } from '../../types/prewalk';
 import { RouteHistoryItem } from '../../types/routes';
 import { getRouteHistories, toggleFavoriteRoute } from '../../api/routes';

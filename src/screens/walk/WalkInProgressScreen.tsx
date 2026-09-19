@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
+import { Text } from '../../components/Text';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Pedometer } from 'expo-sensors';
 import { RouteMapView } from '../../components/map';
@@ -7,13 +8,11 @@ import { Button } from '../../components/Button';
 import { DevChip } from '../../components/DevChip';
 import { DevLocationChips } from '../../components/DevLocationChips';
 import { TurnByTurnBanner } from '../../components/TurnByTurnBanner';
-import { BackgroundGuidancePrompt } from '../../components/BackgroundGuidancePrompt';
 import { WalkRouteResponse } from '../../types/prewalk';
 import { WalkEndSnapshot } from '../../types/walk';
 import { useWatchLocation } from '../../hooks/useWatchLocation';
 import { useWalkProgress } from '../../hooks/useWalkProgress';
 import { useTurnByTurn } from '../../hooks/useTurnByTurn';
-import { useBackgroundLocationPermission } from '../../hooks/useBackgroundLocationPermission';
 import { resolveEndReason } from '../../utils/walkProgress';
 import { TurnStep } from '../../utils/turnByTurn';
 import { polylineLengthKm } from '../../utils/geo';
@@ -38,6 +37,8 @@ interface Props {
   routeResult: WalkRouteResponse;
   /** 개발용 — 도로 스냅 전 원본 경로 좌표. [DEV] "원본 경로 보기" 칩으로 빨간 점선 오버레이를 켠다. */
   originalRouteCoordinates?: WalkRouteResponse['coordinates'];
+  /** WalkPrepScreen에서 이미 물어본 백그라운드("항상 허용") 위치 권한 결과 — 여기선 다시 묻지 않는다. */
+  backgroundLocationGranted: boolean;
   onRequestEnd: (snapshot: WalkEndSnapshot) => void;
   /** 종착점 geofence로 완료가 확정됐을 때 1회 호출 — 상위(WalkFlow)가 완료 확인 모달을 띄운다. */
   onGoalReached: (snapshot: WalkEndSnapshot) => void;
@@ -46,6 +47,7 @@ interface Props {
 export function WalkInProgressScreen({
   routeResult,
   originalRouteCoordinates,
+  backgroundLocationGranted,
   onRequestEnd,
   onGoalReached,
 }: Props) {
@@ -60,9 +62,6 @@ export function WalkInProgressScreen({
   const [showOriginalRoute, setShowOriginalRoute] = useState(false);
   // [DEV] 턴 아이콘/문구 미리보기 — 켜져 있으면 실제 계산된 다음 턴 대신 이 값을 배너에 보여준다.
   const [turnPreview, setTurnPreview] = useState<TurnStep | null>(null);
-  // 화면을 꺼도 안내받기(백그라운드 지속) 제안 배너 — "나중에"를 누르면 이번 산책에서는 다시 안 뜬다.
-  const bgPermission = useBackgroundLocationPermission();
-  const [bgPromptDismissed, setBgPromptDismissed] = useState(false);
 
   // 진행률 분모는 백엔드 total_km가 아니라 tracker가 실제 투영에 쓰는 폴리라인의 누적 길이다
   // (직선 현 vs 실도로라 스케일이 달라 total_km로 나누면 종착점에서도 100%에 못 닿는다).
@@ -83,7 +82,7 @@ export function WalkInProgressScreen({
   const turnByTurn = useTurnByTurn(
     routeResult.coordinates,
     progress.routeProgressKm,
-    bgPermission.granted,
+    backgroundLocationGranted,
   );
 
   useEffect(() => {
@@ -157,16 +156,6 @@ export function WalkInProgressScreen({
             남은 거리 {progress.remainingRouteKm.toFixed(1)}km
           </Text>
         </View>
-        {!bgPermission.granted && bgPermission.status !== 'checking' && !bgPromptDismissed ? (
-          <BackgroundGuidancePrompt
-            needsSettings={bgPermission.status === 'denied'}
-            onAllow={() => {
-              bgPermission.request();
-            }}
-            onOpenSettings={bgPermission.openSettings}
-            onDismiss={() => setBgPromptDismissed(true)}
-          />
-        ) : null}
         {dev ? (
           <View style={styles.devPanel}>
             <Text style={styles.devLabel}>[DEV] state: {progress.state}</Text>

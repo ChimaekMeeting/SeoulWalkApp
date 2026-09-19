@@ -1,4 +1,5 @@
-import { Image, Pressable, Text, View, StyleSheet } from 'react-native';
+import { Image, Pressable, View, StyleSheet } from 'react-native';
+import { Text } from '../Text';
 import { WalkMode, WalkRouteResponse } from '../../types/prewalk';
 import { estimateDurationMinutes, estimateKcal } from '../../utils/walkEstimate';
 import { buildRouteThumbnailUrl } from '../../utils/routeThumbnail';

@@ -1,5 +1,6 @@
 import React, { useCallback } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
+import { Text } from '../../components/Text';
 import { GestureDetector } from 'react-native-gesture-handler';
 import { TabScreen } from '../../components/TabScreen';
 import { HistoryFilter, RouteHistoryList } from '../../components/record/RouteHistoryList';

@@ -1,5 +1,15 @@
 import React, { useEffect, useRef } from 'react';
-import { Animated, Dimensions, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import {
+  Animated,
+  Dimensions,
+  Modal,
+  Pressable,
+  StyleProp,
+  StyleSheet,
+  TextStyle,
+  View,
+} from 'react-native';
+import { Text } from '../../components/Text';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Button } from '../../components/Button';
 import { colors, radii, spacing } from '../../theme/tokens';
@@ -14,6 +24,11 @@ interface Props {
   icon?: string;
   title?: string;
   subtitle?: string;
+  /**
+   * subtitle 기본 스타일은 짧은 한 줄 태그라인 기준(작고 굵게)이라 문단 분량 설명문에는 너무
+   * 촘촘하다 — 그런 경우 PermissionPrompt.tsx의 본문 스타일처럼 덮어써서 가독성을 맞춘다.
+   */
+  subtitleStyle?: StyleProp<TextStyle>;
   confirmLabel?: string;
   cancelLabel?: string;
 }
@@ -25,6 +40,7 @@ export function WalkEndConfirmModal({
   icon = '🚶',
   title = '산책을 정말로\n종료하시겠습니까?',
   subtitle = '기록은 자동으로 저장돼요',
+  subtitleStyle,
   confirmLabel = '종료',
   cancelLabel = '아니요',
 }: Props) {
@@ -57,7 +73,7 @@ export function WalkEndConfirmModal({
           <View style={styles.dragHandle} />
           <Text style={styles.icon}>{icon}</Text>
           <Text style={styles.title}>{title}</Text>
-          <Text style={styles.subtitle}>{subtitle}</Text>
+          <Text style={[styles.subtitle, subtitleStyle]}>{subtitle}</Text>
           <View style={styles.actionRow}>
             <Button label={cancelLabel} onPress={onCancel} variant="secondary" style={styles.flexButton} />
             <Button label={confirmLabel} onPress={onConfirm} style={styles.flexButton} />

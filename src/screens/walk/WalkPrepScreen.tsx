@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
+import { Text } from '../../components/Text';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { RouteMapView } from '../../components/map';
 import { Button } from '../../components/Button';
@@ -7,17 +8,26 @@ import { DevChip } from '../../components/DevChip';
 import { DevLocationChips } from '../../components/DevLocationChips';
 import { ScreenHeader } from '../../components/ScreenHeader';
 import { StatRow } from '../../components/StatRow';
+import { BackgroundLocationStatus } from '../../hooks/useBackgroundLocationPermission';
 import { LocationInfo, WalkRouteResponse } from '../../types/prewalk';
 import { estimateDurationMinutes, estimateKcal } from '../../utils/walkEstimate';
 import { WALK_MODE_LABEL } from '../../utils/walkMode';
 import { isLoopRoute, reverseRoute } from '../../utils/geo';
 import { colors, radii, shadows, spacing } from '../../theme/tokens';
+import { WalkEndConfirmModal } from './WalkEndConfirmModal';
 
 interface Props {
   routeResult: WalkRouteResponse;
   currentLocation: LocationInfo | null;
   /** 도로 스냅(Map Matching)이 아직 진행 중이면 시작 버튼 대신 스냅 바를 띄운다 — 산책 중 경로 교체를 없애기 위함. */
   snapPending: boolean;
+  /** 백그라운드("항상 허용") 위치 권한 상태 — 산책 시작 전에 물어봐 walking 화면까지 이어지게 한다. */
+  bgPermissionStatus: BackgroundLocationStatus;
+  /** "나중에"를 눌렀는지 — 누르면 이 산책 준비 화면에서는 배너를 다시 안 띄운다. */
+  bgPromptDismissed: boolean;
+  onAllowBackgroundLocation: () => Promise<boolean>;
+  onOpenBackgroundLocationSettings: () => void;
+  onDismissBackgroundPrompt: () => void;
   /** 방향 전환 버튼으로 고른 최종 좌표(반전 안 했으면 routeResult.coordinates 그대로)를 넘긴다. */
   onStart: (coordinates: WalkRouteResponse['coordinates']) => void;
   onBack: () => void;
@@ -27,6 +37,11 @@ export function WalkPrepScreen({
   routeResult,
   currentLocation,
   snapPending,
+  bgPermissionStatus,
+  bgPromptDismissed,
+  onAllowBackgroundLocation,
+  onOpenBackgroundLocationSettings,
+  onDismissBackgroundPrompt,
   onStart,
   onBack,
 }: Props) {
@@ -47,7 +62,25 @@ export function WalkPrepScreen({
     [reversed, routeResult.coordinates],
   );
 
-  const handleStart = () => onStart(previewRoute);
+  // 배너를 시작 버튼 옆에 항상 띄우면 버튼이 2개로 늘어 화면이 복잡해지므로, "산책 시작"을
+  // 누른 시점에만 1회성 확인 모달로 물어본다 — 모달의 "나중에"/"허용하기"/"설정 열기" 중 뭘
+  // 눌러도(허용 결과와 무관하게) 그대로 산책을 시작한다(선택 기능이라 산책 시작을 막지 않음).
+  const needsBgPrompt =
+    bgPermissionStatus !== 'granted' && bgPermissionStatus !== 'checking' && !bgPromptDismissed;
+  const [bgModalVisible, setBgModalVisible] = useState(false);
+
+  const handleStart = () => {
+    if (needsBgPrompt) {
+      setBgModalVisible(true);
+      return;
+    }
+    onStart(previewRoute);
+  };
+
+  const dismissBgModalAndStart = () => {
+    setBgModalVisible(false);
+    onStart(previewRoute);
+  };
 
   return (
     <SafeAreaView style={styles.safe} edges={['left', 'right', 'bottom']}>
@@ -109,6 +142,38 @@ export function WalkPrepScreen({
       ) : (
         <Button label="▶ 산책 시작" onPress={handleStart} style={styles.startButton} />
       )}
+
+      <WalkEndConfirmModal
+        visible={bgModalVisible}
+        icon="📍"
+        title="화면을 꺼도 경로 안내를 받을까요?"
+        subtitle={
+          bgPermissionStatus === 'denied'
+            ? '설정 앱에서 위치 권한을 "항상 허용"으로 바꾸면, 화면이 꺼지거나 다른 앱을 쓰는 동안에도 턴 안내가 이어져요.'
+            : '위치 권한을 "항상 허용"하면 화면이 꺼지거나 다른 앱을 쓰는 동안에도 턴 안내가 이어져요.'
+        }
+        subtitleStyle={styles.bgModalSubtitle}
+        confirmLabel={bgPermissionStatus === 'denied' ? '설정 열기' : '허용하기'}
+        cancelLabel="나중에"
+        onCancel={() => {
+          onDismissBackgroundPrompt();
+          dismissBgModalAndStart();
+        }}
+        onConfirm={async () => {
+          if (bgPermissionStatus === 'denied') {
+            // 설정 앱으로 나가는 경우라 여기선 기다릴 게 없다 — 사용자가 돌아왔을 때 이미 산책
+            // 화면이어야 자연스럽다.
+            onOpenBackgroundLocationSettings();
+          } else {
+            // OS 권한 다이얼로그 응답을 기다린 뒤 산책을 시작해야, walking 화면이 뜨자마자(잠금
+            // 화면으로 넘어가도) 포그라운드 서비스 알림이 이미 켜져 있다 — 기다리지 않고 곧장
+            // onStart하면 권한 결과가 아직 반영되기 전 렌더로 시작해 알림이 늦게(또는 화면이
+            // 꺼진 뒤에야) 뜰 수 있었다.
+            await onAllowBackgroundLocation();
+          }
+          dismissBgModalAndStart();
+        }}
+      />
     </SafeAreaView>
   );
 }
@@ -160,6 +225,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '800',
     color: colors.ink,
+  },
+  // 문단이 화면 끝까지 넓게 퍼지면 읽기 힘들어서, 좌우 여백을 더 줘 가운데로 좁혀 보여준다.
+  bgModalSubtitle: {
+    paddingHorizontal: spacing.lg,
+    textAlign: 'center',
   },
   devRow: {
     marginTop: 'auto',

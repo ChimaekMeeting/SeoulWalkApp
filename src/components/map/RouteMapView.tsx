@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
-import { LayoutChangeEvent, Pressable, StyleSheet, Text, View } from 'react-native';
+import { LayoutChangeEvent, Pressable, StyleSheet, View } from 'react-native';
+import { Text } from '../Text';
 import { AppMapView, AppMapViewProps } from './AppMapView';
 import { mapConfig } from '../../config/mapConfig';
 import { centerOfBounds, computeRouteBounds, zoomLevelForBounds } from '../../utils/geo';

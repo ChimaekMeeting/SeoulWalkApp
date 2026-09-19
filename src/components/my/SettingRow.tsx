@@ -1,5 +1,6 @@
 import React from 'react';
-import { Pressable, StyleSheet, Text } from 'react-native';
+import { Pressable, StyleSheet } from 'react-native';
+import { Text } from '../Text';
 import { Feather } from '@expo/vector-icons';
 import { colors, radii, spacing } from '../../theme/tokens';
 
