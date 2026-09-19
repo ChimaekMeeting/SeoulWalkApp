@@ -11,7 +11,12 @@ import {
   TURN_IMMEDIATE_KM,
 } from '../utils/turnByTurn';
 import { activeWalkSession } from '../utils/activeWalkSession';
-import { TURN_BY_TURN_LOCATION_TASK } from '../tasks/turnByTurnBackgroundTask';
+import {
+  TURN_BY_TURN_FOREGROUND_SERVICE_BODY,
+  TURN_BY_TURN_FOREGROUND_SERVICE_TITLE,
+  TURN_BY_TURN_LOCATION_OPTIONS,
+  TURN_BY_TURN_LOCATION_TASK,
+} from '../tasks/turnByTurnBackgroundTask';
 
 // 최종("지금 OO회전") 안내 거리 — turnByTurn.ts가 문구를 "지금"으로 바꾸는 거리와 같다(진동·TTS가
 // "지금"이라고 말하는 순간과 문구가 어긋나면 안 되므로 같은 상수를 그대로 쓴다).
@@ -33,7 +38,7 @@ export interface TurnByTurnInfo {
  *     lastAnnouncedAtKm을 기록해 백그라운드 태스크(turnByTurnBackgroundTask.ts)와 중복 안내를
  *     피한다 — 화면이 꺼져 백그라운드로 넘어가는 순간 같은 턴을 또 안내하지 않게.
  *
- * backgroundEnabled가 true면(사용자가 BackgroundGuidancePrompt에서 동의 + 권한 허용) 걷는 동안
+ * backgroundEnabled가 true면(사용자가 산책 준비 화면의 권한 확인 모달에서 동의 + 권한 허용) 걷는 동안
  * expo-task-manager 백그라운드 위치 태스크를 시작해 화면이 꺼지거나 앱이 백그라운드로 가도 안내가
  * 이어지게 한다. false면(권한 없음/거부) 이 훅은 useWatchLocation(포그라운드 watch) 갱신에만
  * 반응하는 Phase A 그대로다.
@@ -85,14 +90,11 @@ export function useTurnByTurn(
   useEffect(() => {
     if (!backgroundEnabled) return;
     Location.startLocationUpdatesAsync(TURN_BY_TURN_LOCATION_TASK, {
-      accuracy: Location.Accuracy.BestForNavigation,
-      distanceInterval: 10,
+      ...TURN_BY_TURN_LOCATION_OPTIONS,
       foregroundService: {
-        notificationTitle: '산책 안내 중',
-        notificationBody: '경로를 벗어나지 않도록 안내를 이어가는 중이에요.',
+        notificationTitle: TURN_BY_TURN_FOREGROUND_SERVICE_TITLE,
+        notificationBody: TURN_BY_TURN_FOREGROUND_SERVICE_BODY,
       },
-      showsBackgroundLocationIndicator: true,
-      pausesUpdatesAutomatically: false,
     }).catch(err => console.warn('[useTurnByTurn] 백그라운드 위치 시작 실패:', err));
 
     return () => {

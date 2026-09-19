@@ -17,14 +17,28 @@ import { decideBackgroundAnnouncement, formatTurnInstruction } from '../utils/tu
  * 안전장치. 세션이 있으면 decideBackgroundAnnouncement(순수 함수, utils/turnByTurn.ts, Jest로 검증됨)
  * 로 다음 턴과 "지금 안내해야 하는지"를 판정한다.
  *
- * 알림(expo-notifications)은 백그라운드에서 가장 신뢰할 수 있는 채널이라 항상 보낸다. TTS
- * (expo-speech)는 best-effort로 같이 시도한다 — 안드로이드는 포그라운드 서비스가 JS를 살려두는
- * 동안 대체로 재생되지만, iOS는 백그라운드 실행 창이 짧아 보장되지 않는다. 지속 알림은 매 GPS
- * fix마다 남은 거리로 다시 그려 잠금화면·알림창에서도 네이버지도처럼 진행 상황이 보이게 한다
- * (sticky라 재예약해도 알림이 다시 튀어오르거나 소리 나지 않고 내용만 갱신된다). 턴 알림(사운드
- * 있는 1회성 안내)만 턴이 바뀔 때 한 번 보낸다.
+ * 잠금화면·알림창에 보이는 진행 상황은 이 태스크가 직접 올리는 지속 알림(ONGOING_NOTIFICATION_ID)
+ * 하나뿐이다 — 안드로이드가 강제하는 포그라운드 서비스 알림(useTurnByTurn.ts가 startLocationUpdatesAsync
+ * 에 거는 것)은 백그라운드 위치 서비스를 유지하기 위한 기술적 요건일 뿐이라, 이 지속 알림과 헷갈리지
+ * 않도록 일부러 다른 문구를 쓴다. 지속 알림은 `trigger: null`(=기본 채널)로만 보낸다 — 전용 채널을
+ * 새로 만들어 트리거로 라우팅해봤더니 알림 내용이 통째로 안 뜨는 기기가 있어(원인 미확정), 실제로
+ * 내용이 뜨는 걸 확인한 이 조합만 쓴다. 잠금화면 노출·진동 억제(채널 중요도 조정)는 채널 생성 후
+ * 안드로이드가 대부분 값을 잠가버려 앱에서 사후 변경이 잘 안 먹는 영역이라, 지금은 시도하지 않는다.
+ * 턴 알림(사운드 있는 1회성 안내)만 따로, 턴이 바뀔 때 한 번 보낸다.
  */
 export const TURN_BY_TURN_LOCATION_TASK = 'turn-by-turn-location-task';
+
+export const TURN_BY_TURN_LOCATION_OPTIONS: Location.LocationTaskOptions = {
+  accuracy: Location.Accuracy.BestForNavigation,
+  distanceInterval: 10,
+  showsBackgroundLocationIndicator: true,
+  pausesUpdatesAutomatically: false,
+};
+
+// 안드로이드가 강제하는 포그라운드 서비스 알림용 — 지속 알림("산책 안내 중")과 겹쳐 보이지 않도록
+// 일부러 다른 제목/문구를 쓴다. useTurnByTurn.ts의 최초 시작 호출에서만 쓰이고 이후 갱신되지 않는다.
+export const TURN_BY_TURN_FOREGROUND_SERVICE_TITLE = '위치 사용 중';
+export const TURN_BY_TURN_FOREGROUND_SERVICE_BODY = '화면이 꺼져도 산책 안내가 계속돼요.';
 
 const ONGOING_NOTIFICATION_ID = 'turn-by-turn-ongoing';
 
@@ -49,13 +63,14 @@ TaskManager.defineTask(TURN_BY_TURN_LOCATION_TASK, async ({ data, error }) => {
   );
   if (!decision.step) return;
 
-  // 지속 알림 — 매 GPS fix마다 남은 거리를 다시 그려 잠금화면에서도 진행 상황이 실시간으로 보이게 한다.
+  // 지속 알림 — 매 GPS fix마다 남은 거리로 다시 그려 잠금화면·알림창에서도 실시간으로 보이게 한다.
   await Notifications.scheduleNotificationAsync({
     identifier: ONGOING_NOTIFICATION_ID,
     content: {
       title: '산책 안내 중',
       body: formatTurnInstruction(decision.step.kind, decision.distanceToKm),
       sticky: true,
+      sound: false,
     },
     trigger: null,
   }).catch(() => {});
