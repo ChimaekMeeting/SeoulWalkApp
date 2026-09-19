@@ -6,10 +6,11 @@ import { authStorage } from '../../auth/authStorage';
 
 interface Props {
   onResetSurvey?: () => void;
+  onResetOnboarding?: () => void;
 }
 
 /** 개발 빌드에서만 보이는 디버그 메뉴. 프로덕션(`__DEV__` false)에서는 아무것도 렌더하지 않는다. */
-export function DevMenu({ onResetSurvey }: Props) {
+export function DevMenu({ onResetSurvey, onResetOnboarding }: Props) {
   if (!__DEV__) {
     return null;
   }
@@ -26,6 +27,9 @@ export function DevMenu({ onResetSurvey }: Props) {
       </Pressable>
       <Pressable style={styles.button} onPress={onResetSurvey}>
         <Text style={styles.buttonText}>[DEV] 설문 화면 다시 보기</Text>
+      </Pressable>
+      <Pressable style={styles.button} onPress={onResetOnboarding}>
+        <Text style={styles.buttonText}>[DEV] 온보딩 화면 다시 보기</Text>
       </Pressable>
     </View>
   );

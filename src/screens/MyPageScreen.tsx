@@ -12,6 +12,7 @@ interface MyPageScreenProps {
   nickname: string | null;
   email: string | null;
   onResetSurvey?: () => void;
+  onResetOnboarding?: () => void;
 }
 
 export function MyPageScreen({
@@ -19,6 +20,7 @@ export function MyPageScreen({
   nickname,
   email,
   onResetSurvey,
+  onResetOnboarding,
 }: MyPageScreenProps) {
   return (
     <TabScreen title="마이페이지">
@@ -34,7 +36,7 @@ export function MyPageScreen({
       />
       <SettingRow label="로그아웃" onPress={onLogout} danger showChevron={false} />
 
-      <DevMenu onResetSurvey={onResetSurvey} />
+      <DevMenu onResetSurvey={onResetSurvey} onResetOnboarding={onResetOnboarding} />
     </TabScreen>
   );
 }

@@ -76,6 +76,8 @@ export const onboardingStorage = {
   readHasSeen: onboardingFlag.read,
   /** 온보딩 열람 기록을 저장하고, 저장 값을 재확인한 성공 여부를 돌려준다. */
   markSeen: onboardingFlag.set,
+  /** 로컬 열람 기록을 제거한다([DEV] 온보딩 다시 보기 등). */
+  clear: onboardingFlag.clear,
 };
 
 export const activityPromptStorage = {

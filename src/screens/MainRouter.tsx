@@ -58,6 +58,7 @@ interface MainRouterProps {
   onLogout?: () => void;
   userId?: string | null;
   onResetSurvey?: () => void;
+  onResetOnboarding?: () => void;
   /** 산책 진입 직전 OS 권한 재확인. false면 진입을 막는다(권한 화면으로 자동 이동됨). */
   ensureWalkable: () => Promise<boolean>;
   /** AppBootstrap의 위치 권한 단일 기준. useLocation은 이 값으로만 좌표 조회 여부를 정한다. */
@@ -73,6 +74,7 @@ export function MainRouter({
   onLogout,
   userId,
   onResetSurvey,
+  onResetOnboarding,
   ensureWalkable,
   locationGranted,
 }: MainRouterProps) {
@@ -366,6 +368,7 @@ export function MainRouter({
               nickname={nickname}
               email={email}
               onResetSurvey={onResetSurvey}
+              onResetOnboarding={onResetOnboarding}
             />
           ) : null}
         </View>
