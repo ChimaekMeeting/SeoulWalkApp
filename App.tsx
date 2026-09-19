@@ -79,12 +79,14 @@ function ActivityPermissionScreenContainer() {
 }
 
 function MainRouterContainer() {
-  const { signOut, userId, resetSurvey, ensureWalkable, locationGranted } = useAppBootstrap();
+  const { signOut, userId, resetSurvey, resetOnboarding, ensureWalkable, locationGranted } =
+    useAppBootstrap();
   return (
     <MainRouter
       onLogout={signOut}
       userId={userId}
       onResetSurvey={resetSurvey}
+      onResetOnboarding={resetOnboarding}
       ensureWalkable={ensureWalkable}
       locationGranted={locationGranted}
     />

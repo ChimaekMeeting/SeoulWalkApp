@@ -40,6 +40,7 @@ interface AppBootstrapState {
   signIn: () => void;
   signOut: () => void;
   onboardingDone: () => void;
+  resetOnboarding: () => void;
   surveyDone: () => void;
   resetSurvey: () => void;
   permissionStatus: PermissionStatus;
@@ -339,6 +340,12 @@ export function AppBootstrapProvider({ children }: { children: React.ReactNode }
       signIn,
       signOut,
       onboardingDone: () => setOnboardingStatus('seen'),
+      resetOnboarding: () => {
+        debugLog('resetOnboarding', 'called: local flag clear + onboardingStatus → unseen');
+        // clear는 내부에서 실패를 잡으므로 reject되지 않는다.
+        onboardingStorage.clear();
+        setOnboardingStatus('unseen');
+      },
       surveyDone: () => setSurveyStatus('completed'),
       resetSurvey: () => {
         debugLog('resetSurvey', 'called: local flag clear + surveyStatus → pending');
