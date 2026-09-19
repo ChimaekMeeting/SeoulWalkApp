@@ -44,6 +44,22 @@ type Message =
   | { from: 'bot' | 'me'; text: string }
   | { from: 'routes'; routes: WalkRouteResponse[] };
 
+// 대기 중 위에 순서대로 흘러가는 진행 상태 문구. 지금은 백엔드가 실제 진행 단계를 내려주지
+// 않아 자리표시자로 채워둔 것 — 나중에 백엔드가 단계별 상태를 보내주면(TODO) applyResponse
+// 쪽에서 받아 그대로 LoadingBubble에 꽂아 넣도록 바꾸면 된다. 지금은 시간 기반으로만 넘어간다.
+// 첫 메시지(init)는 서버 콜드 스타트로 8~20초까지 걸릴 수 있어 그에 맞는 문구를 쓴다.
+const INIT_LOADING_STEPS = [
+  '오늘 날씨를 확인하고 있어요',
+  '주변 정보를 불러오고 있어요',
+  '대화를 준비하고 있어요',
+];
+const FOLLOWUP_LOADING_STEPS = [
+  '메시지를 이해하고 있어요',
+  '어울리는 산책로를 찾고 있어요',
+  '경로를 계산하고 있어요',
+  '답변을 정리하고 있어요',
+];
+
 const STATUS_MESSAGES: Partial<Record<ChatStatus, string>> = {
   [ChatStatus.ACCESS_EXPIRED_TOKEN]: '로그인이 만료되었어요. 다시 로그인해주세요.',
   [ChatStatus.INVALID_TOKEN]: '인증 정보가 올바르지 않아요. 다시 로그인해주세요.',
@@ -529,13 +545,7 @@ export const ChatConversation = forwardRef(function ChatConversation(
             return <View key={index}>{bubble}</View>;
           })}
           {sending ? (
-            <LoadingBubble
-              text={
-                !threadId
-                  ? '오늘 날씨를 살펴보고 있어요.'
-                  : '좋은 답변을 생각 중입니다.'
-              }
-            />
+            <LoadingBubble steps={!threadId ? INIT_LOADING_STEPS : FOLLOWUP_LOADING_STEPS} />
           ) : null}
           {initFailed && !sending ? (
             <Pressable
