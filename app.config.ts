@@ -8,6 +8,15 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   version: '1.0.0',
   orientation: 'portrait',
   userInterfaceStyle: 'automatic',
+  // OTA(expo-updates): 네이티브 변경 없는 JS/에셋 수정을 스토어 재심사 없이 배포하기 위한 설정.
+  // fingerprint 정책 — 네이티브 코드(플러그인·의존성)가 바뀌면 런타임 버전이 자동으로 갈려서,
+  // 새 네이티브 빌드가 필요한 JS를 옛날 빌드가 잘못 받아 크래시 나는 걸 막아준다.
+  runtimeVersion: {
+    policy: 'fingerprint',
+  },
+  updates: {
+    url: 'https://u.expo.dev/940923dd-b69d-4910-bbdb-d0c0c9d7ba9f',
+  },
   ios: {
     bundleIdentifier: 'com.seoulwalkapp',
     supportsTablet: false,
