@@ -442,8 +442,8 @@ export const ChatConversation = forwardRef(function ChatConversation(
 
     const showSub = Keyboard.addListener(showEvent, () => {
       keyboardVisibleRef.current = true;
-      // Android adjustResize/iOS KeyboardAvoidingView가 viewport를 줄인 다음 프레임에서
-      // 마지막 메시지를 다시 노출한다. 키보드 높이나 기기별 지연값에는 의존하지 않는다.
+      // 키보드가 뜨며 대화 영역이 좁아진(또는 시트가 펼쳐진) 다음 프레임에서 마지막 메시지를
+      // 다시 노출한다. 키보드 높이나 기기별 지연값에는 의존하지 않는다.
       scrollToLatest(false);
     });
     const hideSub = Keyboard.addListener(hideEvent, () => {

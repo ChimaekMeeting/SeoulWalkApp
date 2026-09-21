@@ -7,19 +7,29 @@ export const SHEET_TOP_UP = 40; // 위: 채팅 가득 (지도 거의 가려짐) 
 const HANDLE_HEIGHT = 44;
 
 /**
- * 화면 하단에서 입력창까지 예약해야 하는 공간. 키보드 높이는 받지 않는다 — OS의 resize 또는
- * KeyboardAvoidingView가 이미 사용 가능한 화면 자체를 줄이므로 여기서 다시 더하면 이중 보정이다.
+ * 화면 하단에서 입력창까지 예약해야 하는 공간. `keyboardOverlap`은 "키보드 높이 중 OS 리사이즈가
+ * 아직 못 줄여준 나머지"를 가리킨다(호출부에서 실측해서 넘긴다) — 안드로이드 windowSoftInputMode
+ * ="resize"가 기종/버전마다 실제로 레이아웃을 줄여주는 정도가 달라서(edge-to-edge 등), 여기서
+ * "키보드가 열렸다"는 사실만으로 고정값을 더하지 않고, 리사이즈가 못 채운 만큼만 보정한다.
+ * 리사이즈가 완전히 되는 기기에서는 keyboardOverlap이 0에 가까워서 기존 로직과 동일하게 동작한다.
  */
 export function computeChatBottomLayout({
   bottomNavHeight,
   bottomSafeArea,
   chatInputHeight,
+  keyboardOverlap = 0,
+  keyboardGap = 0,
 }: {
   bottomNavHeight: number;
   bottomSafeArea: number;
   chatInputHeight: number;
+  keyboardOverlap?: number;
+  keyboardGap?: number;
 }): { chatInputBottom: number; chatBottomInset: number } {
-  const chatInputBottom = bottomNavHeight + bottomSafeArea;
+  const chatInputBottom =
+    keyboardOverlap > 0
+      ? keyboardOverlap + bottomSafeArea + keyboardGap
+      : bottomNavHeight + bottomSafeArea;
   return {
     chatInputBottom,
     chatBottomInset: chatInputBottom + chatInputHeight,

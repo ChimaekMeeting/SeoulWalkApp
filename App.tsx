@@ -7,6 +7,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
+import { KeyboardProvider } from 'react-native-keyboard-controller';
 import Mapbox from '@rnmapbox/maps';
 import { env } from './src/config/env';
 import { AppBootstrapProvider, useAppBootstrap } from './src/auth/AppBootstrap';
@@ -111,15 +112,17 @@ function RootNavigator() {
 export default function App() {
   return (
     <GestureHandlerRootView style={styles.root}>
-      <SafeAreaProvider>
-        <NavigationContainer ref={navigationRef}>
-          <BottomSheetModalProvider>
-            <AppBootstrapProvider>
-              <RootNavigator />
-            </AppBootstrapProvider>
-          </BottomSheetModalProvider>
-        </NavigationContainer>
-      </SafeAreaProvider>
+      <KeyboardProvider>
+        <SafeAreaProvider>
+          <NavigationContainer ref={navigationRef}>
+            <BottomSheetModalProvider>
+              <AppBootstrapProvider>
+                <RootNavigator />
+              </AppBootstrapProvider>
+            </BottomSheetModalProvider>
+          </NavigationContainer>
+        </SafeAreaProvider>
+      </KeyboardProvider>
     </GestureHandlerRootView>
   );
 }
