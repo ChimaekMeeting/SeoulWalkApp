@@ -9,7 +9,7 @@ import { usePageSwipeGesture } from '../../hooks/usePageSwipeGesture';
 import { colors, spacing } from '../../theme/tokens';
 
 interface RecordTabProps {
-  /** 현재 필터('최근 경로'/'즐겨찾기'). 탭을 벗어나도 유지되도록 MainRouter가 소유한다. */
+  /** 현재 필터('최근 경로'/'완주한 경로'/'즐겨찾기'). 탭을 벗어나도 유지되도록 MainRouter가 소유한다. */
   filter: HistoryFilter;
   onFilterChange: (filter: HistoryFilter) => void;
   /** 경로 기록 카드를 눌렀을 때 그 경로로 다시 산책(6a)을 시작하도록 호출된다. */
@@ -17,10 +17,11 @@ interface RecordTabProps {
 }
 
 // 좌우로 나열된 필터 순서 — 좌→우 스와이프로 이 배열을 앞뒤로 오간다.
-const FILTER_ORDER: HistoryFilter[] = ['recent', 'favorite'];
+const FILTER_ORDER: HistoryFilter[] = ['recent', 'completed', 'favorite'];
 
 const FILTERS: [HistoryFilter, string][] = [
   ['recent', '최근 경로'],
+  ['completed', '완주한 경로'],
   ['favorite', '즐겨찾기'],
 ];
 

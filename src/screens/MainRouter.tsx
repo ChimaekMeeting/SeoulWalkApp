@@ -79,8 +79,9 @@ export function MainRouter({
   locationGranted,
 }: MainRouterProps) {
   const [route, setRoute] = useState<Route>({ name: 'home' });
-  // 기록 탭 필터('최근 경로'/'즐겨찾기'). 탭을 벗어났다 돌아와도 유지되도록 RecordTab이 아닌
-  // 여기서 소유한다 — 안드로이드 뒤로가기로 '즐겨찾기'→'최근 경로'로 한 단계 되돌리기도 처리.
+  // 기록 탭 필터('최근 경로'/'완주한 경로'/'즐겨찾기'). 탭을 벗어났다 돌아와도 유지되도록 RecordTab이
+  // 아닌 여기서 소유한다 — 안드로이드 뒤로가기로 비-'최근 경로' 필터를 보고 있으면 '최근 경로'로
+  // 되돌리기도 처리.
   const [recordFilter, setRecordFilter] = useState<HistoryFilter>('recent');
   const [nickname, setNickname] = useState<string | null>(null);
   const [email, setEmail] = useState<string | null>(null);
@@ -259,7 +260,8 @@ export function MainRouter({
 
   // 안드로이드 하드웨어 뒤로가기. realWalk 단계는 WalkFlow가 직접 처리하므로 여기선 구독하지 않는다.
   const handleAndroidBack = useCallback(() => {
-    // record/me 탭 → 홈 탭으로. 단 기록 탭에서 '즐겨찾기'를 보고 있으면 먼저 '최근 경로'로 되돌린다.
+    // record/me 탭 → 홈 탭으로. 단 기록 탭에서 '최근 경로'가 아닌 필터를 보고 있으면 먼저
+    // '최근 경로'로 되돌린다.
     if (route.name === 'record' || route.name === 'me') {
       if (route.name === 'record' && recordFilter !== 'recent') {
         setRecordFilter('recent');
