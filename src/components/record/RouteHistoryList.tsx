@@ -18,7 +18,7 @@ import { WALK_MODE_LABEL } from '../../utils/walkMode';
 import { colors, radii, spacing } from '../../theme/tokens';
 import { HistoryPlaceLabel } from './HistoryPlaceLabel';
 
-export type HistoryFilter = 'recent' | 'favorite';
+export type HistoryFilter = 'recent' | 'completed' | 'favorite';
 
 interface Props {
   filter: HistoryFilter;
@@ -31,10 +31,15 @@ interface HistoryData {
 }
 
 export function RouteHistoryList({ filter, onSelectRoute }: Props) {
+  // 'completed'(완주한 경로)는 백엔드가 아직 완주 여부를 내려주지 않아 API를 호출하지 않는다.
+  // 값이 생기면 getRouteHistories에 파라미터를 추가하고 이 분기를 없애면 된다.
+  const isBackedByServer = filter !== 'completed';
+
   // 서버 기록 + 로컬 재산책 시각을 한 번에. 콜드스타트로 느리거나 실패하면 훅이 재시도하고,
   // 탭을 나갔다 들어오면 지난 목록을 즉시 보여준 뒤(세션 캐시) 뒤에서 갱신한다.
   const { data, loading, error, mutate } = useCachedResource<HistoryData>({
     key: `routeHistories:${filter}`,
+    enabled: isBackedByServer,
     fetcher: async () => {
       const [res, usage] = await Promise.all([
         getRouteHistories({
@@ -69,6 +74,9 @@ export function RouteHistoryList({ filter, onSelectRoute }: Props) {
     }
   };
 
+  if (!isBackedByServer) {
+    return <Text style={styles.historyEmptyText}>완주한 경로 기능은 준비 중이에요.</Text>;
+  }
   if (loading) {
     return <Text style={styles.historyEmptyText}>불러오는 중...</Text>;
   }
