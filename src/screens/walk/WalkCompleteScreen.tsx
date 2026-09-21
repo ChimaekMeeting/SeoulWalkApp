@@ -24,6 +24,8 @@ interface Props {
   routeId?: number;
   /** 완료 요약을 확인하고 다음(산책로 평가) 화면으로 넘어갈 때. */
   onNext: () => void;
+  /** 평가를 남기지 않고 홈으로 돌아갈 때. */
+  onExit: () => void;
 }
 
 // 완주 여부(종착점 도착 / 중간 종료)와 무관하게 완료 화면은 동일하게 보여준다 —
@@ -37,6 +39,7 @@ export function WalkCompleteScreen({
   steps: measuredSteps,
   routeId,
   onNext,
+  onExit,
 }: Props) {
   const [isFavorite, setIsFavorite] = useState(routeResult.is_favorite ?? false);
   const [favoritePending, setFavoritePending] = useState(false);
@@ -96,7 +99,10 @@ export function WalkCompleteScreen({
         />
       </View>
 
-      <Button label="산책로 평가하기" onPress={onNext} style={styles.nextButton} />
+      <View style={styles.bottomActions}>
+        <Button label="산책로 평가하기" onPress={onNext} />
+        <Button label="평가 없이 홈으로" onPress={onExit} variant="secondary" />
+      </View>
     </SafeAreaView>
   );
 }
@@ -153,8 +159,9 @@ const styles = StyleSheet.create({
   favoriteButtonText: {
     fontSize: 14,
   },
-  nextButton: {
+  bottomActions: {
     marginTop: 'auto',
     marginBottom: spacing.lg,
+    gap: spacing.sm,
   },
 });

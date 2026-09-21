@@ -103,14 +103,19 @@ src/bottomsheets/
 
 `components/AppBottomSheet.tsx`(범용 gorhom 래퍼)에 채팅 전용 스냅포인트 계산을 얹은 것이 `ChatBottomSheet`입니다. 이 앱에 바텀시트를 쓰는 곳이 지금은 홈 화면 채팅 하나뿐이라 폴더가 작지만, 다른 시트가 추가되면 같은 패턴으로(`AppBottomSheet` 재사용 + 이 폴더에 전용 geometry/handle 추가) 확장하면 됩니다.
 
-`chatSheetGeometry.ts`의 `computeChatSheetHalfHeight`는 `HomeScreen`이 `AppMapView`의 카메라 `bottomPadding`을 계산할 때도 재사용합니다 — 시트 중간 스냅 높이와 지도가 가려지지 않는 영역이 항상 일치해야 하기 때문입니다.
+`chatSheetGeometry.ts`의 `computeChatSheetHalfHeight`는 `HomeScreen`이 `AppMapView`의 카메라 `bottomPadding`을 계산할 때도 재사용합니다 — 시트 중간 스냅 높이와 지도가 가려지지 않는 영역이 항상 일치해야 하기 때문입니다. 화면 높이는 모듈 로드 시 고정한 `Dimensions` 값이 아니라 `HomeScreen`의 현재 `onLayout` 실측값을 사용하므로, 키보드·분할 화면·기기 크기로 사용 가능 높이가 바뀌면 시트와 지도 여백도 함께 다시 계산됩니다.
 
 ```ts
 import { ChatBottomSheet, ChatBottomSheetHandle } from '../bottomsheets/ChatBottomSheet';
 
 const sheetRef = useRef<ChatBottomSheetHandle>(null);
 // ...
-<ChatBottomSheet ref={sheetRef} previewHeight={...} bottomReservedHeight={...}>
+<ChatBottomSheet
+  ref={sheetRef}
+  containerHeight={availableHeight}
+  previewHeight={...}
+  bottomReservedHeight={...}
+>
   <ChatConversation ... />
 </ChatBottomSheet>;
 // 필요할 때
@@ -237,7 +242,7 @@ src/auth/
 
 **`authStorage`** 는 다섯 가지 키(`kakao_user_id`, `app_access_token`, `app_refresh_token`, `user_nickname`, `user_email`)를 `expo-secure-store`에 저장합니다. 앱을 삭제하기 전까지는 기기에 남아 있어 재실행 시 자동 로그인이 가능합니다.
 
-**`useKakaoAuth`** 는 마운트 시 `getUserId()` 로 저장된 userId 유무를 확인해 `authState`를 `'loggedIn'` 또는 `'loggedOut'`으로 초기화합니다. `DeviceEventEmitter`의 `'auth:forceLogout'` 이벤트를 구독해, `client.ts` 인터셉터가 refresh 실패를 감지했을 때 자동으로 로그아웃 상태로 전환됩니다.
+**`useKakaoAuth`** 는 마운트 시 `getUserId()` 로 저장된 userId 유무를 확인해 `authState`를 `'loggedIn'` 또는 `'loggedOut'`으로 초기화합니다. `DeviceEventEmitter`의 `'auth:forceLogout'` 이벤트를 구독해, `client.ts` 인터셉터가 refresh 실패를 감지했을 때 자동으로 로그아웃 상태로 전환됩니다. 사용자가 로그아웃하면 저장된 refresh token을 `/api/login/kakao/logout`에 먼저 보내 서버 토큰도 폐기하고, 카카오 또는 서버 요청이 실패해도 로컬 인증 정보와 사용자별 캐시는 항상 정리합니다.
 
 ```ts
 // AppBootstrap.tsx에서 사용

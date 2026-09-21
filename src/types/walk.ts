@@ -43,8 +43,7 @@ export interface WalkExitEvent {
 }
 
 /**
- * 산책 완료 후 사용자가 코스에 매기는 별점(각 1~5). 완료 화면(6d) 다음의 별점 화면(6e)에서 수집한다.
- * TODO: 서버 전송 엔드포인트가 정해지면 배선한다 — 현재는 WalkFlow에서 로컬 로깅만.
+ * 산책 완료 후 사용자가 코스에 매기는 별점(각 1~5). WalkFlow가 경로 피드백 API로 전송한다.
  */
 export interface WalkRatings {
   /** 걷는 내내 안전하다고 느껴 좋았는지 */

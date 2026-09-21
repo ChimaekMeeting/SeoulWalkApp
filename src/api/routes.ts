@@ -1,5 +1,11 @@
 import { client } from './client';
-import { RouteHistoryItem, RouteHistoryQuery, RouteHistoryResponse } from '../types/routes';
+import {
+  RouteFeedbackRequest,
+  RouteFeedbackResponse,
+  RouteHistoryItem,
+  RouteHistoryQuery,
+  RouteHistoryResponse,
+} from '../types/routes';
 
 /* 저장된 산책 경로의 즐겨찾기 상태를 토글합니다(서버가 현재 상태의 반대로 뒤집어 돌려줌). */
 export const toggleFavoriteRoute = async (routeId: number): Promise<RouteHistoryItem> => {
@@ -14,5 +20,17 @@ export const getRouteHistories = async (
   const { data } = await client.get<RouteHistoryResponse>('/api/user/routes', {
     params: query,
   });
+  return data;
+};
+
+/* 방금 걸은 경로의 별점을 저장하고 장기 선호 가중치 갱신 결과를 받습니다. */
+export const submitRouteFeedback = async (
+  routeId: number,
+  request: RouteFeedbackRequest,
+): Promise<RouteFeedbackResponse> => {
+  const { data } = await client.post<RouteFeedbackResponse>(
+    `/api/user/routes/${routeId}/feedback`,
+    request,
+  );
   return data;
 };

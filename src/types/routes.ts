@@ -24,3 +24,24 @@ export interface RouteHistoryQuery {
   offset?: number;
   is_favorite?: boolean;
 }
+
+export interface RouteFeedbackRequest {
+  rating_safety: number;
+  rating_comfort: number;
+  rating_overall: number;
+}
+
+export type RouteFeedbackStatus =
+  | 'success'
+  | 'insufficient_candidates'
+  | 'access_expired_token'
+  | 'refresh_expired_token'
+  | 'invalid_token'
+  | 'user_not_found'
+  | 'route_not_found';
+
+export interface RouteFeedbackResponse {
+  status: RouteFeedbackStatus;
+  weights_safety: number | null;
+  weights_comfort: number | null;
+}

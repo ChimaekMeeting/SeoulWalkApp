@@ -18,6 +18,7 @@ interface LoginTokens {
 }
 
 const MOBILE_LOGIN_ENDPOINT = '/api/login/kakao/mobile-login';
+const SERVER_LOGOUT_ENDPOINT = '/api/login/kakao/logout';
 // Cloud Run 콜드스타트로 첫 요청이 응답을 못 받고 끊기는 일이 잦다("Network Error").
 // 재시도 전 컨테이너가 뜰 시간을 준다.
 const COLD_START_RETRY_DELAY_MS = 1500;
@@ -119,21 +120,46 @@ export function useKakaoAuth() {
   };
 
   const signOut = async () => {
+    // 서버 로그아웃에는 ROUDI refresh token이 필요하므로 로컬 토큰을 지우기 전에 읽는다.
+    // 카카오 SDK 로그아웃과 서버 토큰 폐기는 서로 독립적으로 시도한다. 한쪽이 실패해도
+    // 기기의 로그인 정보는 반드시 정리해 사용자가 로그인 화면으로 돌아갈 수 있어야 한다.
+    let refreshToken: string | null = null;
     try {
-      await logout();
+      refreshToken = await authStorage.getRefreshToken();
     } catch (err: unknown) {
-      console.error('[KakaoAuth] logout failed:', err);
-    } finally {
-      cachedResource.clearAll();
-      await Promise.all([
-        authStorage.removeUserId(),
-        authStorage.removeTokens(),
-        authStorage.removeNickname(),
-        authStorage.removeEmail(),
-      ]);
-      setUserId(null);
-      setAuthState('loggedOut');
+      console.error('[KakaoAuth] refresh token read failed:', err);
     }
+
+    const kakaoLogout = Promise.resolve().then(() => logout());
+    const serverLogout = refreshToken
+      ? client.post(SERVER_LOGOUT_ENDPOINT, { refresh_token: refreshToken })
+      : Promise.resolve();
+    const [kakaoResult, serverResult] = await Promise.allSettled([
+      kakaoLogout,
+      serverLogout,
+    ]);
+
+    if (kakaoResult.status === 'rejected') {
+      console.error('[KakaoAuth] Kakao logout failed:', kakaoResult.reason);
+    }
+    if (serverResult.status === 'rejected') {
+      console.error('[KakaoAuth] server logout failed:', serverResult.reason);
+    }
+
+    cachedResource.clearAll();
+    const cleanupResults = await Promise.allSettled([
+      authStorage.removeUserId(),
+      authStorage.removeTokens(),
+      authStorage.removeNickname(),
+      authStorage.removeEmail(),
+    ]);
+    cleanupResults.forEach(result => {
+      if (result.status === 'rejected') {
+        console.error('[KakaoAuth] local auth cleanup failed:', result.reason);
+      }
+    });
+    setUserId(null);
+    setAuthState('loggedOut');
   };
 
   return { authState, userId, error, signingIn, signIn, signOut };

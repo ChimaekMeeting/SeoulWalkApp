@@ -15,11 +15,8 @@ export interface SurveyResponse {
   status: SurveyStatus;
   default_target_km: number | null;
   weights_safety: number | null;
-  weights_nature: number | null;
-  weights_slope: number | null;
-  weights_running: number | null;
-  weights_landmark: number | null;
-  weights_child: number | null;
+  weights_comfort: number | null;
+  selected_tags: string[] | null;
 };
 
 export interface SurveyStatusResponse {
@@ -27,10 +24,6 @@ export interface SurveyStatusResponse {
   survey_completed: boolean;
   default_target_km: number | null;
   weights_safety: number | null;
-  weights_nature: number | null;
-  weights_slope: number | null;
-  weights_running: number | null;
-  weights_landmark: number | null;
-  weights_child: number | null;
+  weights_comfort: number | null;
   selected_tags: string[] | null;
 };

@@ -3,6 +3,7 @@ import { ActivityIndicator, View, StyleSheet } from 'react-native';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import { Text } from '../Text';
 import { colors, spacing } from '../../theme/tokens';
+import { AssistantAvatar } from './AssistantAvatar';
 
 // 다음 단계 문구로 넘어가는 간격. 실제 응답 시간과 무관하게 흘러가다 마지막 단계에서 멈춰
 // 기다린다(steps가 다 떨어져도 로딩 자체는 sending이 풀릴 때까지 계속 보임).
@@ -24,14 +25,11 @@ export function LoadingBubble({ steps }: Props) {
       setStepIndex(prev => (prev + 1 < steps.length ? prev + 1 : prev));
     }, STEP_INTERVAL_MS);
     return () => clearInterval(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [steps]);
 
   return (
     <View style={styles.chatLine}>
-      <View style={styles.chatIcon}>
-        <Text style={styles.chatIconText}>✳</Text>
-      </View>
+      <AssistantAvatar />
       <View style={styles.chatBubble}>
         <Animated.View
           key={stepIndex}
@@ -52,19 +50,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: spacing.sm,
-  },
-  chatIcon: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: colors.black,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  chatIconText: {
-    color: colors.card,
-    fontSize: 12,
-    fontWeight: '900',
   },
   chatBubble: {
     flexShrink: 1,

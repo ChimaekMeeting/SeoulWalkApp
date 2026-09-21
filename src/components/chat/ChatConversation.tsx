@@ -1,12 +1,13 @@
 import React, {
   forwardRef,
+  useCallback,
   useEffect,
   useImperativeHandle,
   useMemo,
   useRef,
   useState,
 } from 'react';
-import { Linking, Pressable, View, StyleSheet } from 'react-native';
+import { Keyboard, Linking, Platform, Pressable, View, StyleSheet } from 'react-native';
 import { Text } from '../Text';
 import { BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import { getInitMessage, getMessage } from '../../api/prewalk';
@@ -22,6 +23,7 @@ import { ChatBubble } from './ChatBubble';
 import { MyBubble } from './MyBubble';
 import { LoadingBubble } from './LoadingBubble';
 import { RouteCandidate } from './RouteCandidate';
+import { AssistantAvatar } from './AssistantAvatar';
 import { spacing, colors } from '../../theme/tokens';
 
 export type ChatConversationHandle = {
@@ -94,13 +96,10 @@ type Props = {
    */
   onRefreshLocation?: () => Promise<Coordinates | null>;
   bottomInset: number; // 바텀시트 바깥에 떠 있는 ChatInput에 가려지지 않도록 남겨둘 여백
-  // 헤더 + 첫 봇 메시지의 실측 높이를 부모(중간 스냅 계산)에 전달.
-  // 대화가 길어져도 이 미리보기 묶음 자체의 크기는 바뀌지 않아, 중간 스냅이 항상 같은
-  // 위치(말풍선이 잘리지 않는 위치)를 가리키게 된다.
+  // 첫 봇 메시지의 실측 높이를 부모(중간 스냅 계산)에 전달한다. 브랜드 제목은 지도 위에
+  // 따로 있으므로 포함하지 않는다. 대화가 길어져도 이 미리보기 묶음 자체의 크기는 바뀌지 않아,
+  // 중간 스냅이 항상 같은 위치(말풍선이 잘리지 않는 위치)를 가리키게 된다.
   onPreviewHeightChange: (height: number) => void;
-  // "Roudi" 헤더만의 실측 높이를 부모(아래로 접기 스냅 계산)에 전달 — 시트를 완전히
-  // 접어도 이 헤더까지는 보이게 하기 위함.
-  onHeaderHeightChange?: (height: number) => void;
 };
 
 // 홈 바텀시트 안에 들어가는 채팅 대화 패널 (오버레이/배경 없이 시트가 컨테이너 역할)
@@ -120,7 +119,6 @@ export const ChatConversation = forwardRef(function ChatConversation(
     onRefreshLocation,
     bottomInset,
     onPreviewHeightChange,
-    onHeaderHeightChange,
   }: Props,
   ref: React.Ref<ChatConversationHandle>,
 ) {
@@ -141,9 +139,9 @@ export const ChatConversation = forwardRef(function ChatConversation(
   const [sending, setSending] = useState(false);
   // getInitMessage 실패 시 true — hasStartedRef가 재시도를 막아버리지 않도록 별도로 추적한다.
   const [initFailed, setInitFailed] = useState(false);
-  const [headerHeight, setHeaderHeight] = useState(0);
   const [previewGroupHeight, setPreviewGroupHeight] = useState(0);
   const scrollRef = useRef<React.ElementRef<typeof BottomSheetScrollView>>(null);
+  const keyboardVisibleRef = useRef(false);
   const hasStartedRef = useRef(false);
   // 비동기 응답이 리셋된 대화/바뀐 세션에 섞이지 않도록: 요청마다 세대 번호를 올리고,
   // 응답이 돌아왔을 때 여전히 최신 요청·같은 thread인지 검증한다.
@@ -152,6 +150,19 @@ export const ChatConversation = forwardRef(function ChatConversation(
   const abortRef = useRef<AbortController | null>(null);
   // 세션 만료로 유실된 직전 사용자 발화. "새 대화 시작" 시 새 세션에서 재처리한다.
   const pendingPromptRef = useRef<string | null>(null);
+
+  // 새 말풍선 추가와 바텀시트 높이 변경은 같은 프레임에 일어날 수 있다. 한 번만
+  // scrollToEnd를 호출하면 이전 viewport를 기준으로 계산되어 긴 첫 메시지 쪽에 멈출 수
+  // 있으므로, 현재 레이아웃과 다음 레이아웃이 모두 끝난 뒤 최신 항목을 다시 맞춘다.
+  // 키보드 높이·화면 크기를 직접 계산하지 않아 기기별 adjustResize 동작에도 동일하게 대응한다.
+  const scrollToLatest = useCallback((animated = false) => {
+    requestAnimationFrame(() => {
+      scrollRef.current?.scrollToEnd({ animated });
+      requestAnimationFrame(() => {
+        scrollRef.current?.scrollToEnd({ animated: false });
+      });
+    });
+  }, []);
 
   const isAbortError = (err: unknown) =>
     (err as { name?: string })?.name === 'AbortError' ||
@@ -422,12 +433,33 @@ export const ChatConversation = forwardRef(function ChatConversation(
   useEffect(() => {
     // previewGroupHeight는 스크롤 여백(padding)을 뺀 순수 콘텐츠 높이라,
     // 위쪽 padding(spacing.lg)만 더하면 "미리보기 영역이 실제로 차지하는 높이"가 된다.
-    onPreviewHeightChange(headerHeight + previewGroupHeight + spacing.lg);
-  }, [headerHeight, previewGroupHeight, onPreviewHeightChange]);
+    onPreviewHeightChange(previewGroupHeight + spacing.lg);
+  }, [previewGroupHeight, onPreviewHeightChange]);
 
   useEffect(() => {
-    onHeaderHeightChange?.(headerHeight);
-  }, [headerHeight, onHeaderHeightChange]);
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+
+    const showSub = Keyboard.addListener(showEvent, () => {
+      keyboardVisibleRef.current = true;
+      // Android adjustResize/iOS KeyboardAvoidingView가 viewport를 줄인 다음 프레임에서
+      // 마지막 메시지를 다시 노출한다. 키보드 높이나 기기별 지연값에는 의존하지 않는다.
+      scrollToLatest(false);
+    });
+    const hideSub = Keyboard.addListener(hideEvent, () => {
+      keyboardVisibleRef.current = false;
+    });
+
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, [scrollToLatest]);
+
+  useEffect(() => {
+    // 사용자 발화, 로딩 버블, AI 응답/경로 카드로 타임라인 끝이 바뀔 때마다 최신 항목을 노출한다.
+    scrollToLatest(false);
+  }, [messages.length, sending, scrollToLatest]);
 
   useImperativeHandle(ref, () => ({
     submitAnswer: (answer: string) => {
@@ -463,12 +495,6 @@ export const ChatConversation = forwardRef(function ChatConversation(
 
   return (
     <View style={styles.chatPanel}>
-      <View
-        style={styles.chatHeader}
-        onLayout={e => setHeaderHeight(e.nativeEvent.layout.height)}
-      >
-        <Text style={styles.chatHeaderTitle}>Roudi</Text>
-      </View>
       <BottomSheetScrollView
         ref={scrollRef}
         style={styles.chatScroll}
@@ -477,11 +503,9 @@ export const ChatConversation = forwardRef(function ChatConversation(
           { paddingBottom: bottomInset },
         ]}
         showsVerticalScrollIndicator={false}
-        // 말풍선이 추가/삭제되어 콘텐츠 높이가 바뀔 때마다(=맨 아래 높이가 바뀔 때마다)
-        // 그 높이를 기준으로 맨 아래로 자동 스크롤한다.
-        onContentSizeChange={() =>
-          scrollRef.current?.scrollToEnd({ animated: true })
-        }
+        // 콘텐츠와 viewport 중 어느 쪽이 먼저 바뀌어도 최종 레이아웃을 기준으로 최신 대화를 보인다.
+        onContentSizeChange={() => scrollToLatest(false)}
+        onLayout={() => scrollToLatest(false)}
       >
         <View style={styles.bubbleStack}>
           {locationNotice ? (
@@ -505,9 +529,7 @@ export const ChatConversation = forwardRef(function ChatConversation(
             const bubble =
               message.from === 'routes' ? (
                 <View style={styles.chatLine}>
-                  <View style={styles.chatIcon}>
-                    <Text style={styles.chatIconText}>✳</Text>
-                  </View>
+                  <AssistantAvatar />
                   <View style={styles.cardColumn}>
                     {message.routes.map((route, routeIndex) => (
                       <RouteCandidate
@@ -579,21 +601,6 @@ const styles = StyleSheet.create({
   chatPanel: {
     flex: 1,
   },
-  chatHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.line,
-    backgroundColor: '#FFFFFF'
-  },
-  chatHeaderTitle: {
-    fontSize: 16,
-    fontWeight: '900',
-    color: colors.ink,
-  },
   chatScroll: {
     flex: 1,
     backgroundColor: '#FFFFFF',
@@ -633,19 +640,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: spacing.sm,
-  },
-  chatIcon: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: colors.black,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  chatIconText: {
-    color: colors.card,
-    fontSize: 12,
-    fontWeight: '900',
   },
   cardColumn: {
     flexShrink: 1,

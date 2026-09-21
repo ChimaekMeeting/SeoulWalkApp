@@ -16,6 +16,7 @@ src/components/
 ├─ DistanceSelector.tsx # 선호 거리(~2 / 2~4 / 4km+) 버튼 3개 — 설문 화면·마이페이지 공용
 ├─ chat/                # 홈 화면 하단시트에 들어가는 AI 챗봇 대화 UI
 │  ├─ ChatConversation.tsx  # 대화 흐름 전체를 관리하는 컨테이너 (이걸 import해서 쓰면 됨)
+│  ├─ AssistantAvatar.tsx   # 앱 시작 화면과 같은 👣 ROUDI AI 아바타
 │  ├─ ChatInput.tsx         # 하단 입력창
 │  ├─ ChatBubble.tsx        # 챗봇 말풍선
 │  ├─ MyBubble.tsx          # 사용자 말풍선
@@ -86,6 +87,8 @@ ChatConversation (컨테이너, src/api/prewalk.ts로 백엔드와 통신)
 메인 화면(경로안내 없음)과 산책중 화면(경로안내 있음) 둘 다 `AppMapView` 하나로 처리합니다 — `mode`만 바꿔서 씁니다. 좌표 타입은 새로 만들지 않고 `src/types/prewalk.ts`의 backend 스키마(`LocationInfo`, `WalkRouteResponse`)를 그대로 씁니다.
 
 **기본 사용 — 메인화면(경로안내 없음)**: 베이스맵 + 현재 위치(파란 점)만 보여줍니다. 코스를 선택했을 때만 `previewRoute`로 점선 미리보기 경로를 얹을 수 있습니다(점선이 눈에 잘 안 띄면 `previewRouteSolid`로 실선으로). 출발·도착 마커(`RouteEndpointMarkers`)는 이 모드엔 안 그립니다 — `WalkPrepScreen`(산책 준비)·`WalkCompleteScreen`(완료 화면)의 작은 미리보기 지도에는 배지가 오히려 복잡해 보여서, walk 모드(실제 산책 중)에서만 표시합니다. `showDirectionArrows`(기본 꺼짐)를 켜면 방향 화살표(`RouteDirectionArrows`, `size="large"`로 밝은 지도에서도 잘 보이게)만 얹을 수 있습니다 — `WalkPrepScreen`이 순환·편도 모두 켜서 진행 방향을 보여줍니다.
+
+홈 지도 위의 `MapOverviewControls`는 `/api/weather`의 실제 기온·미세먼지 값을 작은 세로 배지로 보여주고, 현재 위치 버튼으로 GPS 재조회와 지도 재중앙 정렬을 함께 실행합니다. 보조 정보 조회 실패는 지도·채팅 사용을 막지 않고 `--`로 표시합니다. Mapbox 기본 축척 막대는 작은 화면에서 지도를 많이 가려 `AppMapView`에서 숨깁니다.
 
 ```tsx
 import { AppMapView } from '../components/map';

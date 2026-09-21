@@ -8,6 +8,11 @@ import ReactTestRenderer from 'react-test-renderer';
 
 const calls: Record<string, any> = {};
 
+const mockSubmitRouteFeedback = jest.fn();
+jest.mock('../../../api/routes', () => ({
+  submitRouteFeedback: (...args: any[]) => mockSubmitRouteFeedback(...args),
+}));
+
 jest.mock('../WalkPrepScreen', () => ({
   WalkPrepScreen: (p: any) => {
     calls.prep = p;
@@ -73,6 +78,8 @@ const mkRoute = (id: number): WalkRouteResponse =>
 
 beforeEach(() => {
   for (const k of Object.keys(calls)) delete calls[k];
+  mockSubmitRouteFeedback.mockReset();
+  mockSubmitRouteFeedback.mockResolvedValue({ status: 'success' });
 });
 
 function mount(route: WalkRouteResponse, snapPending = false) {
@@ -144,7 +151,7 @@ it('산책 준비 화면에서 순환 코스 방향을 반대로 골랐으면(on
   expect(calls.walk.routeResult.mode).toBe(r1.mode);
 });
 
-it('완료 화면의 "산책로 평가하기"는 곧장 나가지 않고 별점 화면을 거친 뒤 onExitToHome을 부른다', () => {
+it('완료 화면의 별점은 서버에 저장된 뒤 onExitToHome을 부른다', async () => {
   const onExit = jest.fn();
   const r1 = mkRoute(1);
   ReactTestRenderer.act(() => {
@@ -170,15 +177,39 @@ it('완료 화면의 "산책로 평가하기"는 곧장 나가지 않고 별점 
   expect(onExit).not.toHaveBeenCalled();
   expect(calls.rating).toBeDefined();
 
-  // 별점 제출 → 그제서야 홈으로.
-  ReactTestRenderer.act(() =>
-    calls.rating.onSubmit({ safety: 4, comfort: 3, overall: 4 }),
-  );
+  // 별점 제출 → API 저장이 끝난 뒤 홈으로.
+  await ReactTestRenderer.act(async () => {
+    await calls.rating.onSubmit({ safety: 4, comfort: 3, overall: 4 });
+  });
+  expect(mockSubmitRouteFeedback).toHaveBeenCalledWith(1, {
+    rating_safety: 4,
+    rating_comfort: 3,
+    rating_overall: 4,
+  });
   expect(onExit).toHaveBeenCalledTimes(1);
   expect(onExit.mock.calls[0][0]).toMatchObject({ reason: 'ended_early' });
 });
 
-it('완료 화면(6d)에서 안드로이드 뒤로가기를 눌러도 별점 없이 홈으로 나가지지 않는다', () => {
+it('별점 저장이 실패하면 홈으로 나가지 않고 재시도 오류를 보여준다', async () => {
+  mockSubmitRouteFeedback.mockRejectedValueOnce(new Error('network'));
+  const onExit = jest.fn();
+  const r1 = mkRoute(1);
+  mount(r1);
+  ReactTestRenderer.act(() => calls.prep.onStart(r1.coordinates));
+  ReactTestRenderer.act(() => calls.walk.onRequestEnd({ endReason: 'user_ended_before_destination', elapsedMs: 1000 }));
+  ReactTestRenderer.act(() => calls.endModal.onConfirm());
+  ReactTestRenderer.act(() => calls.complete.onNext());
+
+  await ReactTestRenderer.act(async () => {
+    await calls.rating.onSubmit({ safety: 4, comfort: 3, overall: 4 });
+  });
+
+  expect(onExit).not.toHaveBeenCalled();
+  expect(calls.rating.errorMessage).toContain('네트워크');
+  expect(calls.rating.onSkip).toEqual(expect.any(Function));
+});
+
+it('완료 화면에서 평가 없이 나가기와 안드로이드 뒤로가기는 홈으로 이동한다', () => {
   const onExit = jest.fn();
   const r1 = mkRoute(1);
   ReactTestRenderer.act(() => {
@@ -199,8 +230,14 @@ it('완료 화면(6d)에서 안드로이드 뒤로가기를 눌러도 별점 없
   ReactTestRenderer.act(() => calls.endModal.onConfirm());
   expect(calls.complete).toBeDefined();
 
-  // 6d에서 뒤로가기 — 별점을 매기지 않았으므로 홈으로 나가지지 않는다.
-  ReactTestRenderer.act(() => backHandler());
-  expect(onExit).not.toHaveBeenCalled();
+  expect(calls.complete.onExit).toEqual(expect.any(Function));
+  ReactTestRenderer.act(() => calls.complete.onExit());
+  expect(onExit).toHaveBeenCalledTimes(1);
+
+  // 완료 화면에서 안드로이드 뒤로가기도 같은 선택적 종료로 처리한다.
+  ReactTestRenderer.act(() => {
+    backHandler();
+  });
+  expect(onExit).toHaveBeenCalledTimes(2);
   expect(calls.rating).toBeUndefined();
 });

@@ -1,6 +1,7 @@
 import React, { useCallback, useRef, useState } from 'react';
 import { LocationInfo, WalkRouteResponse } from '../../types/prewalk';
-import { WalkEndSnapshot, WalkExitEvent } from '../../types/walk';
+import { WalkEndSnapshot, WalkExitEvent, WalkRatings } from '../../types/walk';
+import { submitRouteFeedback } from '../../api/routes';
 import { useAndroidBackHandler } from '../../hooks/useAndroidBackHandler';
 import { useBackgroundLocationPermission } from '../../hooks/useBackgroundLocationPermission';
 import { WalkPrepScreen } from './WalkPrepScreen';
@@ -36,6 +37,8 @@ export function WalkFlow({
   // 종착점 도착으로 완료가 확정됐을 때 뜨는 완료 확인 모달.
   const [goalModalVisible, setGoalModalVisible] = useState(false);
   const [snapshot, setSnapshot] = useState<WalkEndSnapshot | null>(null);
+  const [feedbackSubmitting, setFeedbackSubmitting] = useState(false);
+  const [feedbackError, setFeedbackError] = useState<string | null>(null);
   // 실제 walking 단계에 진입한 적이 있는지. prep에서 바로 취소한 경우와 구분한다.
   const walkingStartedRef = useRef(false);
   // walking 진입 시점의 경로를 얼려, 산책 도중 스냅 결과가 도착해도 tracker 기준이 바뀌지 않게 한다.
@@ -63,6 +66,40 @@ export function WalkFlow({
     });
   }, [completedRoute, snapshot?.elapsedMs, onExitToHome]);
 
+  const submitRatings = useCallback(
+    async (ratings: WalkRatings) => {
+      if (walkRoute.id == null) {
+        setFeedbackError('경로 기록을 찾지 못해 별점을 저장할 수 없어요.');
+        return;
+      }
+
+      setFeedbackSubmitting(true);
+      setFeedbackError(null);
+      try {
+        const result = await submitRouteFeedback(walkRoute.id, {
+          rating_safety: ratings.safety,
+          rating_comfort: ratings.comfort,
+          rating_overall: ratings.overall,
+        });
+        // insufficient_candidates여도 별점 자체는 서버에 저장된다. 장기 가중치만
+        // 후보 대조가 가능한 다음 경로부터 갱신되므로 정상 완료로 취급한다.
+        if (
+          result.status === 'success' ||
+          result.status === 'insufficient_candidates'
+        ) {
+          exitFromComplete();
+          return;
+        }
+        setFeedbackError('별점을 저장하지 못했어요. 잠시 후 다시 시도해 주세요.');
+      } catch {
+        setFeedbackError('별점을 저장하지 못했어요. 네트워크 연결을 확인해 주세요.');
+      } finally {
+        setFeedbackSubmitting(false);
+      }
+    },
+    [walkRoute.id, exitFromComplete],
+  );
+
   // 안드로이드 하드웨어 뒤로가기 — 단계별로 처리한다.
   // (모달이 떠 있을 땐 RN Modal의 onRequestClose가 back을 가로채므로 여기까지 오지 않는다.)
   const handleAndroidBack = useCallback(() => {
@@ -78,9 +115,10 @@ export function WalkFlow({
       setStage('complete');
       return true;
     }
-    // stage === 'complete': 별점을 매기기 전에는 뒤로가기로 홈에 나갈 수 없다 — 반드시 평가를 거쳐야 한다.
+    // 평가는 선택사항이다. 완료 요약 화면에서 뒤로가면 홈으로 나간다.
+    exitFromComplete();
     return true;
-  }, [stage, endConfirmVisible, goalModalVisible, onExitToHome]);
+  }, [stage, endConfirmVisible, goalModalVisible, onExitToHome, exitFromComplete]);
   useAndroidBackHandler(handleAndroidBack);
 
   if (stage === 'prep') {
@@ -162,17 +200,17 @@ export function WalkFlow({
         steps={snapshot?.steps}
         routeId={walkRoute.id ?? undefined}
         onNext={() => setStage('rating')}
+        onExit={exitFromComplete}
       />
     );
   }
 
   return (
     <WalkRatingScreen
-      onSubmit={ratings => {
-        // TODO: 서버 전송 엔드포인트가 정해지면 배선. 지금은 개발 로그만 남기고 홈으로.
-        console.log('[WalkFlow] 별점:', { routeId: walkRoute.id ?? null, ...ratings });
-        exitFromComplete();
-      }}
+      onSubmit={submitRatings}
+      submitting={feedbackSubmitting}
+      errorMessage={feedbackError}
+      onSkip={exitFromComplete}
     />
   );
 }

@@ -1,16 +1,24 @@
-import React from 'react';
+import React, { ComponentProps } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { Text } from './Text';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors, spacing } from '../theme/tokens';
+import { colors } from '../theme/tokens';
 import { TabName } from '../navigation/types';
 
-export const BOTTOM_NAV_HEIGHT = 76;
+export const BOTTOM_NAV_HEIGHT = 60;
 
-const navItems: { name: TabName; label: string; icon: string }[] = [
-  { name: 'home', label: '홈', icon: '⌂' },
-  { name: 'record', label: '기록', icon: '♧' },
-  { name: 'me', label: '마이페이지', icon: '♙' },
+type IoniconName = ComponentProps<typeof Ionicons>['name'];
+
+const navItems: {
+  name: TabName;
+  label: string;
+  icon: IoniconName;
+  activeIcon: IoniconName;
+}[] = [
+  { name: 'home', label: '홈', icon: 'home-outline', activeIcon: 'home' },
+  { name: 'record', label: '기록', icon: 'time-outline', activeIcon: 'time' },
+  { name: 'me', label: '마이페이지', icon: 'person-outline', activeIcon: 'person' },
 ];
 
 export function BottomNav({
@@ -24,6 +32,7 @@ export function BottomNav({
   const insets = useSafeAreaInsets();
   return (
     <View
+      collapsable={false}
       style={[
         styles.bottomNav,
         { height: BOTTOM_NAV_HEIGHT + insets.bottom, paddingBottom: insets.bottom },
@@ -34,12 +43,17 @@ export function BottomNav({
         return (
           <Pressable
             key={item.name}
+            accessibilityRole="button"
+            accessibilityLabel={item.label}
+            accessibilityState={{ selected: isActive }}
             onPress={() => onChange(item.name)}
             style={styles.navItem}
           >
-            <Text style={[styles.navIcon, isActive && styles.navActiveText]}>
-              {item.icon}
-            </Text>
+            <Ionicons
+              name={isActive ? item.activeIcon : item.icon}
+              size={20}
+              color={isActive ? colors.ink : colors.ink3}
+            />
             <Text style={[styles.navLabel, isActive && styles.navActiveText]}>
               {item.label}
             </Text>
@@ -57,7 +71,7 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     height: BOTTOM_NAV_HEIGHT,
-    paddingBottom: spacing.sm,
+    paddingBottom: 2,
     backgroundColor: 'rgba(255,255,255,0.97)',
     borderTopWidth: 1,
     borderTopColor: colors.line,
@@ -69,16 +83,11 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 2,
-  },
-  navIcon: {
-    color: colors.ink3,
-    fontSize: 22,
-    fontWeight: '900',
+    gap: 0,
   },
   navLabel: {
     color: colors.ink3,
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: '800',
   },
   navActiveText: {

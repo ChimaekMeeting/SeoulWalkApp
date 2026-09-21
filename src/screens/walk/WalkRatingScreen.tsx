@@ -1,15 +1,19 @@
 import React, { useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
 import { Text } from '../../components/Text';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button } from '../../components/Button';
+import { ErrorBanner } from '../../components/ErrorBanner';
 import { StarRating } from '../../components/StarRating';
 import { colors, radii, spacing } from '../../theme/tokens';
 import { WalkRatings } from '../../types/walk';
 
 interface Props {
-  /** 네 항목 별점을 모두 매기고 "완료"를 누르면 호출된다. */
-  onSubmit: (ratings: WalkRatings) => void;
+  /** 세 항목 별점을 모두 매기고 "완료"를 누르면 호출된다. */
+  onSubmit: (ratings: WalkRatings) => void | Promise<void>;
+  submitting?: boolean;
+  errorMessage?: string | null;
+  onSkip?: () => void;
 }
 
 const QUESTIONS: { key: keyof WalkRatings; label: string }[] = [
@@ -20,13 +24,22 @@ const QUESTIONS: { key: keyof WalkRatings; label: string }[] = [
 
 const EMPTY: WalkRatings = { safety: 0, comfort: 0, overall: 0 };
 
-// 완료 화면(6d) → 이 화면(6e) → 홈. 네 항목을 모두 매겨야 "완료"가 활성화된다.
-export function WalkRatingScreen({ onSubmit }: Props) {
+// 완료 화면(6d) → 이 화면(6e) → 홈. 세 항목을 모두 매겨야 "완료"가 활성화된다.
+export function WalkRatingScreen({
+  onSubmit,
+  submitting = false,
+  errorMessage,
+  onSkip,
+}: Props) {
   const [ratings, setRatings] = useState<WalkRatings>(EMPTY);
   const complete = QUESTIONS.every(q => ratings[q.key] > 0);
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right', 'bottom']}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+      >
       <Text style={styles.title}>이번 산책로,{'\n'}얼마나 마음에 드셨나요?</Text>
       <Text style={styles.subtitle}>좋았던 점을 별점으로 남겨주세요.</Text>
 
@@ -42,12 +55,21 @@ export function WalkRatingScreen({ onSubmit }: Props) {
         ))}
       </View>
 
-      <Button
-        label="완료"
-        onPress={() => onSubmit(ratings)}
-        disabled={!complete}
-        style={styles.submit}
-      />
+      <View style={styles.actions}>
+        <ErrorBanner message={errorMessage} />
+        <Button
+          label="완료"
+          onPress={() => {
+            onSubmit(ratings);
+          }}
+          disabled={!complete}
+          loading={submitting}
+        />
+        {onSkip ? (
+          <Button label="이번에는 건너뛰기" onPress={onSkip} variant="secondary" />
+        ) : null}
+      </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -56,7 +78,11 @@ const styles = StyleSheet.create({
   safe: {
     flex: 1,
     backgroundColor: colors.card,
+  },
+  content: {
+    flexGrow: 1,
     paddingHorizontal: spacing.xxl,
+    paddingBottom: spacing.xxl,
   },
   title: {
     color: colors.ink,
@@ -91,8 +117,9 @@ const styles = StyleSheet.create({
     lineHeight: 21,
     textAlign: 'center',
   },
-  submit: {
+  actions: {
     marginTop: 'auto',
-    marginBottom: spacing.xxl,
+    paddingTop: spacing.xl,
+    gap: spacing.sm,
   },
 });
