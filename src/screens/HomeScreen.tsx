@@ -98,6 +98,7 @@ export const HomeScreen = forwardRef<HomeScreenHandle, HomeScreenProps>(function
   // 첫 layout 전에는 현재 window 높이를 fallback으로 쓴다.
   const [containerHeight, setContainerHeight] = useState(0);
   const [chatInputHeight, setChatInputHeight] = useState(DEFAULT_CHAT_INPUT_HEIGHT);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [chatPhase, setChatPhase] = useState<ChatPhase>('idle');
   const [chatSending, setChatSending] = useState(false);
   const [chatStarted, setChatStarted] = useState(false);
@@ -155,13 +156,27 @@ export const HomeScreen = forwardRef<HomeScreenHandle, HomeScreenProps>(function
     sheetRef.current?.snapToHalf();
   }, [chatSessionKey]);
   const availableHeight = containerHeight || windowHeight;
-  // 키보드 높이는 여기서 더하지 않는다. Android adjustResize와 iOS MainRouter의
-  // KeyboardAvoidingView가 이미 사용 가능한 레이아웃 높이를 줄인다. 입력창은 줄어든 영역의
-  // 하단 내비게이션 바로 위에 두고, 실제 측정한 입력창 높이만 대화/시트 여백에 반영한다.
+
+  // 안드로이드 windowSoftInputMode="resize"가 실제로 레이아웃을 얼마나 줄여주는지는 기종·버전마다
+  // 다르다 — edge-to-edge 등에서는 아예 안 줄어드는 기기가 있는 걸 실기기 테스트로 확인했다.
+  // 그래서 "리사이즈가 됐다/안 됐다"를 가정하지 않고, 키보드가 닫혀있을 때의 높이를 기준으로
+  // 삼아 실제로 얼마나 줄었는지(screenShrink) 직접 재고, 키보드 실측 높이 중 그 리사이즈가
+  // 못 채운 나머지(keyboardOverlap)만 입력창 위치에 보정한다. 리사이즈가 완전히 되는 기기에서는
+  // screenShrink ≈ keyboardHeight라 keyboardOverlap이 0에 가까워지고, 안 되는 기기에서는
+  // screenShrink가 0이라 keyboardHeight 전체가 보정된다.
+  const closedHeightRef = useRef(availableHeight);
+  useEffect(() => {
+    if (keyboardHeight === 0) closedHeightRef.current = availableHeight;
+  }, [availableHeight, keyboardHeight]);
+  const screenShrink = Math.max(0, closedHeightRef.current - availableHeight);
+  const keyboardOverlap = Math.max(0, keyboardHeight - screenShrink);
+
   const { chatInputBottom, chatBottomInset } = computeChatBottomLayout({
     bottomNavHeight: BOTTOM_NAV_HEIGHT,
     bottomSafeArea: insets.bottom,
     chatInputHeight,
+    keyboardOverlap,
+    keyboardGap: spacing.sm,
   });
 
   const handleContainerLayout = useCallback((event: LayoutChangeEvent) => {
@@ -183,15 +198,23 @@ export const HomeScreen = forwardRef<HomeScreenHandle, HomeScreenProps>(function
     previewHeight,
   });
 
-  // 키보드 위치 계산은 OS/KAV에 맡기고, 여기서는 채팅 시트를 펼치는 동작만 담당한다.
+  // 키보드 실측 높이를 재고(위 keyboardOverlap 계산에 쓰임), 채팅 시트를 펼친다.
   useEffect(() => {
     const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
 
-    const showSub = Keyboard.addListener(showEvent, () => {
+    const showSub = Keyboard.addListener(showEvent, e => {
+      setKeyboardHeight(e.endCoordinates.height);
       sheetRef.current?.expand();
     });
+    const hideSub = Keyboard.addListener(hideEvent, () => {
+      setKeyboardHeight(0);
+    });
 
-    return () => showSub.remove();
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
   }, []);
 
   return (

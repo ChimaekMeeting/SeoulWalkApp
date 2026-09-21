@@ -2,8 +2,6 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   Alert,
   BackHandler,
-  KeyboardAvoidingView,
-  Platform,
   StatusBar,
   StyleSheet,
   ToastAndroid,
@@ -312,10 +310,7 @@ export function MainRouter({
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
       <StatusBar barStyle="dark-content" backgroundColor={colors.card} />
-      <KeyboardAvoidingView
-        style={styles.appShell}
-        behavior={Platform.OS === 'ios' ? 'height' : undefined}
-      >
+      <View style={styles.appShell}>
         <View style={styles.fill}>
           {/* 다른 탭으로 이동했다 돌아와도 챗봇 대화 내역이 초기화되지 않도록, 언마운트하지 않고
               숨기기만 한다(display:'none') — home 라우트가 아닐 때만 화면에서 감춘다. */}
@@ -384,7 +379,7 @@ export function MainRouter({
             <BottomNav active={activeTab} onChange={go} />
           </GestureDetector>
         ) : null}
-      </KeyboardAvoidingView>
+      </View>
     </SafeAreaView>
   );
 }
