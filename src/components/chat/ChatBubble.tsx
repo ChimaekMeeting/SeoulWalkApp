@@ -1,13 +1,12 @@
 import { View, StyleSheet } from 'react-native';
 import { Text } from '../Text';
 import { colors, spacing } from '../../theme/tokens';
+import { AssistantAvatar } from './AssistantAvatar';
 
 export function ChatBubble({ text }: { text: string }) {
   return (
     <View style={styles.chatLine}>
-      <View style={styles.chatIcon}>
-        <Text style={styles.chatIconText}>✳</Text>
-      </View>
+      <AssistantAvatar />
       <View style={styles.chatBubble}>
         <Text style={styles.chatText}>{text}</Text>
       </View>
@@ -21,19 +20,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: spacing.sm,
-  },
-  chatIcon: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: colors.black,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  chatIconText: {
-    color: colors.card,
-    fontSize: 12,
-    fontWeight: '900',
   },
   chatBubble: {
     flexShrink: 1,

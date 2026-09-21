@@ -1,16 +1,28 @@
 import React, {
   forwardRef,
+  useCallback,
   useState,
   useRef,
   useEffect,
   useImperativeHandle,
 } from 'react';
-import { Dimensions, Keyboard, Platform, StyleSheet, View } from 'react-native';
+import {
+  Keyboard,
+  LayoutChangeEvent,
+  Platform,
+  StyleSheet,
+  useWindowDimensions,
+  View,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppMapView } from '../components/map/AppMapView';
+import { MapOverviewControls } from '../components/map/MapOverviewControls';
 import { BOTTOM_NAV_HEIGHT } from '../components/BottomNav';
 import { ChatBottomSheet, ChatBottomSheetHandle } from '../bottomsheets/ChatBottomSheet';
-import { computeChatSheetHalfHeight } from '../bottomsheets/chatSheetGeometry';
+import {
+  computeChatBottomLayout,
+  computeChatSheetHalfHeight,
+} from '../bottomsheets/chatSheetGeometry';
 import {
   ChatConversation,
   ChatConversationHandle,
@@ -21,9 +33,9 @@ import { LocationInfo, WalkRouteResponse } from '../types/prewalk';
 import type { LocationErrorReason } from '../hooks/useLocation';
 import type { Coordinates } from '../types/location';
 import { colors, spacing } from '../theme/tokens';
+import { EnvironmentInfo, getEnvironmentInfo } from '../api/weather';
 
-const { height: SCREEN_H } = Dimensions.get('window');
-const CHAT_INPUT_HEIGHT = 140;
+const DEFAULT_CHAT_INPUT_HEIGHT = 76;
 
 interface HomeScreenProps {
   currentLocation: LocationInfo;
@@ -81,11 +93,53 @@ export const HomeScreen = forwardRef<HomeScreenHandle, HomeScreenProps>(function
     },
   }), []);
   const insets = useSafeAreaInsets();
+  const { height: windowHeight } = useWindowDimensions();
+  // 키보드·분할 화면·회전으로 실제 렌더 영역이 바뀔 때마다 onLayout 값이 갱신된다.
+  // 첫 layout 전에는 현재 window 높이를 fallback으로 쓴다.
+  const [containerHeight, setContainerHeight] = useState(0);
+  const [chatInputHeight, setChatInputHeight] = useState(DEFAULT_CHAT_INPUT_HEIGHT);
   const [chatPhase, setChatPhase] = useState<ChatPhase>('idle');
   const [chatSending, setChatSending] = useState(false);
   const [chatStarted, setChatStarted] = useState(false);
   const [previewHeight, setPreviewHeight] = useState(50);
-  const [headerHeight, setHeaderHeight] = useState(0);
+  const [manualRecenterKey, setManualRecenterKey] = useState(0);
+  const [environmentRefreshKey, setEnvironmentRefreshKey] = useState(0);
+  const [environment, setEnvironment] = useState<EnvironmentInfo | null>(null);
+  const [environmentLoading, setEnvironmentLoading] = useState(false);
+
+  // GPS의 작은 흔들림마다 공공 API를 다시 호출하지 않도록 약 100m 단위로 묶는다.
+  const environmentLat = currentLocation.lat?.toFixed(3) ?? null;
+  const environmentLon = currentLocation.lon?.toFixed(3) ?? null;
+
+  useEffect(() => {
+    if (environmentLat == null || environmentLon == null) {
+      setEnvironment(null);
+      return;
+    }
+
+    let active = true;
+    setEnvironmentLoading(true);
+    getEnvironmentInfo(Number(environmentLat), Number(environmentLon))
+      .then(data => {
+        if (active) setEnvironment(data);
+      })
+      .catch(() => {
+        if (active) setEnvironment(null);
+      })
+      .finally(() => {
+        if (active) setEnvironmentLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [environmentLat, environmentLon, environmentRefreshKey]);
+
+  const handleRecenter = useCallback(() => {
+    onRetryLocation();
+    setManualRecenterKey(key => key + 1);
+    setEnvironmentRefreshKey(key => key + 1);
+  }, [onRetryLocation]);
 
   // 대화가 아직 시작되지 않았고(위치 좌표가 필요) 위치 오류가 있으면 입력을 막는다 —
   // 이유는 ChatConversation이 안내 버블 + 액션 버튼으로 보여준다. 대화가 한 번 시작된 뒤엔
@@ -100,72 +154,67 @@ export const HomeScreen = forwardRef<HomeScreenHandle, HomeScreenProps>(function
     if (chatSessionKey === 0) return;
     sheetRef.current?.snapToHalf();
   }, [chatSessionKey]);
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const availableHeight = containerHeight || windowHeight;
+  // 키보드 높이는 여기서 더하지 않는다. Android adjustResize와 iOS MainRouter의
+  // KeyboardAvoidingView가 이미 사용 가능한 레이아웃 높이를 줄인다. 입력창은 줄어든 영역의
+  // 하단 내비게이션 바로 위에 두고, 실제 측정한 입력창 높이만 대화/시트 여백에 반영한다.
+  const { chatInputBottom, chatBottomInset } = computeChatBottomLayout({
+    bottomNavHeight: BOTTOM_NAV_HEIGHT,
+    bottomSafeArea: insets.bottom,
+    chatInputHeight,
+  });
 
-  // 화면 하단에 떠 있는 ChatInput의 위치/높이. 바텀내비게이션 바로 위에 여백 없이 붙이고,
-  // 키보드가 열려있으면 키보드 바로 위에 딱 붙인다 — 이때는 바텀내비게이션 자리(BOTTOM_NAV_HEIGHT)를
-  // 더 안 띄운다. 키보드가 이미 그 영역을 덮고 있어서, 같이 더하면 키보드와 입력창 사이에
-  // 불필요한 빈 간격이 생긴다. 키보드가 닫혀있을 땐 폰 자체 제스처 바에 안 가리도록 하단
-  // 안전영역(insets.bottom)만큼 띄운다 — 키보드가 열려있을 땐 키보드가 이미 그 영역을 덮으므로 안 더한다.
-  // position:'absolute'인 바라 KeyboardAvoidingView가 제대로 안 먹어서(바텀 오프셋이 안 밀림) 직접 계산한다.
-  // ChatConversation에도 같은 값을 여백(bottomInset)으로 전달해 대화 목록이 가리지 않게 한다.
-  //
-  // 안드로이드에서 keyboardDidShow의 endCoordinates.height는 하단 안전영역(제스처 바)만큼
-  // 덜 측정된다(실측: height=254.9, insets.bottom=47.27일 때 실제 키보드 상단까지 거리는
-  // height+insets.bottom=302.18). 그래서 keyboardHeight에도 insets.bottom을 더해줘야
-  // 입력창이 키보드 속으로 파고들지 않는다. 여기에 더해 안드로이드가 텍스트 입력창 위에
-  // 띄우는 복사/붙여넣기 팝업 같은 시스템 오버레이와 안 겹치도록 약간의 여백(spacing.sm)도 둔다.
-  const chatInputBase =
-    keyboardHeight > 0 ? keyboardHeight + spacing.sm : BOTTOM_NAV_HEIGHT;
-  const chatInputBottom = chatInputBase + insets.bottom;
-  const chatBottomInset = chatInputBottom + CHAT_INPUT_HEIGHT;
+  const handleContainerLayout = useCallback((event: LayoutChangeEvent) => {
+    const nextHeight = Math.round(event.nativeEvent.layout.height);
+    setContainerHeight(current => (current === nextHeight ? current : nextHeight));
+  }, []);
+
+  const handleChatInputLayout = useCallback((event: LayoutChangeEvent) => {
+    const nextHeight = Math.round(event.nativeEvent.layout.height);
+    setChatInputHeight(current => (current === nextHeight ? current : nextHeight));
+  }, []);
 
   // 채팅 시트가 "절반" 스냅으로 떠 있을 때 지도 하단이 가려지는 만큼, 카메라 중심을 위로 밀어서
   // 가려지지 않은 윗부분 안에서 현재 위치(GPS 점)가 보이게 한다. ChatBottomSheet의 절반 높이
   // 계산과 정확히 같은 값을 써야 해서 같은 공용 함수를 쓴다.
   const mapBottomPadding = computeChatSheetHalfHeight({
-    screenHeight: SCREEN_H,
+    screenHeight: availableHeight,
     bottomReservedHeight: chatBottomInset,
-    headerHeight,
     previewHeight,
   });
 
-  // 키보드가 열리면 그 높이를 chatInputBottom에 반영해 입력창이 가려지지 않게 하고,
-  // 채팅에 집중하는 상황이니 시트도 맨 위로 펼친다.
+  // 키보드 위치 계산은 OS/KAV에 맡기고, 여기서는 채팅 시트를 펼치는 동작만 담당한다.
   useEffect(() => {
     const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
-    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
 
-    const showSub = Keyboard.addListener(showEvent, e => {
-      setKeyboardHeight(e.endCoordinates.height);
+    const showSub = Keyboard.addListener(showEvent, () => {
       sheetRef.current?.expand();
     });
-    const hideSub = Keyboard.addListener(hideEvent, () => {
-      setKeyboardHeight(0);
-    });
 
-    return () => {
-      showSub.remove();
-      hideSub.remove();
-    };
+    return () => showSub.remove();
   }, []);
 
   return (
-    <View style={styles.fill}>
+    <View style={styles.fill} onLayout={handleContainerLayout}>
       <View style={styles.homeMap}>
         <AppMapView
           mode="overview"
           currentLocation={currentLocation}
           previewRoute={activeRoute?.coordinates ?? undefined}
           bottomPadding={mapBottomPadding}
-          recenterKey={mapRecenterKey}
+          recenterKey={mapRecenterKey + manualRecenterKey}
+        />
+        <MapOverviewControls
+          environment={environment}
+          loading={environmentLoading}
+          onRecenter={handleRecenter}
         />
       </View>
 
       <ChatBottomSheet
         ref={sheetRef}
+        containerHeight={availableHeight}
         previewHeight={previewHeight}
-        headerHeight={headerHeight}
         bottomReservedHeight={chatBottomInset}
         onChangeIndex={index => {
           sheetIndexRef.current = index;
@@ -180,7 +229,6 @@ export const HomeScreen = forwardRef<HomeScreenHandle, HomeScreenProps>(function
           onSendingChange={setChatSending}
           onStartedChange={setChatStarted}
           onPreviewHeightChange={setPreviewHeight}
-          onHeaderHeightChange={setHeaderHeight}
           bottomInset={chatBottomInset}
           locationLoading={locationLoading}
           locationError={locationError}
@@ -189,7 +237,10 @@ export const HomeScreen = forwardRef<HomeScreenHandle, HomeScreenProps>(function
         />
       </ChatBottomSheet>
 
-      <View style={[styles.chatInputBar, { bottom: chatInputBottom }]}>
+      <View
+        style={[styles.chatInputBar, { bottom: chatInputBottom }]}
+        onLayout={handleChatInputLayout}
+      >
         <ChatInput
           onSend={text => {
             chatRef.current?.submitAnswer(text);

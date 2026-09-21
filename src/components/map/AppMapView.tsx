@@ -256,6 +256,7 @@ export function AppMapView(props: AppMapViewProps) {
         styleURL={mapConfig.styleUrls[activeMapMode]}
         logoEnabled={false}
         attributionEnabled={false}
+        scaleBarEnabled={false}
         localizeLabels={{ locale: 'ko' }}
         onCameraChanged={handleCameraChanged}
       >

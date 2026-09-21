@@ -40,6 +40,9 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   },
   android: {
     package: 'com.seoulwalkapp',
+    // 모든 Android 기기에서 키보드가 앱 위를 덮지 않고 현재 창 높이를 줄이게 한다.
+    // JS 레이아웃은 이 줄어든 높이를 onLayout으로 측정하며 키보드 높이를 따로 더하지 않는다.
+    softwareKeyboardLayoutMode: 'resize',
     permissions: [
       'ACCESS_COARSE_LOCATION',
       'ACCESS_FINE_LOCATION',

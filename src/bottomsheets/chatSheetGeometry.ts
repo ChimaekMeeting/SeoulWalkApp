@@ -7,31 +7,46 @@ export const SHEET_TOP_UP = 40; // 위: 채팅 가득 (지도 거의 가려짐) 
 const HANDLE_HEIGHT = 44;
 
 /**
+ * 화면 하단에서 입력창까지 예약해야 하는 공간. 키보드 높이는 받지 않는다 — OS의 resize 또는
+ * KeyboardAvoidingView가 이미 사용 가능한 화면 자체를 줄이므로 여기서 다시 더하면 이중 보정이다.
+ */
+export function computeChatBottomLayout({
+  bottomNavHeight,
+  bottomSafeArea,
+  chatInputHeight,
+}: {
+  bottomNavHeight: number;
+  bottomSafeArea: number;
+  chatInputHeight: number;
+}): { chatInputBottom: number; chatBottomInset: number } {
+  const chatInputBottom = bottomNavHeight + bottomSafeArea;
+  return {
+    chatInputBottom,
+    chatBottomInset: chatInputBottom + chatInputHeight,
+  };
+}
+
+/**
  * "아래로 접기" 스냅에서 시트가 화면 하단부터 차지하는 높이(px). 화면 하단에 떠 있는 ChatInput
  * 바(bottomReservedHeight)보다 항상 손잡이가 위에 보이도록 그 예약 높이 위에 손잡이 높이를
- * 더하고, 손잡이 바로 아래 "Roudi" 헤더(headerHeight)까지는 보이도록 그것도 더한다 — 그 아래
- * 대화 내용은 안 보여도 되고, 지도를 최대한 많이 남기는 게 우선이라 딱 거기까지만 더한다.
+ * 더한다. 브랜드 제목은 지도 오버레이에 있으므로 시트 안에 별도 헤더 공간을 예약하지 않는다.
  */
 export function computeChatSheetDownHeight({
   bottomReservedHeight,
-  headerHeight,
 }: {
   bottomReservedHeight: number;
-  headerHeight: number;
 }): number {
-  return bottomReservedHeight + HANDLE_HEIGHT + headerHeight;
+  return bottomReservedHeight + HANDLE_HEIGHT;
 }
 
 /** "중간" 스냅에서 시트가 화면 하단부터 차지하는 높이(px). */
 export function computeChatSheetHalfHeight({
   screenHeight,
   bottomReservedHeight,
-  headerHeight,
   previewHeight,
 }: {
   screenHeight: number;
   bottomReservedHeight: number;
-  headerHeight: number;
   previewHeight: number;
 }): number {
   const contentBasedHeight = bottomReservedHeight + previewHeight;
@@ -40,7 +55,7 @@ export function computeChatSheetHalfHeight({
   return Math.min(
     screenHeight - SHEET_TOP_UP,
     Math.max(
-      computeChatSheetDownHeight({ bottomReservedHeight, headerHeight }),
+      computeChatSheetDownHeight({ bottomReservedHeight }),
       contentBasedHeight,
       screenHeight * 0.5,
     ),
