@@ -1,4 +1,5 @@
 import { ChatStatus } from '../../types/prewalk';
+import { PrewalkStreamError } from '../prewalk';
 
 jest.mock('../../auth/authStorage', () => ({
   authStorage: { getAccessToken: jest.fn().mockResolvedValue(null) },
@@ -10,7 +11,6 @@ jest.mock('../../config/env', () => ({
 const mockFetch = jest.fn();
 jest.mock('expo/fetch', () => ({ fetch: (...args: unknown[]) => mockFetch(...args) }));
 
-// eslint-disable-next-line @typescript-eslint/no-var-requires
 const { getMessage } = require('../prewalk');
 
 // RN(Hermes)·Jest(Node) 둘 다 런타임엔 TextEncoder를 전역으로 제공하지만, 이 프로젝트의 tsconfig엔
@@ -23,6 +23,8 @@ declare const TextEncoder: {
 function makeStreamResponse(chunks: string[]) {
   let i = 0;
   return {
+    ok: true,
+    status: 200,
     body: {
       getReader: () => ({
         read: async () => {
@@ -67,6 +69,31 @@ describe('getMessage (prewalk SSE 스트리밍)', () => {
     );
 
     expect(onProgress).toHaveBeenCalledWith('생각 중');
+    expect(res).toEqual(payload);
+  });
+
+  it('HTTP 에러 응답(4xx/5xx)은 SSE로 읽지 않고 상태 코드·본문을 담은 에러를 던진다', async () => {
+    mockFetch.mockResolvedValue({
+      ok: false,
+      status: 500,
+      text: async () => 'internal error',
+      body: null,
+    });
+
+    await expect(
+      getMessage({ thread_id: 't3', user_prompt: '안녕' }),
+    ).rejects.toMatchObject(
+      new PrewalkStreamError('[prewalk] HTTP 500: internal error'),
+    );
+  });
+
+  it('access_expired_token처럼 SSE 포맷 없이 순수 JSON 본문만 오는 응답도 결과로 인식한다', async () => {
+    // 실제로 백엔드가 이렇게 보낸다 — event:/data: 없이 본문 전체가 JSON 한 덩어리.
+    const payload = { status: ChatStatus.ACCESS_EXPIRED_TOKEN, thread_id: null, state: null };
+    mockFetch.mockResolvedValue(makeStreamResponse([JSON.stringify(payload)]));
+
+    const res = await getMessage({ thread_id: 't4', user_prompt: '안녕' });
+
     expect(res).toEqual(payload);
   });
 });

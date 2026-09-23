@@ -41,12 +41,16 @@ import { LoadingBubble } from './LoadingBubble';
 import { RouteCandidate } from './RouteCandidate';
 import { AssistantAvatar } from './AssistantAvatar';
 import { WalkHintCard } from './WalkHintCard';
-import { WalkConditionCard } from './WalkConditionCard';
+import {
+  WalkConditionCard,
+  WalkConditionOptimisticEdit,
+} from './WalkConditionCard';
 import { spacing, colors } from '../../theme/tokens';
 
-// 챗봇이 이해한 산책 조건 요약(WalkConditionCard용). "산책 티켓" 발행 조건 — is_complete=true,
-// feature_labels(안전/편안 중 하나 이상)가 채워지고, user_context에 출발·도착·목표 거리가
-// 갖춰졌을 때만 계산되며, 그 전까지는 null이라 카드 자체가 뜨지 않는다.
+// 챗봇이 이해한 산책 조건 요약(WalkConditionCard용). user_context에 출발지와, 순환 모드면
+// 목표 거리·편도 모드면 목적지가 갖춰지면 계산된다(is_complete·feature_labels는 기다리지
+// 않는다 — 확인 질문 단계에서도 사용자가 뭘 확인하는지 보여줘야 하므로). 그 전까지는 null이라
+// 카드 자체가 뜨지 않는다.
 type WalkConditions = {
   mode: WalkMode;
   origin: LocationInfo;
@@ -58,11 +62,10 @@ type WalkConditions = {
 };
 
 function extractWalkConditions(state: State): WalkConditions | null {
-  if (!state.is_complete) return null;
-  const labels = state.feature_labels;
-  const hasFeatureLabels = !!(labels && (labels.safety || labels.comfort));
-  if (!hasFeatureLabels) return null;
-
+  // is_complete=true(경로 계산 완료)나 feature_labels(안전/편안 라벨)까지 기다리면, 정작
+  // "이 코스로 진행할까요?" 확인 질문이 뜨는 시점(아직 is_complete=false)엔 카드가 안 보여서
+  // 사용자가 뭘 확인하고 예/아니요를 눌러야 할지 알 수 없었다. 출발·도착·거리처럼 확인에 필요한
+  // 최소 정보만 갖춰지면 바로 보여준다.
   const ctx = state.user_context;
   if (!ctx || !ctx.origin) return null;
 
@@ -93,6 +96,7 @@ function extractWalkConditions(state: State): WalkConditions | null {
 
 export type ChatConversationHandle = {
   submitAnswer: (answer: string) => void;
+  submitConfirmation: (confirmed: boolean) => void;
 };
 
 /**
@@ -113,7 +117,8 @@ export type ChatPhase =
 // 이후 채팅은 자연스럽게 그 카드 밑으로 쌓인다.
 type Message =
   | { from: 'bot' | 'me'; text: string }
-  | { from: 'routes'; routes: WalkRouteResponse[] };
+  | { from: 'routes'; routes: WalkRouteResponse[] }
+  | { from: 'conditions'; conditions: WalkConditions };
 
 // 대기 중 LoadingBubble에 보여줄 기본 문구. 서버가 progress 이벤트를 보내주면 그걸로 즉시
 // 대체되므로(progressSteps), 이건 첫 이벤트가 도착하기 전 아주 짧은 순간에만 보인다.
@@ -144,6 +149,9 @@ type Props = {
   onPhaseChange: (phase: ChatPhase) => void; // 대화 단계 변화를 외부(입력창)에 알림
   onSendingChange: (sending: boolean) => void; // 챗봇 응답을 기다리는 중인지를 외부(입력창)에 알림
   onStartedChange?: (started: boolean) => void; // 대화가 시작됐는지(threadId 확보)를 외부에 알림
+  // "이 코스로 진행할까요?" 같은 확인 질문 대기 여부를 외부(입력창 바 위 예/아니요 버튼)에 알림.
+  // 이 동안엔 바깥 ChatInput도 비활성화해서 자유 텍스트 대신 버튼으로만 답하게 한다.
+  onAwaitingConfirmationChange?: (awaiting: boolean) => void;
   /** 현재 위치 좌표를 아직 가져오는 중인지(정상 로딩). 위치 오류(locationError)와 구분된다. */
   locationLoading?: boolean;
   /** 위치 좌표 획득 실패 종류. null이면 정상. */
@@ -178,6 +186,7 @@ export const ChatConversation = forwardRef(function ChatConversation(
     locationError,
     onRetryLocation,
     onRefreshLocation,
+    onAwaitingConfirmationChange,
     bottomInset,
     onPreviewHeightChange,
   }: Props,
@@ -203,9 +212,12 @@ export const ChatConversation = forwardRef(function ChatConversation(
   const [progressSteps, setProgressSteps] = useState<string[]>([]);
   // 직전 응답이 "이 코스로 진행할까요?" 같은 확인 질문이었는지 — true면 예/아니요 버튼을 보여준다.
   const [awaitingConfirmation, setAwaitingConfirmation] = useState(false);
-  // 챗봇이 이해한 산책 조건(WalkConditionCard) — 조건이 갖춰지면 타임라인 위에 고정으로 보여주고,
-  // 이후 응답에서 값이 바뀔 때마다 최신값으로 덮어쓴다(한 번 뜨면 대화가 끝날 때까지 유지).
-  const [conditions, setConditions] = useState<WalkConditions | null>(null);
+  // 산책 조건이 두 번째로 갱신된 뒤부터 보여줄 상단 고정 카드(최신값으로 계속 덮어씀).
+  // 처음 조건이 갖춰졌을 때는 messages 타임라인에 그 라운드 봇 말풍선 바로 위로 한 번 끼워 넣고
+  // (역사적 기록으로 그대로 남음), 그 다음부터 바뀌는 값은 타임라인에 매번 새로 끼우지 않고
+  // 이 상단 고정 카드만 갱신한다 — 안 그러면 조건을 여러 번 고칠 때마다 카드가 계속 쌓인다.
+  const [pinnedConditions, setPinnedConditions] = useState<WalkConditions | null>(null);
+  const hasShownInlineConditionsRef = useRef(false);
   // getInitMessage 실패 시 true — hasStartedRef가 재시도를 막아버리지 않도록 별도로 추적한다.
   const [initFailed, setInitFailed] = useState(false);
   const [previewGroupHeight, setPreviewGroupHeight] = useState(0);
@@ -277,7 +289,6 @@ export const ChatConversation = forwardRef(function ChatConversation(
       response: res.state?.response,
     });
     setAwaitingConfirmation(false);
-    if (options?.reset) setConditions(null);
     if (res.status !== ChatStatus.SUCCESS) {
       const text =
         STATUS_MESSAGES[res.status] ??
@@ -291,7 +302,21 @@ export const ChatConversation = forwardRef(function ChatConversation(
     }
 
     const nextConditions = res.state ? extractWalkConditions(res.state) : null;
-    if (nextConditions) setConditions(nextConditions);
+    if (options?.reset) {
+      hasShownInlineConditionsRef.current = false;
+      setPinnedConditions(null);
+    }
+    // 조건이 처음 갖춰진 라운드만 타임라인에 인라인으로 끼워 넣는다. 그 다음부터 조건이 다시
+    // 채워지면(웬만하면 매 라운드 — 한 번 정해진 출발/도착은 대화가 끝날 때까지 유지되니까)
+    // 인라인 카드를 지우고 상단 고정 카드로 전환한다 — 카드가 두 개로 겹쳐 보이지 않게.
+    const isFirstConditionsAppearance = !!nextConditions && !hasShownInlineConditionsRef.current;
+    if (nextConditions) {
+      if (isFirstConditionsAppearance) {
+        hasShownInlineConditionsRef.current = true;
+      } else {
+        setPinnedConditions(nextConditions);
+      }
+    }
 
     if (res.thread_id) {
       threadIdRef.current = res.thread_id;
@@ -313,6 +338,16 @@ export const ChatConversation = forwardRef(function ChatConversation(
     const botText = res.state?.response;
     setMessages(prev => {
       let next = options?.reset ? [] : prev;
+      if (nextConditions && !isFirstConditionsAppearance) {
+        // 상단 고정 카드로 넘어가는 시점 — 남아있던 인라인 카드를 지운다(중복 방지).
+        next = next.filter(m => m.from !== 'conditions');
+      }
+      // 확인 질문("이 코스로 진행할까요?") 등 봇 텍스트 바로 위에 조건 요약 카드를 보여준다 —
+      // 사용자가 뭘 보고 예/아니요를 누르는지 알 수 있어야 하므로 그 라운드의 봇 말풍선 앞에 둔다.
+      // (처음 한 번만 — 이후 갱신은 상단 고정 카드로.)
+      if (isFirstConditionsAppearance && nextConditions) {
+        next = next.concat({ from: 'conditions', conditions: nextConditions });
+      }
       if (botText && !routeReady) {
         next = next.concat({ from: 'bot', text: botText });
       }
@@ -398,6 +433,10 @@ export const ChatConversation = forwardRef(function ChatConversation(
     abortRef.current = new AbortController();
     const { signal } = abortRef.current;
     setMessages(prev => [...prev, { from: 'me', text: answer }]);
+    // 확인 질문(예/아니요) 대기 중에 카드 수정 등 자유 텍스트로 답한 경우 — 그 확인 질문은
+    // 더 이상 유효하지 않으니 버튼을 바로 치운다(안 그러면 이번 요청이 로딩되는 동안 이전
+    // 질문의 예/아니요 버튼이 계속 눌리는 상태로 남는다).
+    setAwaitingConfirmation(false);
     setProgressSteps([]);
     setSending(true);
     try {
@@ -439,6 +478,45 @@ export const ChatConversation = forwardRef(function ChatConversation(
     } finally {
       if (requestId === requestIdRef.current) setSending(false);
     }
+  };
+
+  // WalkConditionCard 편집 — 백엔드 응답이 오기 전에도 방금 입력한 값을 카드에 바로 반영한다
+  // (낙관적 업데이트). 나중에 실제 응답이 오면 applyResponse가 그 값으로 다시 덮어쓴다 —
+  // 예를 들어 존재하지 않는 장소를 입력했다면 백엔드가 거절하면서 원래 값으로 되돌아간다.
+  const applyOptimisticConditionEdit = (
+    conditions: WalkConditions,
+    optimistic: WalkConditionOptimisticEdit,
+  ): WalkConditions => {
+    if (optimistic.field === 'distance') {
+      return { ...conditions, targetKm: optimistic.value };
+    }
+    const info: LocationInfo = {
+      place_name: optimistic.value,
+      address: null,
+      lat: null,
+      lon: null,
+    };
+    return optimistic.field === 'origin'
+      ? { ...conditions, origin: info }
+      : { ...conditions, destination: info };
+  };
+
+  const handleConditionEdit = (
+    text: string,
+    optimistic: WalkConditionOptimisticEdit,
+  ) => {
+    if (pinnedConditions) {
+      setPinnedConditions(applyOptimisticConditionEdit(pinnedConditions, optimistic));
+    } else {
+      setMessages(prev =>
+        prev.map(m =>
+          m.from === 'conditions'
+            ? { ...m, conditions: applyOptimisticConditionEdit(m.conditions, optimistic) }
+            : m,
+        ),
+      );
+    }
+    submitAnswer(text);
   };
 
   // "이 코스로 진행할까요?" 같은 확인 질문에 버튼으로 답한다. 자유 텍스트가 아니라
@@ -585,6 +663,10 @@ export const ChatConversation = forwardRef(function ChatConversation(
   }, [threadId, onStartedChange]);
 
   useEffect(() => {
+    onAwaitingConfirmationChange?.(awaitingConfirmation);
+  }, [awaitingConfirmation, onAwaitingConfirmationChange]);
+
+  useEffect(() => {
     // previewGroupHeight는 스크롤 여백(padding)을 뺀 순수 콘텐츠 높이라,
     // 위쪽 padding(spacing.lg)만 더하면 "미리보기 영역이 실제로 차지하는 높이"가 된다.
     onPreviewHeightChange(previewGroupHeight + spacing.lg);
@@ -621,6 +703,9 @@ export const ChatConversation = forwardRef(function ChatConversation(
     submitAnswer: (answer: string) => {
       submitAnswer(answer);
     },
+    submitConfirmation: (confirmed: boolean) => {
+      submitConfirmation(confirmed);
+    },
   }));
 
   // 대화 시작 전 위치 좌표를 "정상적으로 기다리는 중"일 때만 로딩 버블을 보여준다.
@@ -655,6 +740,22 @@ export const ChatConversation = forwardRef(function ChatConversation(
 
   return (
     <View style={styles.chatPanel}>
+      {pinnedConditions ? (
+        // 스크롤 콘텐츠 안이 아니라 그 바깥(형제)에 둬서, 대화가 길어져 스크롤해도 화면에서
+        // 안 사라지고 항상 같은 자리에 떠 있게 한다 — 스크롤 콘텐츠의 "맨 위"는 스크롤하면
+        // 같이 밀려 올라가버려서 진짜 고정이 아니었다.
+        <View style={styles.pinnedConditions}>
+          <WalkConditionCard
+            origin={pinnedConditions.origin}
+            destination={pinnedConditions.destination}
+            showDestination={pinnedConditions.mode !== WalkMode.CIRCULAR_RANDOM}
+            targetKm={pinnedConditions.targetKm}
+            distanceEditable={pinnedConditions.targetKmEditable}
+            disabled={sending || phase === 'session_expired'}
+            onEdit={handleConditionEdit}
+          />
+        </View>
+      ) : null}
       <BottomSheetScrollView
         ref={scrollRef}
         style={styles.chatScroll}
@@ -686,17 +787,6 @@ export const ChatConversation = forwardRef(function ChatConversation(
           ) : awaitingLocation ? (
             <ChatBubble text="위치 정보를 확인하는 중이에요…" />
           ) : null}
-          {conditions ? (
-            <WalkConditionCard
-              origin={conditions.origin}
-              destination={conditions.destination}
-              showDestination={conditions.mode !== WalkMode.CIRCULAR_RANDOM}
-              targetKm={conditions.targetKm}
-              distanceEditable={conditions.targetKmEditable}
-              disabled={sending || phase === 'session_expired'}
-              onEdit={text => submitAnswer(text)}
-            />
-          ) : null}
           {messages.map((message, index) => {
             const routeOffset = routeOffsets[index];
             const bubble =
@@ -718,6 +808,16 @@ export const ChatConversation = forwardRef(function ChatConversation(
                     ))}
                   </View>
                 </View>
+              ) : message.from === 'conditions' ? (
+                <WalkConditionCard
+                  origin={message.conditions.origin}
+                  destination={message.conditions.destination}
+                  showDestination={message.conditions.mode !== WalkMode.CIRCULAR_RANDOM}
+                  targetKm={message.conditions.targetKm}
+                  distanceEditable={message.conditions.targetKmEditable}
+                  disabled={sending || phase === 'session_expired'}
+                  onEdit={handleConditionEdit}
+                />
               ) : message.from === 'bot' ? (
                 <ChatBubble text={message.text} />
               ) : (
@@ -747,28 +847,6 @@ export const ChatConversation = forwardRef(function ChatConversation(
                 progressSteps.length ? progressSteps : [DEFAULT_LOADING_STEP]
               }
             />
-          ) : null}
-          {awaitingConfirmation && !sending && phase !== 'session_expired' ? (
-            <View style={styles.confirmRow}>
-              <Pressable
-                onPress={() => submitConfirmation(true)}
-                style={({ pressed }) => [
-                  styles.retryButton,
-                  pressed && styles.retryButtonPressed,
-                ]}
-              >
-                <Text style={styles.retryButtonText}>예</Text>
-              </Pressable>
-              <Pressable
-                onPress={() => submitConfirmation(false)}
-                style={({ pressed }) => [
-                  styles.retryButton,
-                  pressed && styles.retryButtonPressed,
-                ]}
-              >
-                <Text style={styles.retryButtonText}>아니요</Text>
-              </Pressable>
-            </View>
           ) : null}
           {initFailed && !sending ? (
             <Pressable
@@ -806,6 +884,14 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#FFFFFF',
   },
+  pinnedConditions: {
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.lg,
+    paddingBottom: spacing.sm,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: colors.line,
+  },
   chatContent: {
     padding: spacing.lg,
     backgroundColor: '#FFFFFF',
@@ -818,10 +904,6 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   locationNotice: {
-    gap: spacing.sm,
-  },
-  confirmRow: {
-    flexDirection: 'row',
     gap: spacing.sm,
   },
   retryButton: {

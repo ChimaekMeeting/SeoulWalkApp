@@ -85,6 +85,16 @@ async function streamPrewalk(
         signal: idleController.signal,
       });
 
+      // 응답이 SSE가 아닌 일반 에러(4xx/5xx, 프록시 타임아웃 등)일 수 있다 — 이 경우 body를 그대로
+      // 이벤트 스트림으로 읽으려 하면 결과 이벤트를 못 찾고 "stream ended without a result event"라는
+      // 의미 없는 메시지로 뭉개진다. 상태 코드부터 확인해 실제 원인(상태 코드 + 응답 본문)을 남긴다.
+      if (!res.ok) {
+        const bodyText = await res.text().catch(() => '');
+        throw new PrewalkStreamError(
+          `[prewalk] HTTP ${res.status}${bodyText ? `: ${bodyText.slice(0, 500)}` : ''}`,
+        );
+      }
+
       if (!res.body) {
         throw new PrewalkStreamError(
           '[prewalk] streaming response has no body',
@@ -131,6 +141,21 @@ async function streamPrewalk(
       buffer += decoder.decode();
       const trailing = parseSseBlock(buffer);
       if (trailing) handleEvent(trailing);
+
+      // access_expired_token 같은 일부 에러 응답은 SSE 포맷(event:/data:) 없이 body 전체가 그냥
+      // JSON 한 덩어리로 온다 — 위 파싱은 다 실패하지만, buffer 자체가 유효한 ChatResponse JSON일
+      // 수 있으니 마지막으로 그대로 파싱을 시도한다. 이래야 session_expired 처리(로그인 만료 안내)로
+      // 정상적으로 이어진다.
+      if (!result) {
+        try {
+          const parsed = JSON.parse(buffer);
+          if (parsed && typeof parsed.status === 'string') {
+            result = parsed as ChatResponse;
+          }
+        } catch {
+          // buffer가 JSON도 아니면 아래에서 그대로 에러 처리.
+        }
+      }
 
       if (!result) {
         throw new PrewalkStreamError(

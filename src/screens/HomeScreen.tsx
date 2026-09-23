@@ -10,10 +10,12 @@ import {
   Keyboard,
   LayoutChangeEvent,
   Platform,
+  Pressable,
   StyleSheet,
   useWindowDimensions,
   View,
 } from 'react-native';
+import { Text } from '../components/Text';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppMapView } from '../components/map/AppMapView';
 import { MapOverviewControls } from '../components/map/MapOverviewControls';
@@ -32,7 +34,7 @@ import { ChatInput } from '../components/chat/ChatInput';
 import { LocationInfo, WalkRouteResponse } from '../types/prewalk';
 import type { LocationErrorReason } from '../hooks/useLocation';
 import type { Coordinates } from '../types/location';
-import { colors, spacing } from '../theme/tokens';
+import { colors, radii, spacing } from '../theme/tokens';
 import { EnvironmentInfo, getEnvironmentInfo } from '../api/weather';
 
 const DEFAULT_CHAT_INPUT_HEIGHT = 76;
@@ -102,6 +104,9 @@ export const HomeScreen = forwardRef<HomeScreenHandle, HomeScreenProps>(function
   const [chatPhase, setChatPhase] = useState<ChatPhase>('idle');
   const [chatSending, setChatSending] = useState(false);
   const [chatStarted, setChatStarted] = useState(false);
+  // "이 코스로 진행할까요?" 같은 확인 질문 대기 중인지 — true면 입력창 위에 예/아니요 버튼을
+  // 띄우고, 자유 텍스트 입력은 막아 버튼으로만 답하게 한다.
+  const [chatAwaitingConfirmation, setChatAwaitingConfirmation] = useState(false);
   const [previewHeight, setPreviewHeight] = useState(50);
   const [manualRecenterKey, setManualRecenterKey] = useState(0);
   const [environmentRefreshKey, setEnvironmentRefreshKey] = useState(0);
@@ -251,6 +256,7 @@ export const HomeScreen = forwardRef<HomeScreenHandle, HomeScreenProps>(function
           onPhaseChange={setChatPhase}
           onSendingChange={setChatSending}
           onStartedChange={setChatStarted}
+          onAwaitingConfirmationChange={setChatAwaitingConfirmation}
           onPreviewHeightChange={setPreviewHeight}
           bottomInset={chatBottomInset}
           locationLoading={locationLoading}
@@ -264,6 +270,40 @@ export const HomeScreen = forwardRef<HomeScreenHandle, HomeScreenProps>(function
         style={[styles.chatInputBar, { bottom: chatInputBottom }]}
         onLayout={handleChatInputLayout}
       >
+        {chatAwaitingConfirmation ? (
+          <View style={styles.confirmRow}>
+            <Pressable
+              onPress={() => {
+                chatRef.current?.submitConfirmation(true);
+                sheetRef.current?.expand();
+              }}
+              disabled={chatSending}
+              style={({ pressed }) => [
+                styles.confirmButton,
+                styles.confirmButtonYes,
+                chatSending && styles.confirmButtonDisabled,
+                pressed && styles.confirmButtonPressed,
+              ]}
+            >
+              <Text style={styles.confirmButtonTextYes}>예</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => {
+                chatRef.current?.submitConfirmation(false);
+                sheetRef.current?.expand();
+              }}
+              disabled={chatSending}
+              style={({ pressed }) => [
+                styles.confirmButton,
+                styles.confirmButtonNo,
+                chatSending && styles.confirmButtonDisabled,
+                pressed && styles.confirmButtonPressed,
+              ]}
+            >
+              <Text style={styles.confirmButtonTextNo}>아니요</Text>
+            </Pressable>
+          </View>
+        ) : null}
         <ChatInput
           onSend={text => {
             chatRef.current?.submitAnswer(text);
@@ -273,11 +313,14 @@ export const HomeScreen = forwardRef<HomeScreenHandle, HomeScreenProps>(function
           disabled={
             chatSending ||
             inputBlockedByLocation ||
-            chatPhase === 'session_expired'
+            chatPhase === 'session_expired' ||
+            chatAwaitingConfirmation
           }
           placeholder={
             inputBlockedByLocation
               ? '위치 확인 후 대화를 시작할 수 있어요'
+              : chatAwaitingConfirmation
+              ? '위 버튼으로 답해주세요'
               : undefined
           }
         />
@@ -302,5 +345,41 @@ const styles = StyleSheet.create({
     backgroundColor: colors.card,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
+    gap: spacing.sm,
+  },
+  confirmRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  confirmButton: {
+    flex: 1,
+    borderRadius: radii.lg,
+    paddingVertical: spacing.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  confirmButtonPressed: {
+    opacity: 0.75,
+  },
+  confirmButtonDisabled: {
+    opacity: 0.4,
+  },
+  confirmButtonYes: {
+    backgroundColor: colors.ink,
+  },
+  confirmButtonNo: {
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.ink,
+  },
+  confirmButtonTextYes: {
+    color: colors.card,
+    fontSize: 15,
+    fontWeight: '900',
+  },
+  confirmButtonTextNo: {
+    color: colors.ink,
+    fontSize: 15,
+    fontWeight: '900',
   },
 });
