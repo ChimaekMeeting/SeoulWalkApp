@@ -96,6 +96,18 @@ async function streamPrewalk(
       let buffer = '';
       let result: ChatResponse | null = null;
 
+      // 파싱된 이벤트 한 건을 처리한다. 정상 루프 도중과, 스트림이 끝난 뒤 버퍼에 덜 파싱된
+      // 마지막 이벤트를 마저 처리할 때 둘 다에서 쓴다(아래 참고).
+      const handleEvent = (parsed: SseEvent) => {
+        if (parsed.event === 'progress') {
+          onProgress?.(parsed.data);
+        } else if (parsed.event === 'result') {
+          result = JSON.parse(parsed.data) as ChatResponse;
+        } else if (parsed.event === 'error') {
+          throw new PrewalkStreamError(parsed.data);
+        }
+      };
+
       while (true) {
         const { value, done } = await reader.read();
         if (done) break;
@@ -110,17 +122,15 @@ async function streamPrewalk(
           const rawEvent = buffer.slice(0, sepIndex);
           buffer = buffer.slice(sepIndex + 2);
           const parsed = parseSseBlock(rawEvent);
-          if (!parsed) continue;
-
-          if (parsed.event === 'progress') {
-            onProgress?.(parsed.data);
-          } else if (parsed.event === 'result') {
-            result = JSON.parse(parsed.data) as ChatResponse;
-          } else if (parsed.event === 'error') {
-            throw new PrewalkStreamError(parsed.data);
-          }
+          if (parsed) handleEvent(parsed);
         }
       }
+
+      // 서버가 마지막 이벤트(대개 result) 뒤에 구분자(빈 줄) 없이 바로 연결을 끊으면, 그 이벤트가
+      // \n\n을 못 만나 buffer에 그대로 남아 위 루프에서 처리되지 않는다 — 여기서 마저 파싱한다.
+      buffer += decoder.decode();
+      const trailing = parseSseBlock(buffer);
+      if (trailing) handleEvent(trailing);
 
       if (!result) {
         throw new PrewalkStreamError(
