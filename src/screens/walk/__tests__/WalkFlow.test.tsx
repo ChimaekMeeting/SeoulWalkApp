@@ -9,8 +9,12 @@ import ReactTestRenderer from 'react-test-renderer';
 const calls: Record<string, any> = {};
 
 const mockSubmitRouteFeedback = jest.fn();
+const mockStartWalkRoute = jest.fn();
+const mockCompleteWalkRoute = jest.fn();
 jest.mock('../../../api/routes', () => ({
   submitRouteFeedback: (...args: any[]) => mockSubmitRouteFeedback(...args),
+  startWalkRoute: (...args: any[]) => mockStartWalkRoute(...args),
+  completeWalkRoute: (...args: any[]) => mockCompleteWalkRoute(...args),
 }));
 
 jest.mock('../WalkPrepScreen', () => ({
@@ -74,12 +78,22 @@ const mkRoute = (id: number): WalkRouteResponse =>
       [37.5, 127.0],
       [37.5, 127.01],
     ],
-  }) as unknown as WalkRouteResponse;
+  } as unknown as WalkRouteResponse);
 
 beforeEach(() => {
   for (const k of Object.keys(calls)) delete calls[k];
   mockSubmitRouteFeedback.mockReset();
   mockSubmitRouteFeedback.mockResolvedValue({ status: 'success' });
+  mockStartWalkRoute.mockReset();
+  mockStartWalkRoute.mockResolvedValue({
+    walk_status: 'in_progress',
+    walked_on: null,
+  });
+  mockCompleteWalkRoute.mockReset();
+  mockCompleteWalkRoute.mockResolvedValue({
+    walk_status: 'completed',
+    walked_on: '2026-09-23',
+  });
 });
 
 function mount(route: WalkRouteResponse, snapPending = false) {
@@ -139,6 +153,53 @@ it('"산책 시작" 이후 부모가 경로를 교체해도 walking 화면은 �
   expect(calls.walk.routeResult).toBe(r1);
 });
 
+it('"산책 시작"을 누르면 startWalkRoute(id)를 호출한다', () => {
+  const r1 = mkRoute(1);
+  mount(r1);
+  ReactTestRenderer.act(() => calls.prep.onStart(r1.coordinates));
+  expect(mockStartWalkRoute).toHaveBeenCalledWith(1);
+});
+
+it('조기 종료(destination_arrived 아님)로 complete 단계에 들어가면 completeWalkRoute를 호출하지 않는다', () => {
+  const r1 = mkRoute(1);
+  mount(r1);
+  ReactTestRenderer.act(() => calls.prep.onStart(r1.coordinates));
+  ReactTestRenderer.act(() =>
+    calls.walk.onRequestEnd({
+      endReason: 'user_ended_before_destination',
+      elapsedMs: 1000,
+    }),
+  );
+  ReactTestRenderer.act(() => calls.endModal.onConfirm());
+  expect(calls.complete).toBeDefined();
+  expect(mockCompleteWalkRoute).not.toHaveBeenCalled();
+});
+
+it('종착점 도착(destination_arrived)으로 complete 단계에 들어가면 completeWalkRoute(id)를 한 번만 호출한다', () => {
+  const r1 = mkRoute(1);
+  mount(r1);
+  ReactTestRenderer.act(() => calls.prep.onStart(r1.coordinates));
+  ReactTestRenderer.act(() =>
+    calls.walk.onGoalReached({
+      endReason: 'destination_arrived',
+      elapsedMs: 1000,
+    }),
+  );
+  ReactTestRenderer.act(() => calls.endModal.onConfirm());
+  expect(calls.complete).toBeDefined();
+  expect(mockCompleteWalkRoute).toHaveBeenCalledTimes(1);
+  expect(mockCompleteWalkRoute).toHaveBeenCalledWith(1);
+
+  // rating 화면 뒤로가기로 complete에 다시 들어와도 중복 호출되지 않는다.
+  ReactTestRenderer.act(() => calls.complete.onNext());
+  expect(calls.rating).toBeDefined();
+  ReactTestRenderer.act(() => {
+    backHandler();
+  });
+  expect(calls.complete).toBeDefined();
+  expect(mockCompleteWalkRoute).toHaveBeenCalledTimes(1);
+});
+
 it('산책 준비 화면에서 순환 코스 방향을 반대로 골랐으면(onStart에 다른 좌표 배열) 그 좌표로 산책이 시작된다', () => {
   const r1 = mkRoute(1);
   const reversedCoords = [...r1.coordinates].reverse();
@@ -167,7 +228,10 @@ it('완료 화면의 별점은 서버에 저장된 뒤 onExitToHome을 부른다
 
   ReactTestRenderer.act(() => calls.prep.onStart(r1.coordinates));
   ReactTestRenderer.act(() =>
-    calls.walk.onRequestEnd({ endReason: 'user_ended_before_destination', elapsedMs: 1000 }),
+    calls.walk.onRequestEnd({
+      endReason: 'user_ended_before_destination',
+      elapsedMs: 1000,
+    }),
   );
   ReactTestRenderer.act(() => calls.endModal.onConfirm());
   expect(calls.complete).toBeDefined();
@@ -196,7 +260,12 @@ it('별점 저장이 실패하면 홈으로 나가지 않고 재시도 오류를
   const r1 = mkRoute(1);
   mount(r1);
   ReactTestRenderer.act(() => calls.prep.onStart(r1.coordinates));
-  ReactTestRenderer.act(() => calls.walk.onRequestEnd({ endReason: 'user_ended_before_destination', elapsedMs: 1000 }));
+  ReactTestRenderer.act(() =>
+    calls.walk.onRequestEnd({
+      endReason: 'user_ended_before_destination',
+      elapsedMs: 1000,
+    }),
+  );
   ReactTestRenderer.act(() => calls.endModal.onConfirm());
   ReactTestRenderer.act(() => calls.complete.onNext());
 
@@ -225,7 +294,10 @@ it('완료 화면에서 평가 없이 나가기와 안드로이드 뒤로가기�
 
   ReactTestRenderer.act(() => calls.prep.onStart(r1.coordinates));
   ReactTestRenderer.act(() =>
-    calls.walk.onRequestEnd({ endReason: 'user_ended_before_destination', elapsedMs: 1000 }),
+    calls.walk.onRequestEnd({
+      endReason: 'user_ended_before_destination',
+      elapsedMs: 1000,
+    }),
   );
   ReactTestRenderer.act(() => calls.endModal.onConfirm());
   expect(calls.complete).toBeDefined();
