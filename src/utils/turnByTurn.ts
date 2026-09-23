@@ -1,9 +1,10 @@
-import { WalkRouteResponse } from '../types/prewalk';
+import { Maneuver, WalkRouteResponse } from '../types/prewalk';
 import { bearingDeg, haversineDistanceKm, projectOntoRoute } from './geo';
 
 // route 좌표(도로 스냅된 [위도, 경도] 폴리라인)의 방위각 변화만으로 턴 지점을 찾는다.
-// 백엔드에 maneuver/street-name API가 없으므로, "여기서 얼마나 꺾이는가"만 기하학적으로 계산해서
-// 프론트에서 턴바이턴 안내를 만든다. WalkInProgressScreen에서만 쓰인다(useTurnByTurn 참고).
+// 백엔드가 maneuvers(도로 스냅·교차로 정보까지 반영)를 내려주면 resolveTurnSteps가 그걸 우선
+// 쓰고, 없으면(기록 탭에서 재구성한 경로 등) 이 파일의 기하 계산으로 폴백한다 — WalkInProgressScreen은
+// 항상 resolveTurnSteps(useTurnByTurn 경유)만 호출하므로 어느 경로든 같은 TurnStep 형태로 받는다.
 
 export type TurnKind =
   | 'slight_left'
@@ -84,7 +85,9 @@ function makeForwardInterpolator(route: LatLon[], cumKm: number[]) {
  * TURN_MIN_ANGLE_DEG 미만이면 직진으로 보고 버린다. 마지막엔 항상 종착점(atKm=전체 길이) 'arrive'
  * 스텝을 붙인다. 좌표가 2개 미만이면 빈 배열.
  */
-export function buildTurnSteps(route: WalkRouteResponse['coordinates']): TurnStep[] {
+export function buildTurnSteps(
+  route: WalkRouteResponse['coordinates'],
+): TurnStep[] {
   if (!Array.isArray(route) || route.length < 2) return [];
 
   const cumKm = [0];
@@ -107,7 +110,11 @@ export function buildTurnSteps(route: WalkRouteResponse['coordinates']): TurnSte
   const flushCluster = () => {
     if (lastIncludedKm == null) return;
     if (Math.abs(clusterSum) >= TURN_MIN_ANGLE_DEG) {
-      steps.push({ atKm: clusterPeakKm, kind: classifyAngle(clusterSum), angleDeg: clusterSum });
+      steps.push({
+        atKm: clusterPeakKm,
+        kind: classifyAngle(clusterSum),
+        angleDeg: clusterSum,
+      });
     }
     clusterSum = 0;
     clusterSign = 0;
@@ -126,7 +133,8 @@ export function buildTurnSteps(route: WalkRouteResponse['coordinates']): TurnSte
     if (Math.abs(delta) < TURN_NOISE_FLOOR_DEG) continue; // 진동 — 클러스터에 영향 없음
 
     const sign = Math.sign(delta);
-    const withinGap = lastIncludedKm != null && km - lastIncludedKm <= TURN_MERGE_GAP_KM;
+    const withinGap =
+      lastIncludedKm != null && km - lastIncludedKm <= TURN_MERGE_GAP_KM;
     if (!(withinGap && sign === clusterSign)) flushCluster();
 
     clusterSum += delta;
@@ -141,6 +149,53 @@ export function buildTurnSteps(route: WalkRouteResponse['coordinates']): TurnSte
 
   steps.push({ atKm: totalKm, kind: 'arrive', angleDeg: 0 });
   return steps;
+}
+
+/**
+ * 백엔드 maneuvers를 TurnStep으로 변환한다. 방향 분류(slight/sharp 포함 7종)는 백엔드 type을
+ * 그대로 쓰지 않고 bearing_before/after로 부호 있는 회전각을 다시 계산해 classifyAngle에
+ * 태운다 — 백엔드는 left/right/u_turn 3종만 구분하지만, buildTurnSteps(기하 계산 경로)와 완전히
+ * 같은 분류 기준·최소각(TURN_MIN_ANGLE_DEG) 필터를 쓰기 위함이다(백엔드 필터는 15°, 프론트는 25°).
+ * start는 빼고(atKm=0이라 findNextTurnStep이 어차피 못 찾는다 — buildTurnSteps와 동일 동작),
+ * 유효한 arrive가 하나도 없으면(데이터 이상) null을 돌려 호출부가 buildTurnSteps로 폴백하게 한다.
+ */
+export function maneuversToTurnSteps(maneuvers: Maneuver[]): TurnStep[] | null {
+  const sorted = [...maneuvers].sort((a, b) => a.sequence - b.sequence);
+  const steps: TurnStep[] = [];
+  let hasArrive = false;
+
+  for (const m of sorted) {
+    const atKm = m.distance_from_start_m / 1000;
+    if (m.type === 'start') continue;
+    if (m.type === 'arrive') {
+      steps.push({ atKm, kind: 'arrive', angleDeg: 0 });
+      hasArrive = true;
+      continue;
+    }
+    const angleDeg = normalizeAngleDeg(
+      (m.bearing_after_deg ?? 0) - (m.bearing_before_deg ?? 0),
+    );
+    if (Math.abs(angleDeg) < TURN_MIN_ANGLE_DEG) continue;
+    steps.push({ atKm, kind: classifyAngle(angleDeg), angleDeg });
+  }
+
+  return hasArrive ? steps : null;
+}
+
+/**
+ * 턴 목록을 구하는 단일 진입점. useTurnByTurn·decideBackgroundAnnouncement가 항상 이 함수를
+ * 통해서만 턴을 계산한다 — 백엔드 maneuvers가 있으면 우선 쓰고, 없거나(기록 탭 재걷기 등)
+ * 변환에 실패하면 buildTurnSteps(기하 계산)로 폴백한다.
+ */
+export function resolveTurnSteps(
+  route: WalkRouteResponse['coordinates'],
+  maneuvers?: Maneuver[] | null,
+): TurnStep[] {
+  if (maneuvers && maneuvers.length > 0) {
+    const fromBackend = maneuversToTurnSteps(maneuvers);
+    if (fromBackend) return fromBackend;
+  }
+  return buildTurnSteps(route);
 }
 
 // 사람이 읽는 안내 문구에 쓰는 한글 라벨.
@@ -160,7 +215,10 @@ const TURN_KIND_LABEL: Record<Exclude<TurnKind, 'arrive'>, string> = {
 export const TURN_IMMEDIATE_KM = 0.015; // 15m
 
 /** "250m 앞 우회전" / "지금 좌회전" / "목적지 도착" 같은 안내 문구를 만든다. */
-export function formatTurnInstruction(kind: TurnKind, distanceToKm: number): string {
+export function formatTurnInstruction(
+  kind: TurnKind,
+  distanceToKm: number,
+): string {
   if (kind === 'arrive') return '목적지 도착';
   const label = TURN_KIND_LABEL[kind];
   const km = Math.max(0, distanceToKm);
@@ -170,7 +228,10 @@ export function formatTurnInstruction(kind: TurnKind, distanceToKm: number): str
 }
 
 /** steps 중 아직 지나지 않은(atKm이 routeProgressKm보다 큰) 첫 번째 턴. 없으면 null. */
-export function findNextTurnStep(steps: TurnStep[], routeProgressKm: number): TurnStep | null {
+export function findNextTurnStep(
+  steps: TurnStep[],
+  routeProgressKm: number,
+): TurnStep | null {
   return steps.find(step => step.atKm > routeProgressKm) ?? null;
 }
 
@@ -195,12 +256,17 @@ export function decideBackgroundAnnouncement(
   route: WalkRouteResponse['coordinates'],
   current: [number, number],
   lastAnnouncedAtKm: number | null,
+  maneuvers?: Maneuver[] | null,
 ): BackgroundAnnouncementDecision {
-  const steps = buildTurnSteps(route);
+  const steps = resolveTurnSteps(route, maneuvers);
   const { distanceAlongRouteKm } = projectOntoRoute(current, route);
   const step = findNextTurnStep(steps, distanceAlongRouteKm);
   const distanceToKm = step ? Math.max(0, step.atKm - distanceAlongRouteKm) : 0;
   const withinRange = step != null && distanceToKm <= TURN_IMMEDIATE_KM;
   const alreadyAnnounced = step != null && lastAnnouncedAtKm === step.atKm;
-  return { step, distanceToKm, shouldAnnounce: withinRange && !alreadyAnnounced };
+  return {
+    step,
+    distanceToKm,
+    shouldAnnounce: withinRange && !alreadyAnnounced,
+  };
 }

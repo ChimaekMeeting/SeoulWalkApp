@@ -2,10 +2,10 @@ import { useEffect, useMemo, useRef } from 'react';
 import { Vibration } from 'react-native';
 import * as Location from 'expo-location';
 import * as Speech from 'expo-speech';
-import { WalkRouteResponse } from '../types/prewalk';
+import { Maneuver, WalkRouteResponse } from '../types/prewalk';
 import {
   TurnStep,
-  buildTurnSteps,
+  resolveTurnSteps,
   findNextTurnStep,
   formatTurnInstruction,
   TURN_IMMEDIATE_KM,
@@ -42,14 +42,24 @@ export interface TurnByTurnInfo {
  * expo-task-manager 백그라운드 위치 태스크를 시작해 화면이 꺼지거나 앱이 백그라운드로 가도 안내가
  * 이어지게 한다. false면(권한 없음/거부) 이 훅은 useWatchLocation(포그라운드 watch) 갱신에만
  * 반응하는 Phase A 그대로다.
+ *
+ * maneuvers(백엔드가 route_result와 함께 내려주는 턴바이턴 안내)가 있으면 resolveTurnSteps가
+ * 그걸 우선 쓰고, 없으면(예: 기록 탭에서 다시 걷는 경로) route 좌표 기하 계산으로 폴백한다.
  */
 export function useTurnByTurn(
   route: WalkRouteResponse['coordinates'],
   routeProgressKm: number,
   backgroundEnabled = false,
+  maneuvers?: Maneuver[] | null,
 ): TurnByTurnInfo {
-  const steps = useMemo(() => buildTurnSteps(route), [route]);
-  const step = useMemo(() => findNextTurnStep(steps, routeProgressKm), [steps, routeProgressKm]);
+  const steps = useMemo(
+    () => resolveTurnSteps(route, maneuvers),
+    [route, maneuvers],
+  );
+  const step = useMemo(
+    () => findNextTurnStep(steps, routeProgressKm),
+    [steps, routeProgressKm],
+  );
   const distanceToKm = step ? Math.max(0, step.atKm - routeProgressKm) : 0;
 
   const headsUpAtKmRef = useRef<number | null>(null);
@@ -59,7 +69,9 @@ export function useTurnByTurn(
     if (!step || distanceToKm > TURN_HEADS_UP_DISTANCE_KM) return;
     if (headsUpAtKmRef.current === step.atKm) return;
     headsUpAtKmRef.current = step.atKm;
-    Speech.speak(formatTurnInstruction(step.kind, distanceToKm), { language: 'ko-KR' });
+    Speech.speak(formatTurnInstruction(step.kind, distanceToKm), {
+      language: 'ko-KR',
+    });
   }, [step, distanceToKm]);
 
   useEffect(() => {
@@ -67,7 +79,9 @@ export function useTurnByTurn(
     if (finalAtKmRef.current === step.atKm) return;
     finalAtKmRef.current = step.atKm;
     Vibration.vibrate(200);
-    Speech.speak(formatTurnInstruction(step.kind, distanceToKm), { language: 'ko-KR' });
+    Speech.speak(formatTurnInstruction(step.kind, distanceToKm), {
+      language: 'ko-KR',
+    });
     activeWalkSession.update({ lastAnnouncedAtKm: step.atKm });
   }, [step, distanceToKm]);
 
@@ -76,12 +90,14 @@ export function useTurnByTurn(
   useEffect(() => {
     activeWalkSession.write({
       route,
+      maneuvers: maneuvers ?? null,
       lastAnnouncedAtKm: null,
       startedAt: Date.now(),
     });
     return () => {
       activeWalkSession.clear();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [route]);
 
   // 백그라운드 위치 태스크 — 켜지면 시작, 꺼지거나(권한 철회 등) 언마운트되면 중지.
@@ -95,10 +111,14 @@ export function useTurnByTurn(
         notificationTitle: TURN_BY_TURN_FOREGROUND_SERVICE_TITLE,
         notificationBody: TURN_BY_TURN_FOREGROUND_SERVICE_BODY,
       },
-    }).catch(err => console.warn('[useTurnByTurn] 백그라운드 위치 시작 실패:', err));
+    }).catch(err =>
+      console.warn('[useTurnByTurn] 백그라운드 위치 시작 실패:', err),
+    );
 
     return () => {
-      Location.stopLocationUpdatesAsync(TURN_BY_TURN_LOCATION_TASK).catch(() => {});
+      Location.stopLocationUpdatesAsync(TURN_BY_TURN_LOCATION_TASK).catch(
+        () => {},
+      );
     };
   }, [backgroundEnabled]);
 
