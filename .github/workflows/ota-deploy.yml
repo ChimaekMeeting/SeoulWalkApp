@@ -89,3 +89,6 @@ jobs:
           # 있다 — 관례상 채널명과 같게(production-apk) 만들어졌다고 가정한 값이다. 다르면
           # 위 "사전 준비 2"대로 `eas channel:list`로 확인 후 이 값을 고쳐야 한다.
           branch: production-apk
+          # app.json에 iOS 설정(bundleIdentifier 등) 자체가 없어 iOS 빌드는 항상 실패한다.
+          # platform을 명시 안 하면 기본값 all이라 iOS까지 빌드를 시도해 죽는다 — Android만.
+          platform: android
