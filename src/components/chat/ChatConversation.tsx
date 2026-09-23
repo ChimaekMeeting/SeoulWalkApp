@@ -25,7 +25,12 @@ import {
 import {
   ChatResponse,
   ChatStatus,
+  CircularPreference,
   LocationInfo,
+  OnewayPreference,
+  OnewayShortestPreference,
+  State,
+  WalkMode,
   WalkRouteResponse,
 } from '../../types/prewalk';
 import type { LocationErrorReason } from '../../hooks/useLocation';
@@ -35,7 +40,56 @@ import { MyBubble } from './MyBubble';
 import { LoadingBubble } from './LoadingBubble';
 import { RouteCandidate } from './RouteCandidate';
 import { AssistantAvatar } from './AssistantAvatar';
+import { WalkHintCard } from './WalkHintCard';
+import { WalkConditionCard } from './WalkConditionCard';
 import { spacing, colors } from '../../theme/tokens';
+
+// 챗봇이 이해한 산책 조건 요약(WalkConditionCard용). "산책 티켓" 발행 조건 — is_complete=true,
+// feature_labels(안전/편안 중 하나 이상)가 채워지고, user_context에 출발·도착·목표 거리가
+// 갖춰졌을 때만 계산되며, 그 전까지는 null이라 카드 자체가 뜨지 않는다.
+type WalkConditions = {
+  mode: WalkMode;
+  origin: LocationInfo;
+  destination: LocationInfo | null;
+  targetKm: number | null;
+  // oneway_shortest처럼 사용자가 지정한 목표 거리가 아니라 백엔드가 계산한 최단 거리일 때는
+  // "목표 거리를 OOkm로 바꿔줘" 같은 발화로 고칠 대상이 아니므로 연필 아이콘을 숨긴다.
+  targetKmEditable: boolean;
+};
+
+function extractWalkConditions(state: State): WalkConditions | null {
+  if (!state.is_complete) return null;
+  const labels = state.feature_labels;
+  const hasFeatureLabels = !!(labels && (labels.safety || labels.comfort));
+  if (!hasFeatureLabels) return null;
+
+  const ctx = state.user_context;
+  if (!ctx || !ctx.origin) return null;
+
+  if (ctx.mode === WalkMode.CIRCULAR_RANDOM) {
+    const pref = ctx as CircularPreference;
+    if (pref.target_km == null) return null;
+    return {
+      mode: pref.mode,
+      origin: pref.origin!,
+      destination: null,
+      targetKm: pref.target_km,
+      targetKmEditable: true,
+    };
+  }
+
+  const pref = ctx as OnewayPreference | OnewayShortestPreference;
+  if (!pref.destination) return null;
+  const hasOwnTargetKm = 'target_km' in pref;
+  const targetKm = hasOwnTargetKm ? (pref as OnewayPreference).target_km : null;
+  return {
+    mode: pref.mode,
+    origin: pref.origin!,
+    destination: pref.destination,
+    targetKm: targetKm ?? state.shortest_km ?? null,
+    targetKmEditable: hasOwnTargetKm,
+  };
+}
 
 export type ChatConversationHandle = {
   submitAnswer: (answer: string) => void;
@@ -149,6 +203,9 @@ export const ChatConversation = forwardRef(function ChatConversation(
   const [progressSteps, setProgressSteps] = useState<string[]>([]);
   // 직전 응답이 "이 코스로 진행할까요?" 같은 확인 질문이었는지 — true면 예/아니요 버튼을 보여준다.
   const [awaitingConfirmation, setAwaitingConfirmation] = useState(false);
+  // 챗봇이 이해한 산책 조건(WalkConditionCard) — 조건이 갖춰지면 타임라인 위에 고정으로 보여주고,
+  // 이후 응답에서 값이 바뀔 때마다 최신값으로 덮어쓴다(한 번 뜨면 대화가 끝날 때까지 유지).
+  const [conditions, setConditions] = useState<WalkConditions | null>(null);
   // getInitMessage 실패 시 true — hasStartedRef가 재시도를 막아버리지 않도록 별도로 추적한다.
   const [initFailed, setInitFailed] = useState(false);
   const [previewGroupHeight, setPreviewGroupHeight] = useState(0);
@@ -220,6 +277,7 @@ export const ChatConversation = forwardRef(function ChatConversation(
       response: res.state?.response,
     });
     setAwaitingConfirmation(false);
+    if (options?.reset) setConditions(null);
     if (res.status !== ChatStatus.SUCCESS) {
       const text =
         STATUS_MESSAGES[res.status] ??
@@ -231,6 +289,9 @@ export const ChatConversation = forwardRef(function ChatConversation(
       if (SESSION_EXPIRED_STATUSES.has(res.status)) setPhase('session_expired');
       return;
     }
+
+    const nextConditions = res.state ? extractWalkConditions(res.state) : null;
+    if (nextConditions) setConditions(nextConditions);
 
     if (res.thread_id) {
       threadIdRef.current = res.thread_id;
@@ -625,6 +686,17 @@ export const ChatConversation = forwardRef(function ChatConversation(
           ) : awaitingLocation ? (
             <ChatBubble text="위치 정보를 확인하는 중이에요…" />
           ) : null}
+          {conditions ? (
+            <WalkConditionCard
+              origin={conditions.origin}
+              destination={conditions.destination}
+              showDestination={conditions.mode !== WalkMode.CIRCULAR_RANDOM}
+              targetKm={conditions.targetKm}
+              distanceEditable={conditions.targetKmEditable}
+              disabled={sending || phase === 'session_expired'}
+              onEdit={text => submitAnswer(text)}
+            />
+          ) : null}
           {messages.map((message, index) => {
             const routeOffset = routeOffsets[index];
             const bubble =
@@ -651,7 +723,8 @@ export const ChatConversation = forwardRef(function ChatConversation(
               ) : (
                 <MyBubble text={message.text} />
               );
-            // 첫 봇 메시지만 실측해 중간 스냅 높이 계산에 사용한다.
+            // 첫 봇 메시지만 실측해 중간 스냅 높이 계산에 사용한다. 아직 사용자가 아무것도
+            // 입력하지 않은 첫 화면에서는 조건 힌트 카드도 함께 보여준다.
             if (index === 0) {
               return (
                 <View
@@ -662,6 +735,7 @@ export const ChatConversation = forwardRef(function ChatConversation(
                   }
                 >
                   {bubble}
+                  {messages.length === 1 && !sending ? <WalkHintCard /> : null}
                 </View>
               );
             }
