@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Text } from '../Text';
 import { LocationInfo } from '../../types/prewalk';
+import { estimateDistanceKm } from '../../utils/walkEstimate';
 import { colors, radii, spacing } from '../../theme/tokens';
 
 type FieldKey = 'origin' | 'destination' | 'distance';
@@ -62,15 +63,15 @@ export function WalkConditionCard({
 
   const submitDistanceEdit = () => {
     const value = draft.trim();
-    if (!value) {
+    const numeric = Number(value);
+    if (!value || !Number.isFinite(numeric) || numeric <= 0) {
       cancelEdit();
       return;
     }
-    onEdit(
-      distanceUnit === 'km'
-        ? `목표 거리를 ${value}km로 바꿔줘`
-        : `목표 산책 시간을 ${value}분 정도로 바꿔줘`,
-    );
+    // "분" 입력도 체크 버튼을 누르는 즉시 km로 환산해서 보낸다 — 백엔드 응답을 기다려야만
+    // km로 바뀌는 게 아니라, 여기서 바로 확정된 값으로 발화를 만든다.
+    const km = distanceUnit === 'km' ? numeric : estimateDistanceKm(numeric);
+    onEdit(`목표 거리를 ${km}km로 바꿔줘`);
     cancelEdit();
   };
 
