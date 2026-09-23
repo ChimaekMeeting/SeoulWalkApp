@@ -13,9 +13,18 @@ const locationLabel = (info: LocationInfo | null, fallback: string) =>
   info?.place_name ?? info?.address ?? fallback;
 
 /**
+ * 사용자가 방금 입력한 값 — onEdit과 함께 넘겨서 백엔드 응답이 오기 전에 카드가 그 값을
+ * 바로 반영(낙관적 업데이트)할 수 있게 한다. 나중에 실제 응답이 오면 그 값으로 덮어써진다.
+ */
+export type WalkConditionOptimisticEdit =
+  | { field: 'origin' | 'destination'; value: string }
+  | { field: 'distance'; value: number };
+
+/**
  * 챗봇이 이해한 산책 조건(출발/도착/목표 거리)을 요약해 보여주는 카드. 필드마다 연필 아이콘으로
  * 수정할 수 있는데, 값을 직접 상태에 반영하는 게 아니라 "출발지를 OO로 바꿔줘" 같은 자연어
- * 발화를 만들어 onEdit으로 흘려보낸다 — 실제 반영은 항상 백엔드 챗봇 응답을 거친다.
+ * 발화를 만들어 onEdit으로 흘려보낸다 — 실제 반영은 항상 백엔드 챗봇 응답을 거친다(다만 화면에는
+ * optimistic으로 방금 입력한 값을 바로 보여준다).
  */
 export function WalkConditionCard({
   origin,
@@ -32,7 +41,7 @@ export function WalkConditionCard({
   targetKm: number | null;
   distanceEditable: boolean;
   disabled?: boolean;
-  onEdit: (promptText: string) => void;
+  onEdit: (promptText: string, optimistic: WalkConditionOptimisticEdit) => void;
 }) {
   const [editing, setEditing] = useState<FieldKey | null>(null);
   const [draft, setDraft] = useState('');
@@ -57,7 +66,7 @@ export function WalkConditionCard({
       return;
     }
     const label = field === 'origin' ? '출발지' : '목적지';
-    onEdit(`${label}를 ${value}로 바꿔줘`);
+    onEdit(`${label}를 ${value}로 바꿔줘`, { field, value });
     cancelEdit();
   };
 
@@ -71,7 +80,7 @@ export function WalkConditionCard({
     // "분" 입력도 체크 버튼을 누르는 즉시 km로 환산해서 보낸다 — 백엔드 응답을 기다려야만
     // km로 바뀌는 게 아니라, 여기서 바로 확정된 값으로 발화를 만든다.
     const km = distanceUnit === 'km' ? numeric : estimateDistanceKm(numeric);
-    onEdit(`목표 거리를 ${km}km로 바꿔줘`);
+    onEdit(`목표 거리를 ${km}km로 바꿔줘`, { field: 'distance', value: km });
     cancelEdit();
   };
 

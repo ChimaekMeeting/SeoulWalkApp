@@ -41,7 +41,10 @@ import { LoadingBubble } from './LoadingBubble';
 import { RouteCandidate } from './RouteCandidate';
 import { AssistantAvatar } from './AssistantAvatar';
 import { WalkHintCard } from './WalkHintCard';
-import { WalkConditionCard } from './WalkConditionCard';
+import {
+  WalkConditionCard,
+  WalkConditionOptimisticEdit,
+} from './WalkConditionCard';
 import { spacing, colors } from '../../theme/tokens';
 
 // 챗봇이 이해한 산책 조건 요약(WalkConditionCard용). user_context에 출발지와, 순환 모드면
@@ -303,13 +306,13 @@ export const ChatConversation = forwardRef(function ChatConversation(
       hasShownInlineConditionsRef.current = false;
       setPinnedConditions(null);
     }
-    // 처음 조건이 갖춰진 라운드만 타임라인에 끼워 넣고(역사적 기록), 그 이후 바뀌는 값은
-    // 상단 고정 카드로만 반영한다(위 hasShownInlineConditionsRef 주석 참고).
-    let inlineConditions: WalkConditions | null = null;
+    // 조건이 처음 갖춰진 라운드만 타임라인에 인라인으로 끼워 넣는다. 그 다음부터 조건이 다시
+    // 채워지면(웬만하면 매 라운드 — 한 번 정해진 출발/도착은 대화가 끝날 때까지 유지되니까)
+    // 인라인 카드를 지우고 상단 고정 카드로 전환한다 — 카드가 두 개로 겹쳐 보이지 않게.
+    const isFirstConditionsAppearance = !!nextConditions && !hasShownInlineConditionsRef.current;
     if (nextConditions) {
-      if (!hasShownInlineConditionsRef.current) {
+      if (isFirstConditionsAppearance) {
         hasShownInlineConditionsRef.current = true;
-        inlineConditions = nextConditions;
       } else {
         setPinnedConditions(nextConditions);
       }
@@ -335,11 +338,15 @@ export const ChatConversation = forwardRef(function ChatConversation(
     const botText = res.state?.response;
     setMessages(prev => {
       let next = options?.reset ? [] : prev;
+      if (nextConditions && !isFirstConditionsAppearance) {
+        // 상단 고정 카드로 넘어가는 시점 — 남아있던 인라인 카드를 지운다(중복 방지).
+        next = next.filter(m => m.from !== 'conditions');
+      }
       // 확인 질문("이 코스로 진행할까요?") 등 봇 텍스트 바로 위에 조건 요약 카드를 보여준다 —
       // 사용자가 뭘 보고 예/아니요를 누르는지 알 수 있어야 하므로 그 라운드의 봇 말풍선 앞에 둔다.
       // (처음 한 번만 — 이후 갱신은 상단 고정 카드로.)
-      if (inlineConditions) {
-        next = next.concat({ from: 'conditions', conditions: inlineConditions });
+      if (isFirstConditionsAppearance && nextConditions) {
+        next = next.concat({ from: 'conditions', conditions: nextConditions });
       }
       if (botText && !routeReady) {
         next = next.concat({ from: 'bot', text: botText });
@@ -471,6 +478,45 @@ export const ChatConversation = forwardRef(function ChatConversation(
     } finally {
       if (requestId === requestIdRef.current) setSending(false);
     }
+  };
+
+  // WalkConditionCard 편집 — 백엔드 응답이 오기 전에도 방금 입력한 값을 카드에 바로 반영한다
+  // (낙관적 업데이트). 나중에 실제 응답이 오면 applyResponse가 그 값으로 다시 덮어쓴다 —
+  // 예를 들어 존재하지 않는 장소를 입력했다면 백엔드가 거절하면서 원래 값으로 되돌아간다.
+  const applyOptimisticConditionEdit = (
+    conditions: WalkConditions,
+    optimistic: WalkConditionOptimisticEdit,
+  ): WalkConditions => {
+    if (optimistic.field === 'distance') {
+      return { ...conditions, targetKm: optimistic.value };
+    }
+    const info: LocationInfo = {
+      place_name: optimistic.value,
+      address: null,
+      lat: null,
+      lon: null,
+    };
+    return optimistic.field === 'origin'
+      ? { ...conditions, origin: info }
+      : { ...conditions, destination: info };
+  };
+
+  const handleConditionEdit = (
+    text: string,
+    optimistic: WalkConditionOptimisticEdit,
+  ) => {
+    if (pinnedConditions) {
+      setPinnedConditions(applyOptimisticConditionEdit(pinnedConditions, optimistic));
+    } else {
+      setMessages(prev =>
+        prev.map(m =>
+          m.from === 'conditions'
+            ? { ...m, conditions: applyOptimisticConditionEdit(m.conditions, optimistic) }
+            : m,
+        ),
+      );
+    }
+    submitAnswer(text);
   };
 
   // "이 코스로 진행할까요?" 같은 확인 질문에 버튼으로 답한다. 자유 텍스트가 아니라
@@ -694,6 +740,22 @@ export const ChatConversation = forwardRef(function ChatConversation(
 
   return (
     <View style={styles.chatPanel}>
+      {pinnedConditions ? (
+        // 스크롤 콘텐츠 안이 아니라 그 바깥(형제)에 둬서, 대화가 길어져 스크롤해도 화면에서
+        // 안 사라지고 항상 같은 자리에 떠 있게 한다 — 스크롤 콘텐츠의 "맨 위"는 스크롤하면
+        // 같이 밀려 올라가버려서 진짜 고정이 아니었다.
+        <View style={styles.pinnedConditions}>
+          <WalkConditionCard
+            origin={pinnedConditions.origin}
+            destination={pinnedConditions.destination}
+            showDestination={pinnedConditions.mode !== WalkMode.CIRCULAR_RANDOM}
+            targetKm={pinnedConditions.targetKm}
+            distanceEditable={pinnedConditions.targetKmEditable}
+            disabled={sending || phase === 'session_expired'}
+            onEdit={handleConditionEdit}
+          />
+        </View>
+      ) : null}
       <BottomSheetScrollView
         ref={scrollRef}
         style={styles.chatScroll}
@@ -725,17 +787,6 @@ export const ChatConversation = forwardRef(function ChatConversation(
           ) : awaitingLocation ? (
             <ChatBubble text="위치 정보를 확인하는 중이에요…" />
           ) : null}
-          {pinnedConditions ? (
-            <WalkConditionCard
-              origin={pinnedConditions.origin}
-              destination={pinnedConditions.destination}
-              showDestination={pinnedConditions.mode !== WalkMode.CIRCULAR_RANDOM}
-              targetKm={pinnedConditions.targetKm}
-              distanceEditable={pinnedConditions.targetKmEditable}
-              disabled={sending || phase === 'session_expired'}
-              onEdit={text => submitAnswer(text)}
-            />
-          ) : null}
           {messages.map((message, index) => {
             const routeOffset = routeOffsets[index];
             const bubble =
@@ -765,7 +816,7 @@ export const ChatConversation = forwardRef(function ChatConversation(
                   targetKm={message.conditions.targetKm}
                   distanceEditable={message.conditions.targetKmEditable}
                   disabled={sending || phase === 'session_expired'}
-                  onEdit={text => submitAnswer(text)}
+                  onEdit={handleConditionEdit}
                 />
               ) : message.from === 'bot' ? (
                 <ChatBubble text={message.text} />
@@ -832,6 +883,14 @@ const styles = StyleSheet.create({
   chatScroll: {
     flex: 1,
     backgroundColor: '#FFFFFF',
+  },
+  pinnedConditions: {
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.lg,
+    paddingBottom: spacing.sm,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: colors.line,
   },
   chatContent: {
     padding: spacing.lg,
