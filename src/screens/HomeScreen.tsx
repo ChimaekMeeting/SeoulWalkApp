@@ -277,9 +277,11 @@ export const HomeScreen = forwardRef<HomeScreenHandle, HomeScreenProps>(function
                 chatRef.current?.submitConfirmation(true);
                 sheetRef.current?.expand();
               }}
+              disabled={chatSending}
               style={({ pressed }) => [
                 styles.confirmButton,
                 styles.confirmButtonYes,
+                chatSending && styles.confirmButtonDisabled,
                 pressed && styles.confirmButtonPressed,
               ]}
             >
@@ -290,9 +292,11 @@ export const HomeScreen = forwardRef<HomeScreenHandle, HomeScreenProps>(function
                 chatRef.current?.submitConfirmation(false);
                 sheetRef.current?.expand();
               }}
+              disabled={chatSending}
               style={({ pressed }) => [
                 styles.confirmButton,
                 styles.confirmButtonNo,
+                chatSending && styles.confirmButtonDisabled,
                 pressed && styles.confirmButtonPressed,
               ]}
             >
@@ -356,6 +360,9 @@ const styles = StyleSheet.create({
   },
   confirmButtonPressed: {
     opacity: 0.75,
+  },
+  confirmButtonDisabled: {
+    opacity: 0.4,
   },
   confirmButtonYes: {
     backgroundColor: colors.ink,

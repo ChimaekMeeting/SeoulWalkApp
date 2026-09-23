@@ -1,5 +1,4 @@
 import { ActivityIndicator, View, StyleSheet } from 'react-native';
-import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import { Text } from '../Text';
 import { colors, spacing } from '../../theme/tokens';
 import { AssistantAvatar } from './AssistantAvatar';
@@ -17,13 +16,10 @@ export function LoadingBubble({ steps }: Props) {
     <View style={styles.chatLine}>
       <AssistantAvatar />
       <View style={styles.chatBubble}>
-        <Animated.View
-          key={current}
-          entering={FadeIn.duration(220)}
-          exiting={FadeOut.duration(120)}
-        >
-          <Text style={styles.chatText}>{current}</Text>
-        </Animated.View>
+        {/* 이전엔 문구가 바뀔 때마다 FadeIn/FadeOut을 같이 걸었는데, Reanimated가 exiting
+            뷰를 그 자리에 절대 위치로 남겨둔 채 다음 뷰를 그려서 두 문구가 겹쳐 보였다
+            (레이아웃이 알아서 밀어주는 컴포넌트가 아니라서). 애니메이션 없이 바로 교체한다. */}
+        <Text style={styles.chatText}>{current}</Text>
         <ActivityIndicator size="small" color={colors.ink} />
       </View>
     </View>

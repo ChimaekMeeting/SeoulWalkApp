@@ -209,6 +209,12 @@ export const ChatConversation = forwardRef(function ChatConversation(
   const [progressSteps, setProgressSteps] = useState<string[]>([]);
   // 직전 응답이 "이 코스로 진행할까요?" 같은 확인 질문이었는지 — true면 예/아니요 버튼을 보여준다.
   const [awaitingConfirmation, setAwaitingConfirmation] = useState(false);
+  // 산책 조건이 두 번째로 갱신된 뒤부터 보여줄 상단 고정 카드(최신값으로 계속 덮어씀).
+  // 처음 조건이 갖춰졌을 때는 messages 타임라인에 그 라운드 봇 말풍선 바로 위로 한 번 끼워 넣고
+  // (역사적 기록으로 그대로 남음), 그 다음부터 바뀌는 값은 타임라인에 매번 새로 끼우지 않고
+  // 이 상단 고정 카드만 갱신한다 — 안 그러면 조건을 여러 번 고칠 때마다 카드가 계속 쌓인다.
+  const [pinnedConditions, setPinnedConditions] = useState<WalkConditions | null>(null);
+  const hasShownInlineConditionsRef = useRef(false);
   // getInitMessage 실패 시 true — hasStartedRef가 재시도를 막아버리지 않도록 별도로 추적한다.
   const [initFailed, setInitFailed] = useState(false);
   const [previewGroupHeight, setPreviewGroupHeight] = useState(0);
@@ -293,6 +299,21 @@ export const ChatConversation = forwardRef(function ChatConversation(
     }
 
     const nextConditions = res.state ? extractWalkConditions(res.state) : null;
+    if (options?.reset) {
+      hasShownInlineConditionsRef.current = false;
+      setPinnedConditions(null);
+    }
+    // 처음 조건이 갖춰진 라운드만 타임라인에 끼워 넣고(역사적 기록), 그 이후 바뀌는 값은
+    // 상단 고정 카드로만 반영한다(위 hasShownInlineConditionsRef 주석 참고).
+    let inlineConditions: WalkConditions | null = null;
+    if (nextConditions) {
+      if (!hasShownInlineConditionsRef.current) {
+        hasShownInlineConditionsRef.current = true;
+        inlineConditions = nextConditions;
+      } else {
+        setPinnedConditions(nextConditions);
+      }
+    }
 
     if (res.thread_id) {
       threadIdRef.current = res.thread_id;
@@ -316,8 +337,9 @@ export const ChatConversation = forwardRef(function ChatConversation(
       let next = options?.reset ? [] : prev;
       // 확인 질문("이 코스로 진행할까요?") 등 봇 텍스트 바로 위에 조건 요약 카드를 보여준다 —
       // 사용자가 뭘 보고 예/아니요를 누르는지 알 수 있어야 하므로 그 라운드의 봇 말풍선 앞에 둔다.
-      if (nextConditions) {
-        next = next.concat({ from: 'conditions', conditions: nextConditions });
+      // (처음 한 번만 — 이후 갱신은 상단 고정 카드로.)
+      if (inlineConditions) {
+        next = next.concat({ from: 'conditions', conditions: inlineConditions });
       }
       if (botText && !routeReady) {
         next = next.concat({ from: 'bot', text: botText });
@@ -404,6 +426,10 @@ export const ChatConversation = forwardRef(function ChatConversation(
     abortRef.current = new AbortController();
     const { signal } = abortRef.current;
     setMessages(prev => [...prev, { from: 'me', text: answer }]);
+    // 확인 질문(예/아니요) 대기 중에 카드 수정 등 자유 텍스트로 답한 경우 — 그 확인 질문은
+    // 더 이상 유효하지 않으니 버튼을 바로 치운다(안 그러면 이번 요청이 로딩되는 동안 이전
+    // 질문의 예/아니요 버튼이 계속 눌리는 상태로 남는다).
+    setAwaitingConfirmation(false);
     setProgressSteps([]);
     setSending(true);
     try {
@@ -698,6 +724,17 @@ export const ChatConversation = forwardRef(function ChatConversation(
             </View>
           ) : awaitingLocation ? (
             <ChatBubble text="위치 정보를 확인하는 중이에요…" />
+          ) : null}
+          {pinnedConditions ? (
+            <WalkConditionCard
+              origin={pinnedConditions.origin}
+              destination={pinnedConditions.destination}
+              showDestination={pinnedConditions.mode !== WalkMode.CIRCULAR_RANDOM}
+              targetKm={pinnedConditions.targetKm}
+              distanceEditable={pinnedConditions.targetKmEditable}
+              disabled={sending || phase === 'session_expired'}
+              onEdit={text => submitAnswer(text)}
+            />
           ) : null}
           {messages.map((message, index) => {
             const routeOffset = routeOffsets[index];
