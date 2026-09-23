@@ -1,7 +1,9 @@
 import { dedupeRouteHistories } from '../routeHistory';
 import { RouteHistoryItem } from '../../types/routes';
 
-function makeHistory(overrides: Partial<RouteHistoryItem> = {}): RouteHistoryItem {
+function makeHistory(
+  overrides: Partial<RouteHistoryItem> = {},
+): RouteHistoryItem {
   return {
     id: 1,
     mode: 'oneway_shortest',
@@ -17,6 +19,12 @@ function makeHistory(overrides: Partial<RouteHistoryItem> = {}): RouteHistoryIte
     total_km: 1.0,
     is_favorite: false,
     created_at: '2026-09-01T09:00:00.000Z',
+    origin_address: null,
+    origin_place_name: null,
+    destination_address: null,
+    destination_place_name: null,
+    walk_status: 'recommended',
+    walked_on: null,
     ...overrides,
   };
 }
@@ -101,20 +109,38 @@ describe('dedupeRouteHistories', () => {
     };
 
     const histories = [
-      makeHistory({ id: 10, ...routeA, created_at: '2026-09-01T09:00:00.000Z' }),
-      makeHistory({ id: 20, ...routeB, created_at: '2026-09-05T09:00:00.000Z' }),
+      makeHistory({
+        id: 10,
+        ...routeA,
+        created_at: '2026-09-01T09:00:00.000Z',
+      }),
+      makeHistory({
+        id: 20,
+        ...routeB,
+        created_at: '2026-09-05T09:00:00.000Z',
+      }),
     ];
 
     // 서버 created_at만 보면 routeB(9/5)가 위지만, routeA(id 10)를 오늘 다시 걸었다.
     const usage = { '10': Date.parse('2026-09-10T09:00:00.000Z') };
 
-    expect(dedupeRouteHistories(histories, usage).map(h => h.id)).toEqual([10, 20]);
+    expect(dedupeRouteHistories(histories, usage).map(h => h.id)).toEqual([
+      10, 20,
+    ]);
   });
 
   it('그룹에 즐겨찾기된 기록이 하나라도 있으면 대표 카드도 즐겨찾기로 표시한다', () => {
     const result = dedupeRouteHistories([
-      makeHistory({ id: 1, is_favorite: true, created_at: '2026-09-01T09:00:00.000Z' }),
-      makeHistory({ id: 2, is_favorite: false, created_at: '2026-09-02T09:00:00.000Z' }),
+      makeHistory({
+        id: 1,
+        is_favorite: true,
+        created_at: '2026-09-01T09:00:00.000Z',
+      }),
+      makeHistory({
+        id: 2,
+        is_favorite: false,
+        created_at: '2026-09-02T09:00:00.000Z',
+      }),
     ]);
 
     expect(result).toHaveLength(1);

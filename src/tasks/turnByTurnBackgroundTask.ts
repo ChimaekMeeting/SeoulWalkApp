@@ -3,7 +3,10 @@ import * as Location from 'expo-location';
 import * as Notifications from 'expo-notifications';
 import * as Speech from 'expo-speech';
 import { activeWalkSession } from '../utils/activeWalkSession';
-import { decideBackgroundAnnouncement, formatTurnInstruction } from '../utils/turnByTurn';
+import {
+  decideBackgroundAnnouncement,
+  formatTurnInstruction,
+} from '../utils/turnByTurn';
 
 /**
  * 이 태스크 이름으로 useTurnByTurn이 `Location.startLocationUpdatesAsync`를 건다. 안드로이드가
@@ -38,7 +41,8 @@ export const TURN_BY_TURN_LOCATION_OPTIONS: Location.LocationTaskOptions = {
 // 안드로이드가 강제하는 포그라운드 서비스 알림용 — 지속 알림("산책 안내 중")과 겹쳐 보이지 않도록
 // 일부러 다른 제목/문구를 쓴다. useTurnByTurn.ts의 최초 시작 호출에서만 쓰이고 이후 갱신되지 않는다.
 export const TURN_BY_TURN_FOREGROUND_SERVICE_TITLE = '위치 사용 중';
-export const TURN_BY_TURN_FOREGROUND_SERVICE_BODY = '화면이 꺼져도 산책 안내가 계속돼요.';
+export const TURN_BY_TURN_FOREGROUND_SERVICE_BODY =
+  '화면이 꺼져도 산책 안내가 계속돼요.';
 
 const ONGOING_NOTIFICATION_ID = 'turn-by-turn-ongoing';
 
@@ -48,18 +52,21 @@ TaskManager.defineTask(TURN_BY_TURN_LOCATION_TASK, async ({ data, error }) => {
     return;
   }
 
-  const locations = (data as { locations?: Location.LocationObject[] } | undefined)?.locations;
+  const locations = (
+    data as { locations?: Location.LocationObject[] } | undefined
+  )?.locations;
   const latest = locations?.[locations.length - 1];
   if (!latest) return;
 
   const result = await activeWalkSession.read();
   if (!result.ok || !result.session) return;
-  const { route, lastAnnouncedAtKm } = result.session;
+  const { route, maneuvers, lastAnnouncedAtKm } = result.session;
 
   const decision = decideBackgroundAnnouncement(
     route,
     [latest.coords.latitude, latest.coords.longitude],
     lastAnnouncedAtKm,
+    maneuvers,
   );
   if (!decision.step) return;
 
@@ -76,7 +83,10 @@ TaskManager.defineTask(TURN_BY_TURN_LOCATION_TASK, async ({ data, error }) => {
   }).catch(() => {});
 
   if (decision.shouldAnnounce) {
-    const text = formatTurnInstruction(decision.step.kind, decision.distanceToKm);
+    const text = formatTurnInstruction(
+      decision.step.kind,
+      decision.distanceToKm,
+    );
     await Notifications.scheduleNotificationAsync({
       content: { title: '턴 안내', body: text, sound: true },
       trigger: null,

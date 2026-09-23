@@ -17,7 +17,10 @@ type MaterialIconName = React.ComponentProps<typeof MaterialIcons>['name'];
 // 따로 있어서(u-turn-left/right) angleDeg 부호로 고른다(아래 iconNameFor). sharp_left/sharp_right는
 // Material 프리셋(turn-sharp-*)이 둥글게 이어져 있어서 아래 SharpTurnArrow(직선으로 각지게 꺾이는
 // 모양, 손으로 그린 참고 스케치 기준)로 직접 그린다.
-const TURN_KIND_ICON: Record<Exclude<TurnKind, 'arrive' | 'uturn'>, MaterialIconName> = {
+const TURN_KIND_ICON: Record<
+  Exclude<TurnKind, 'arrive' | 'uturn'>,
+  MaterialIconName
+> = {
   slight_left: 'turn-slight-left',
   left: 'turn-left',
   sharp_left: 'turn-sharp-left', // renderIcon이 sharp_*를 먼저 가로채므로 실사용 안 함(타입 완전성용)
@@ -28,15 +31,16 @@ const TURN_KIND_ICON: Record<Exclude<TurnKind, 'arrive' | 'uturn'>, MaterialIcon
 
 function iconNameFor(step: TurnStep): MaterialIconName {
   if (step.kind === 'arrive') return 'flag';
-  if (step.kind === 'uturn') return step.angleDeg >= 0 ? 'u-turn-right' : 'u-turn-left';
+  if (step.kind === 'uturn')
+    return step.angleDeg >= 0 ? 'u-turn-right' : 'u-turn-left';
   return TURN_KIND_ICON[step.kind];
 }
 
 /**
  * 산책 중 화면 상단에 다음 턴 안내를 보여주는 배너(WalkInProgressScreen 전용). step이 없으면
  * (턴이 없는 완전 직선 코스거나 이미 다 지나온 경우) 아무것도 렌더하지 않는다.
- * utils/turnByTurn.ts가 route 좌표만으로 계산한 턴을 kind별 고정 화살표 모양 + 문구로 표시한다 —
- * 백엔드 maneuver 데이터 없이 프론트 기하 계산만으로 동작.
+ * utils/turnByTurn.ts(resolveTurnSteps — 백엔드 maneuvers 우선, 없으면 기하 계산 폴백)가 만든
+ * TurnStep을 kind별 고정 화살표 모양 + 문구로 표시한다. 이 컴포넌트는 턴이 어디서 왔는지 몰라도 된다.
  */
 export function TurnByTurnBanner({ step, distanceToKm }: Props) {
   if (!step) return null;
@@ -46,9 +50,15 @@ export function TurnByTurnBanner({ step, distanceToKm }: Props) {
     <View style={styles.container}>
       <View style={styles.iconWrap}>
         {isSharp ? (
-          <SharpTurnArrow direction={step.kind === 'sharp_left' ? 'left' : 'right'} />
+          <SharpTurnArrow
+            direction={step.kind === 'sharp_left' ? 'left' : 'right'}
+          />
         ) : (
-          <MaterialIcons name={iconNameFor(step)} size={22} color={colors.card} />
+          <MaterialIcons
+            name={iconNameFor(step)}
+            size={22}
+            color={colors.card}
+          />
         )}
       </View>
       <Text style={styles.text} numberOfLines={1}>
@@ -91,7 +101,12 @@ function SharpTurnArrow({ direction }: { direction: 'left' | 'right' }) {
   return (
     <View style={{ width: GLYPH, height: GLYPH }}>
       {/* 곧게 올라가는 구간 — 피벗(centerX, PIVOT_Y)까지. */}
-      <View style={[styles.bar, { left: centerX - BAR_W / 2, top: PIVOT_Y, height: TAIL_LEN }]} />
+      <View
+        style={[
+          styles.bar,
+          { left: centerX - BAR_W / 2, top: PIVOT_Y, height: TAIL_LEN },
+        ]}
+      />
       {/* 꺾이는 구간 — 피벗을 축으로 135° 회전, 끝은 tipX/tipY로. */}
       <View
         style={[

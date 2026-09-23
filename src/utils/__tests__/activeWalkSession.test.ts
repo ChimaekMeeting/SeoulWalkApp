@@ -28,19 +28,26 @@ describe('activeWalkSession', () => {
   it('write한 세션을 read로 그대로 돌려받는다', async () => {
     await activeWalkSession.write({
       route: ROUTE,
+      maneuvers: null,
       lastAnnouncedAtKm: null,
       startedAt: 1000,
     });
     const result = await activeWalkSession.read();
     expect(result).toEqual({
       ok: true,
-      session: { route: ROUTE, lastAnnouncedAtKm: null, startedAt: 1000 },
+      session: {
+        route: ROUTE,
+        maneuvers: null,
+        lastAnnouncedAtKm: null,
+        startedAt: 1000,
+      },
     });
   });
 
   it('update는 세션이 있을 때만 지정한 필드만 바꾼다', async () => {
     await activeWalkSession.write({
       route: ROUTE,
+      maneuvers: null,
       lastAnnouncedAtKm: null,
       startedAt: 1000,
     });
@@ -58,6 +65,7 @@ describe('activeWalkSession', () => {
   it('clear 후에는 read가 세션 없음을 돌려준다', async () => {
     await activeWalkSession.write({
       route: ROUTE,
+      maneuvers: null,
       lastAnnouncedAtKm: null,
       startedAt: 1000,
     });
@@ -72,7 +80,23 @@ describe('activeWalkSession', () => {
   });
 
   it('파싱은 되지만 route가 없는 예전/손상된 스키마는 세션 없음으로 취급한다', async () => {
-    await AsyncStorage.setItem('active_walk_session_v1', JSON.stringify({ foo: 'bar' }));
+    await AsyncStorage.setItem(
+      'active_walk_session_v1',
+      JSON.stringify({ foo: 'bar' }),
+    );
     expect(await activeWalkSession.read()).toEqual({ ok: true, session: null });
+  });
+
+  it('maneuvers 필드가 생기기 전에 저장된 세션(route/startedAt만 있음)은 maneuvers를 null로 채운다', async () => {
+    await AsyncStorage.setItem(
+      'active_walk_session_v1',
+      JSON.stringify({
+        route: ROUTE,
+        lastAnnouncedAtKm: null,
+        startedAt: 1000,
+      }),
+    );
+    const result = await activeWalkSession.read();
+    expect(result.ok && result.session?.maneuvers).toBeNull();
   });
 });

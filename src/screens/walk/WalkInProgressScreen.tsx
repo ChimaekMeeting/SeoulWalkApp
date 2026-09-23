@@ -1,7 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { Text } from '../../components/Text';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from 'react-native-safe-area-context';
 import { Pedometer } from 'expo-sensors';
 import { RouteMapView } from '../../components/map';
 import { Button } from '../../components/Button';
@@ -83,6 +86,7 @@ export function WalkInProgressScreen({
     routeResult.coordinates,
     progress.routeProgressKm,
     backgroundLocationGranted,
+    routeResult.maneuvers,
   );
 
   useEffect(() => {
@@ -103,7 +107,12 @@ export function WalkInProgressScreen({
   }, []);
 
   const currentLocation = coords
-    ? { lat: coords.latitude, lon: coords.longitude, address: null, place_name: null }
+    ? {
+        lat: coords.latitude,
+        lon: coords.longitude,
+        address: null,
+        place_name: null,
+      }
     : null;
 
   const buildSnapshot = (): WalkEndSnapshot => ({
@@ -131,14 +140,23 @@ export function WalkInProgressScreen({
 
   return (
     <View style={styles.container}>
-      <SafeAreaView style={styles.statsSection} edges={['top', 'left', 'right']}>
+      <SafeAreaView
+        style={styles.statsSection}
+        edges={['top', 'left', 'right']}
+      >
         <TurnByTurnBanner
           step={turnPreview ?? turnByTurn.step}
-          distanceToKm={turnPreview ? TURN_PREVIEW_DISTANCE_KM : turnByTurn.distanceToKm}
+          distanceToKm={
+            turnPreview ? TURN_PREVIEW_DISTANCE_KM : turnByTurn.distanceToKm
+          }
         />
         <View style={styles.statsHeader}>
-          <Text style={styles.traveledKm}>{progress.routeProgressKm.toFixed(1)} km</Text>
-          <Text style={styles.goalKm}>목표 {routeResult.total_km.toFixed(1)}km</Text>
+          <Text style={styles.traveledKm}>
+            {progress.routeProgressKm.toFixed(1)} km
+          </Text>
+          <Text style={styles.goalKm}>
+            목표 {routeResult.total_km.toFixed(1)}km
+          </Text>
         </View>
         <View style={styles.progressTrack}>
           <View
@@ -176,14 +194,24 @@ export function WalkInProgressScreen({
               <DevLocationChips routeCoords={routeResult.coordinates} />
               {/* 턴 아이콘/문구 전체 종류를 실제 경로 없이 훑어보기 위한 미리보기 칩. */}
               {TURN_PREVIEW_STEPS.map(({ label, step }) => (
-                <DevChip key={label} label={label} onPress={() => setTurnPreview(step)} />
+                <DevChip
+                  key={label}
+                  label={label}
+                  onPress={() => setTurnPreview(step)}
+                />
               ))}
               {turnPreview ? (
-                <DevChip label="턴 미리보기 끄기" onPress={() => setTurnPreview(null)} />
-              ) : null}
-              {originalRouteCoordinates && originalRouteCoordinates.length > 1 ? (
                 <DevChip
-                  label={showOriginalRoute ? '원본 경로 숨기기' : '원본 경로 보기'}
+                  label="턴 미리보기 끄기"
+                  onPress={() => setTurnPreview(null)}
+                />
+              ) : null}
+              {originalRouteCoordinates &&
+              originalRouteCoordinates.length > 1 ? (
+                <DevChip
+                  label={
+                    showOriginalRoute ? '원본 경로 숨기기' : '원본 경로 보기'
+                  }
                   onPress={() => setShowOriginalRoute(v => !v)}
                 />
               ) : null}
@@ -198,13 +226,23 @@ export function WalkInProgressScreen({
           currentLocation={currentLocation}
           route={routeResult.coordinates}
           routeProgressKm={progress.routeProgressKm}
-          debugOverlayRoute={showOriginalRoute ? originalRouteCoordinates : undefined}
+          debugOverlayRoute={
+            showOriginalRoute ? originalRouteCoordinates : undefined
+          }
           style={StyleSheet.absoluteFill}
           zoomControlBottomOffset={96 + insets.bottom}
         />
 
-        <SafeAreaView style={styles.bottomOverlay} edges={['bottom']} pointerEvents="box-none">
-          <Button label="■ 산책 종료" onPress={handleEnd} style={styles.endButton} />
+        <SafeAreaView
+          style={styles.bottomOverlay}
+          edges={['bottom']}
+          pointerEvents="box-none"
+        >
+          <Button
+            label="■ 산책 종료"
+            onPress={handleEnd}
+            style={styles.endButton}
+          />
         </SafeAreaView>
       </View>
     </View>

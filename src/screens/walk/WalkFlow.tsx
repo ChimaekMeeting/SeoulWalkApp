@@ -1,7 +1,11 @@
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { LocationInfo, WalkRouteResponse } from '../../types/prewalk';
 import { WalkEndSnapshot, WalkExitEvent, WalkRatings } from '../../types/walk';
-import { submitRouteFeedback } from '../../api/routes';
+import {
+  completeWalkRoute,
+  startWalkRoute,
+  submitRouteFeedback,
+} from '../../api/routes';
 import { useAndroidBackHandler } from '../../hooks/useAndroidBackHandler';
 import { useBackgroundLocationPermission } from '../../hooks/useBackgroundLocationPermission';
 import { WalkPrepScreen } from './WalkPrepScreen';
@@ -57,6 +61,18 @@ export function WalkFlow({
   // 종착점 geofence 도달(endReason)로 완주/조기 종료를 구분한다. 세션 리셋 판단에는 영향 없고
   // (둘 다 actualWalkingStarted=true) 통계·분석용 구분이다.
   const completedRoute = snapshot?.endReason === 'destination_arrived';
+  // POST .../complete는 호출 자체가 "완주했다"는 뜻이라(본문 없음) 실제 완주일 때만, 딱 한 번 불러야
+  // 한다 — rating 화면에서 뒤로가 complete 단계에 다시 들어와도 중복 호출되지 않도록 ref로 막는다.
+  const completeCalledRef = useRef(false);
+  useEffect(() => {
+    if (stage !== 'complete' || !completedRoute || walkRoute.id == null) return;
+    if (completeCalledRef.current) return;
+    completeCalledRef.current = true;
+    // 진행 상태 기록은 산책 완료 화면 진입을 막을 이유가 없는 부가 정보라 실패해도 흐름은 그대로 둔다.
+    completeWalkRoute(walkRoute.id).catch(err =>
+      console.warn('[WalkFlow] completeWalkRoute 실패:', err),
+    );
+  }, [stage, completedRoute, walkRoute.id]);
 
   const exitFromComplete = useCallback(() => {
     onExitToHome({
@@ -90,9 +106,13 @@ export function WalkFlow({
           exitFromComplete();
           return;
         }
-        setFeedbackError('별점을 저장하지 못했어요. 잠시 후 다시 시도해 주세요.');
+        setFeedbackError(
+          '별점을 저장하지 못했어요. 잠시 후 다시 시도해 주세요.',
+        );
       } catch {
-        setFeedbackError('별점을 저장하지 못했어요. 네트워크 연결을 확인해 주세요.');
+        setFeedbackError(
+          '별점을 저장하지 못했어요. 네트워크 연결을 확인해 주세요.',
+        );
       } finally {
         setFeedbackSubmitting(false);
       }
@@ -104,7 +124,10 @@ export function WalkFlow({
   // (모달이 떠 있을 땐 RN Modal의 onRequestClose가 back을 가로채므로 여기까지 오지 않는다.)
   const handleAndroidBack = useCallback(() => {
     if (stage === 'prep') {
-      onExitToHome({ reason: 'cancelled_before_start', actualWalkingStarted: false });
+      onExitToHome({
+        reason: 'cancelled_before_start',
+        actualWalkingStarted: false,
+      });
       return true;
     }
     if (stage === 'walking') {
@@ -118,7 +141,13 @@ export function WalkFlow({
     // 평가는 선택사항이다. 완료 요약 화면에서 뒤로가면 홈으로 나간다.
     exitFromComplete();
     return true;
-  }, [stage, endConfirmVisible, goalModalVisible, onExitToHome, exitFromComplete]);
+  }, [
+    stage,
+    endConfirmVisible,
+    goalModalVisible,
+    onExitToHome,
+    exitFromComplete,
+  ]);
   useAndroidBackHandler(handleAndroidBack);
 
   if (stage === 'prep') {
@@ -136,7 +165,15 @@ export function WalkFlow({
           walkingStartedRef.current = true;
           // 방향 전환 안 했으면(같은 배열 참조) routeResult를 그대로 써서 불필요한 객체를 안 만든다.
           frozenRouteRef.current =
-            coordinates === routeResult.coordinates ? routeResult : { ...routeResult, coordinates };
+            coordinates === routeResult.coordinates
+              ? routeResult
+              : { ...routeResult, coordinates };
+          // RouteHistory로 자동 저장되지 않은 경로면(id 없음) 호출할 대상이 없다 — 조용히 건너뛴다.
+          if (routeResult.id != null) {
+            startWalkRoute(routeResult.id).catch(err =>
+              console.warn('[WalkFlow] startWalkRoute 실패:', err),
+            );
+          }
           setStage('walking');
         }}
         onBack={() =>

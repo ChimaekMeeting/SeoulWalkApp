@@ -1,0 +1,91 @@
+name: OTA / Build on merge to dev
+
+# dev에 머지(푸시)될 때마다 테스터 채널(production-apk)에 자동 배포한다.
+# 네이티브 코드가 안 바뀌었으면 OTA(eas update)만, 바뀌었으면 새 빌드(eas build)까지 자동으로 돈다 —
+# 판단은 expo/expo-github-action/continuous-deploy-fingerprint가 머지 전/후 커밋의 네이티브
+# fingerprint를 비교해서 내린다. docs/DEPLOYMENT.md 2.3에 있던 "OTA 써도 되는 기준"(네이티브를
+# 건드렸는가)과 같은 판단을 사람이 매번 기억하지 않아도 되게 자동화한 것.
+#
+# 일부러 안 건드리는 것: 스토어 정식 출시(eas submit). 실제 사용자에게 바로 노출되는, 되돌리기
+# 어려운 액션이라 docs/DEPLOYMENT.md 2.2 그대로 수동으로 남겨둔다(이 워크플로는 --auto-submit을
+# 켜지 않는다).
+#
+# 사전 준비(1회, 사람이 해야 함):
+#  1. GitHub 저장소 Settings → Secrets and variables → Actions → EXPO_TOKEN 추가.
+#     `npx eas-cli login` 후 https://expo.dev/accounts/[조직]/settings/access-tokens 에서 발급.
+#  2. `eas channel:list`로 production-apk 채널에 실제로 연결된 EAS Update 브랜치 이름을 확인하고,
+#     아래 deploy 잡의 `branch:` 값이 그것과 일치하는지 확인(다르면 배포가 조용히 아무 기기에도
+#     안 뜨는 채로 "성공"해버린다 — 반드시 최초 1회는 확인).
+#  3. production-apk 프로파일로 최소 한 번은 로컬에서
+#     `eas build --profile production-apk --platform android`를 돌려 서명 자격 증명을 만들어둬야
+#     한다 — CI가 처음부터 credentials를 새로 만들지는 않는다.
+
+on:
+  push:
+    branches: [dev]
+
+env:
+  EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 저장소 체크아웃
+        uses: actions/checkout@v4
+
+      - name: Node 설치
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: 의존성 설치
+        run: npm ci
+
+      - name: 타입 체크
+        run: npm run typecheck
+
+      - name: 린트
+        run: npm run lint
+
+      - name: 테스트
+        # App.test.tsx는 @rnmapbox/maps 네이티브 모듈이 Jest 환경에 없어 실패하는 기존 이슈라
+        # jest.ci.config.js에서 제외한다(로컬 `npm test`는 그대로 포함).
+        run: npm run test:ci
+
+  deploy:
+    needs: verify
+    runs-on: ubuntu-latest
+    concurrency: ota-deploy-production-apk
+    permissions:
+      contents: read
+    steps:
+      - name: 저장소 체크아웃
+        uses: actions/checkout@v4
+
+      - name: Node 설치
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: 의존성 설치
+        run: npm ci
+
+      - name: EAS 인증
+        uses: expo/expo-github-action@main
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: fingerprint 비교 후 OTA 또는 빌드
+        uses: expo/expo-github-action/continuous-deploy-fingerprint@main
+        with:
+          profile: production-apk
+          # eas.json의 production-apk 빌드 프로파일과 같은 환경 변수 세트를 쓰게 맞춘다.
+          environment: production
+          # ⚠️ eas.json엔 "channel: production-apk"만 있고 EAS Update 브랜치 이름은 안 적혀
+          # 있다 — 관례상 채널명과 같게(production-apk) 만들어졌다고 가정한 값이다. 다르면
+          # 위 "사전 준비 2"대로 `eas channel:list`로 확인 후 이 값을 고쳐야 한다.
+          branch: production-apk

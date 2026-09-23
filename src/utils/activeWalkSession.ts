@@ -1,10 +1,12 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { WalkRouteResponse } from '../types/prewalk';
+import { Maneuver, WalkRouteResponse } from '../types/prewalk';
 
 const ACTIVE_WALK_SESSION_KEY = 'active_walk_session_v1';
 
 export interface ActiveWalkSession {
   route: WalkRouteResponse['coordinates'];
+  /** 백엔드 턴바이턴 maneuvers(있으면). 없으면 백그라운드 태스크도 route 기하 계산으로 폴백한다. */
+  maneuvers: Maneuver[] | null;
   /** 알림·TTS로 이미 안내한 턴의 atKm(중복 안내 방지). 포그라운드 훅과 백그라운드 태스크가 공유. */
   lastAnnouncedAtKm: number | null;
   startedAt: number;
@@ -32,13 +34,19 @@ export const activeWalkSession = {
       if (raw == null) return { ok: true, session: null };
       const parsed = JSON.parse(raw) as Partial<ActiveWalkSession> | null;
       // 손상된 JSON이나 예전 스키마가 남아있으면 "세션 없음"으로 취급(형태 최소 방어).
-      if (!parsed || !Array.isArray(parsed.route) || typeof parsed.startedAt !== 'number') {
+      if (
+        !parsed ||
+        !Array.isArray(parsed.route) ||
+        typeof parsed.startedAt !== 'number'
+      ) {
         return { ok: true, session: null };
       }
       return {
         ok: true,
         session: {
           route: parsed.route,
+          // 이 필드가 생기기 전에 저장된 세션(앱 업데이트 중 산책 중이던 경우)엔 없을 수 있어 방어.
+          maneuvers: Array.isArray(parsed.maneuvers) ? parsed.maneuvers : null,
           lastAnnouncedAtKm: parsed.lastAnnouncedAtKm ?? null,
           startedAt: parsed.startedAt,
         },
@@ -51,14 +59,21 @@ export const activeWalkSession = {
 
   write: async (session: ActiveWalkSession): Promise<void> => {
     try {
-      await AsyncStorage.setItem(ACTIVE_WALK_SESSION_KEY, JSON.stringify(session));
+      await AsyncStorage.setItem(
+        ACTIVE_WALK_SESSION_KEY,
+        JSON.stringify(session),
+      );
     } catch (error) {
       console.warn('[activeWalkSession] 저장 실패:', error);
     }
   },
 
   /** 세션이 있을 때만 일부 필드를 갱신한다(route 재전송 없이). 세션이 없으면 아무 일도 안 한다. */
-  update: async (patch: Partial<Omit<ActiveWalkSession, 'route' | 'startedAt'>>): Promise<void> => {
+  update: async (
+    patch: Partial<
+      Omit<ActiveWalkSession, 'route' | 'maneuvers' | 'startedAt'>
+    >,
+  ): Promise<void> => {
     const result = await activeWalkSession.read();
     if (!result.ok || !result.session) return;
     await activeWalkSession.write({ ...result.session, ...patch });

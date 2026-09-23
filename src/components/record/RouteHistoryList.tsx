@@ -31,24 +31,33 @@ interface HistoryData {
 }
 
 export function RouteHistoryList({ filter, onSelectRoute }: Props) {
-  // 'completed'(완주한 경로)는 백엔드가 아직 완주 여부를 내려주지 않아 API를 호출하지 않는다.
-  // 값이 생기면 getRouteHistories에 파라미터를 추가하고 이 분기를 없애면 된다.
-  const isBackedByServer = filter !== 'completed';
-
   // 서버 기록 + 로컬 재산책 시각을 한 번에. 콜드스타트로 느리거나 실패하면 훅이 재시도하고,
   // 탭을 나갔다 들어오면 지난 목록을 즉시 보여준 뒤(세션 캐시) 뒤에서 갱신한다.
   const { data, loading, error, mutate } = useCachedResource<HistoryData>({
     key: `routeHistories:${filter}`,
-    enabled: isBackedByServer,
     fetcher: async () => {
-      const [res, usage] = await Promise.all([
-        getRouteHistories({
-          limit: 20,
-          is_favorite: filter === 'favorite' ? true : undefined,
-        }),
+      // 'recent'(최근 경로)는 "한 번이라도 시작한 모든 경로"라 in_progress·completed 두 상태를
+      // 각각 조회해 합친다 — 서버가 walk_status를 OR로 걸러주는 파라미터는 없다. 두 요청 다
+      // created_at 내림차순으로 오므로, 합친 뒤 dedupeRouteHistories가 다시 정렬해준다.
+      const historyRequests =
+        filter === 'recent'
+          ? [
+              getRouteHistories({ limit: 20, walk_status: 'in_progress' }),
+              getRouteHistories({ limit: 20, walk_status: 'completed' }),
+            ]
+          : [
+              getRouteHistories({
+                limit: 20,
+                is_favorite: filter === 'favorite' ? true : undefined,
+                walk_status: filter === 'completed' ? 'completed' : undefined,
+              }),
+            ];
+      const [responses, usage] = await Promise.all([
+        Promise.all(historyRequests),
         getRecentRouteUsage(),
       ]);
-      return { histories: res.histories, usage };
+      const histories = responses.flatMap(res => res.histories);
+      return { histories, usage };
     },
     logLabel: '[RouteHistoryList]',
   });
@@ -74,19 +83,24 @@ export function RouteHistoryList({ filter, onSelectRoute }: Props) {
     }
   };
 
-  if (!isBackedByServer) {
-    return <Text style={styles.historyEmptyText}>완주한 경로 기능은 준비 중이에요.</Text>;
-  }
   if (loading) {
     return <Text style={styles.historyEmptyText}>불러오는 중...</Text>;
   }
   if (error) {
-    return <Text style={styles.historyEmptyText}>경로 기록을 불러오지 못했어요.</Text>;
+    return (
+      <Text style={styles.historyEmptyText}>
+        경로 기록을 불러오지 못했어요.
+      </Text>
+    );
   }
   if (visibleHistories.length === 0) {
     return (
       <Text style={styles.historyEmptyText}>
-        {filter === 'favorite' ? '즐겨찾기한 경로가 없어요.' : '아직 산책 기록이 없어요.'}
+        {filter === 'favorite'
+          ? '즐겨찾기한 경로가 없어요.'
+          : filter === 'completed'
+          ? '아직 완주한 경로가 없어요.'
+          : '아직 산책 기록이 없어요.'}
       </Text>
     );
   }
@@ -102,7 +116,10 @@ export function RouteHistoryList({ filter, onSelectRoute }: Props) {
             onPress={() => onSelectRoute(routeHistoryToWalkRoute(history))}
           >
             {thumbnailUrl ? (
-              <Image source={{ uri: thumbnailUrl }} style={styles.historyThumb} />
+              <Image
+                source={{ uri: thumbnailUrl }}
+                style={styles.historyThumb}
+              />
             ) : (
               <View style={styles.historyThumb} />
             )}
@@ -112,16 +129,21 @@ export function RouteHistoryList({ filter, onSelectRoute }: Props) {
               </Text>
               <HistoryPlaceLabel history={history} />
               <Text style={styles.historyCardMeta}>
-                {history.total_km.toFixed(1)}km · 약 {estimateDurationMinutes(history.total_km)}분
+                {history.total_km.toFixed(1)}km · 약{' '}
+                {estimateDurationMinutes(history.total_km)}분
               </Text>
-              <Text style={styles.historyCardDate}>{formatHistoryDate(history.created_at)}</Text>
+              <Text style={styles.historyCardDate}>
+                {formatHistoryDate(history.created_at)}
+              </Text>
             </View>
             <Pressable
               onPress={() => handleToggleFavorite(history.id)}
               hitSlop={8}
               style={styles.historyCardStar}
             >
-              <Text style={styles.starText}>{history.is_favorite ? '★' : '☆'}</Text>
+              <Text style={styles.starText}>
+                {history.is_favorite ? '★' : '☆'}
+              </Text>
             </Pressable>
           </Pressable>
         );

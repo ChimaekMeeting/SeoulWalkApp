@@ -3,16 +3,22 @@ import {
   decideBackgroundAnnouncement,
   findNextTurnStep,
   formatTurnInstruction,
+  maneuversToTurnSteps,
+  resolveTurnSteps,
   TurnStep,
 } from '../turnByTurn';
 import { haversineDistanceKm, polylineLengthKm } from '../geo';
-import { WalkRouteResponse } from '../../types/prewalk';
+import { Maneuver, WalkRouteResponse } from '../../types/prewalk';
 
 const START: [number, number] = [37.5, 127.0];
 
 /** from에서 bearingDeg 방향으로 km만큼 떨어진 좌표(평면 근사 — 테스트용, 다른 테스트 파일의
  * offsetEastM과 같은 수준의 근사치). */
-function destPoint(from: [number, number], bearingDegVal: number, km: number): [number, number] {
+function destPoint(
+  from: [number, number],
+  bearingDegVal: number,
+  km: number,
+): [number, number] {
   const rad = (bearingDegVal * Math.PI) / 180;
   const dLat = (km / 111.32) * Math.cos(rad);
   const kmPerDegLon = 111.32 * Math.cos((from[0] * Math.PI) / 180);
@@ -95,6 +101,184 @@ describe('buildTurnSteps', () => {
   });
 });
 
+/** 필드 대부분을 기본값으로 채운 Maneuver — 테스트마다 필요한 필드만 덮어쓴다. */
+function makeManeuver(
+  overrides: Partial<Maneuver> & Pick<Maneuver, 'sequence' | 'type'>,
+): Maneuver {
+  return {
+    instruction: '',
+    location: [0, 0],
+    node_id: null,
+    distance_from_start_m: 0,
+    distance_to_maneuver_m: 0,
+    bearing_before_deg: null,
+    bearing_after_deg: null,
+    turn_angle_deg: null,
+    ...overrides,
+  };
+}
+
+describe('maneuversToTurnSteps', () => {
+  it('start·arrive만 있고 회전이 없으면 arrive 스텝 하나만 남는다(start는 제외)', () => {
+    const maneuvers = [
+      makeManeuver({ sequence: 0, type: 'start', bearing_after_deg: 90 }),
+      makeManeuver({
+        sequence: 1,
+        type: 'arrive',
+        distance_from_start_m: 2000,
+        bearing_before_deg: 90,
+      }),
+    ];
+    const steps = maneuversToTurnSteps(maneuvers);
+    expect(steps).toEqual([{ atKm: 2, kind: 'arrive', angleDeg: 0 }]);
+  });
+
+  it('bearing_before/after 차이로 좌/우/유턴을 분류하고 atKm을 m→km로 변환한다', () => {
+    const maneuvers = [
+      makeManeuver({ sequence: 0, type: 'start', bearing_after_deg: 90 }),
+      makeManeuver({
+        sequence: 1,
+        type: 'left', // 백엔드 type은 참고만 — 실제 분류는 bearing 차이로 다시 계산한다
+        distance_from_start_m: 889,
+        bearing_before_deg: 90,
+        bearing_after_deg: 0,
+        turn_angle_deg: 90,
+      }),
+      makeManeuver({
+        sequence: 2,
+        type: 'arrive',
+        distance_from_start_m: 2000,
+        bearing_before_deg: 0,
+      }),
+    ];
+    const steps = maneuversToTurnSteps(maneuvers);
+    expect(steps).toEqual([
+      { atKm: 0.889, kind: 'left', angleDeg: -90 },
+      { atKm: 2, kind: 'arrive', angleDeg: 0 },
+    ]);
+  });
+
+  it('유턴(bearing 차이 >= 150도)도 분류된다', () => {
+    const maneuvers = [
+      makeManeuver({ sequence: 0, type: 'start', bearing_after_deg: 0 }),
+      makeManeuver({
+        sequence: 1,
+        type: 'u_turn',
+        distance_from_start_m: 500,
+        bearing_before_deg: 0,
+        bearing_after_deg: 170,
+      }),
+      makeManeuver({
+        sequence: 2,
+        type: 'arrive',
+        distance_from_start_m: 1000,
+        bearing_before_deg: 170,
+      }),
+    ];
+    const turns = maneuversToTurnSteps(maneuvers)!.filter(
+      s => s.kind !== 'arrive',
+    );
+    expect(turns).toHaveLength(1);
+    expect(turns[0].kind).toBe('uturn');
+  });
+
+  it('TURN_MIN_ANGLE_DEG(25도) 미만인 회전은 버린다(백엔드는 15도 기준으로 걸러 보낸다)', () => {
+    const maneuvers = [
+      makeManeuver({ sequence: 0, type: 'start', bearing_after_deg: 0 }),
+      makeManeuver({
+        sequence: 1,
+        type: 'right',
+        distance_from_start_m: 300,
+        bearing_before_deg: 0,
+        bearing_after_deg: 18, // 15~25도 사이 — 백엔드는 통과시키지만 프론트 기준엔 못 미침
+      }),
+      makeManeuver({
+        sequence: 2,
+        type: 'arrive',
+        distance_from_start_m: 600,
+        bearing_before_deg: 18,
+      }),
+    ];
+    const steps = maneuversToTurnSteps(maneuvers);
+    expect(steps).toEqual([{ atKm: 0.6, kind: 'arrive', angleDeg: 0 }]);
+  });
+
+  it('sequence 순서가 뒤섞여 와도 정렬해서 처리한다', () => {
+    const maneuvers = [
+      makeManeuver({
+        sequence: 2,
+        type: 'arrive',
+        distance_from_start_m: 1000,
+        bearing_before_deg: 90,
+      }),
+      makeManeuver({ sequence: 0, type: 'start', bearing_after_deg: 0 }),
+      makeManeuver({
+        sequence: 1,
+        type: 'right',
+        distance_from_start_m: 400,
+        bearing_before_deg: 0,
+        bearing_after_deg: 90,
+      }),
+    ];
+    const steps = maneuversToTurnSteps(maneuvers);
+    expect(steps).toEqual([
+      { atKm: 0.4, kind: 'right', angleDeg: 90 },
+      { atKm: 1, kind: 'arrive', angleDeg: 0 },
+    ]);
+  });
+
+  it('arrive가 없으면(데이터 이상) null을 돌려준다', () => {
+    const maneuvers = [
+      makeManeuver({ sequence: 0, type: 'start', bearing_after_deg: 0 }),
+    ];
+    expect(maneuversToTurnSteps(maneuvers)).toBeNull();
+  });
+});
+
+describe('resolveTurnSteps', () => {
+  const ROUTE = buildPath(START, 0, [
+    [0, 0.35],
+    [90, 0.3],
+  ]);
+
+  it('maneuvers가 있으면 우선 쓰고 buildTurnSteps는 무시한다', () => {
+    const maneuvers = [
+      makeManeuver({ sequence: 0, type: 'start', bearing_after_deg: 0 }),
+      makeManeuver({
+        sequence: 1,
+        type: 'left', // route 기하로는 우회전이지만, maneuvers 우선이라 이 값이 이겨야 한다
+        distance_from_start_m: 100,
+        bearing_before_deg: 0,
+        bearing_after_deg: 270,
+      }),
+      makeManeuver({
+        sequence: 2,
+        type: 'arrive',
+        distance_from_start_m: 200,
+        bearing_before_deg: 270,
+      }),
+    ];
+    const steps = resolveTurnSteps(ROUTE, maneuvers);
+    expect(steps[0].kind).toBe('left');
+    expect(steps[0].atKm).toBeCloseTo(0.1, 5);
+  });
+
+  it('maneuvers가 없으면 buildTurnSteps(기하 계산) 결과와 같다', () => {
+    expect(resolveTurnSteps(ROUTE, undefined)).toEqual(buildTurnSteps(ROUTE));
+    expect(resolveTurnSteps(ROUTE, null)).toEqual(buildTurnSteps(ROUTE));
+    expect(resolveTurnSteps(ROUTE, [])).toEqual(buildTurnSteps(ROUTE));
+  });
+
+  it('maneuvers가 있어도 arrive가 없어 변환에 실패하면 buildTurnSteps로 폴백한다', () => {
+    const brokenManeuvers = [
+      makeManeuver({ sequence: 0, type: 'start', bearing_after_deg: 0 }),
+    ];
+    expect(resolveTurnSteps(ROUTE, brokenManeuvers)).toEqual(
+      buildTurnSteps(ROUTE),
+    );
+  });
+});
+
 describe('findNextTurnStep', () => {
   const steps: TurnStep[] = [
     { atKm: 0.3, kind: 'right', angleDeg: 80 },
@@ -152,7 +336,11 @@ describe('decideBackgroundAnnouncement', () => {
   });
 
   it('같은 턴을 이미 안내했으면(lastAnnouncedAtKm 일치) 다시 안내하지 않는다', () => {
-    const first = decideBackgroundAnnouncement(ROUTE, pointAt(ROUTE, 0.345), null);
+    const first = decideBackgroundAnnouncement(
+      ROUTE,
+      pointAt(ROUTE, 0.345),
+      null,
+    );
     const already = decideBackgroundAnnouncement(
       ROUTE,
       pointAt(ROUTE, 0.348),
@@ -171,7 +359,10 @@ describe('decideBackgroundAnnouncement', () => {
 
 /** route 위 시작점부터 km 지점의 좌표(선형 보간, km이 전체 길이를 넘으면 끝점 쪽으로 그대로
  * 외삽 — decideBackgroundAnnouncement 테스트에서 "한참 지나침"을 표현하는 용도라 문제없다). */
-function pointAt(route: WalkRouteResponse['coordinates'], km: number): [number, number] {
+function pointAt(
+  route: WalkRouteResponse['coordinates'],
+  km: number,
+): [number, number] {
   let acc = 0;
   for (let i = 0; i < route.length - 1; i++) {
     const segLen = haversineDistanceKm(route[i], route[i + 1]);

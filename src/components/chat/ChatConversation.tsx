@@ -7,14 +7,30 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { Keyboard, Linking, Platform, Pressable, View, StyleSheet } from 'react-native';
+import {
+  Keyboard,
+  Linking,
+  Platform,
+  Pressable,
+  View,
+  StyleSheet,
+} from 'react-native';
 import { Text } from '../Text';
 import { BottomSheetScrollView } from '@gorhom/bottom-sheet';
-import { getInitMessage, getMessage } from '../../api/prewalk';
+import {
+  getInitMessage,
+  getMessage,
+  PrewalkStreamError,
+} from '../../api/prewalk';
 import {
   ChatResponse,
   ChatStatus,
+  CircularPreference,
   LocationInfo,
+  OnewayPreference,
+  OnewayShortestPreference,
+  State,
+  WalkMode,
   WalkRouteResponse,
 } from '../../types/prewalk';
 import type { LocationErrorReason } from '../../hooks/useLocation';
@@ -24,7 +40,56 @@ import { MyBubble } from './MyBubble';
 import { LoadingBubble } from './LoadingBubble';
 import { RouteCandidate } from './RouteCandidate';
 import { AssistantAvatar } from './AssistantAvatar';
+import { WalkHintCard } from './WalkHintCard';
+import { WalkConditionCard } from './WalkConditionCard';
 import { spacing, colors } from '../../theme/tokens';
+
+// 챗봇이 이해한 산책 조건 요약(WalkConditionCard용). "산책 티켓" 발행 조건 — is_complete=true,
+// feature_labels(안전/편안 중 하나 이상)가 채워지고, user_context에 출발·도착·목표 거리가
+// 갖춰졌을 때만 계산되며, 그 전까지는 null이라 카드 자체가 뜨지 않는다.
+type WalkConditions = {
+  mode: WalkMode;
+  origin: LocationInfo;
+  destination: LocationInfo | null;
+  targetKm: number | null;
+  // oneway_shortest처럼 사용자가 지정한 목표 거리가 아니라 백엔드가 계산한 최단 거리일 때는
+  // "목표 거리를 OOkm로 바꿔줘" 같은 발화로 고칠 대상이 아니므로 연필 아이콘을 숨긴다.
+  targetKmEditable: boolean;
+};
+
+function extractWalkConditions(state: State): WalkConditions | null {
+  if (!state.is_complete) return null;
+  const labels = state.feature_labels;
+  const hasFeatureLabels = !!(labels && (labels.safety || labels.comfort));
+  if (!hasFeatureLabels) return null;
+
+  const ctx = state.user_context;
+  if (!ctx || !ctx.origin) return null;
+
+  if (ctx.mode === WalkMode.CIRCULAR_RANDOM) {
+    const pref = ctx as CircularPreference;
+    if (pref.target_km == null) return null;
+    return {
+      mode: pref.mode,
+      origin: pref.origin!,
+      destination: null,
+      targetKm: pref.target_km,
+      targetKmEditable: true,
+    };
+  }
+
+  const pref = ctx as OnewayPreference | OnewayShortestPreference;
+  if (!pref.destination) return null;
+  const hasOwnTargetKm = 'target_km' in pref;
+  const targetKm = hasOwnTargetKm ? (pref as OnewayPreference).target_km : null;
+  return {
+    mode: pref.mode,
+    origin: pref.origin!,
+    destination: pref.destination,
+    targetKm: targetKm ?? state.shortest_km ?? null,
+    targetKmEditable: hasOwnTargetKm,
+  };
+}
 
 export type ChatConversationHandle = {
   submitAnswer: (answer: string) => void;
@@ -37,7 +102,11 @@ export type ChatConversationHandle = {
  *  - route_recommended: 경로가 추천됨 — 카드 수락뿐 아니라 조건 변경·재추천 입력도 가능
  *  - session_expired  : 세션이 만료/유실됨 — "새 대화 시작"으로만 복구
  */
-export type ChatPhase = 'idle' | 'chatting' | 'route_recommended' | 'session_expired';
+export type ChatPhase =
+  | 'idle'
+  | 'chatting'
+  | 'route_recommended'
+  | 'session_expired';
 
 // 'routes'는 추천 경로 카드 묶음을 타임라인상의 한 항목으로 취급하기 위한 것.
 // 재추천마다 새 항목을 이어붙이므로(교체가 아님) 이전 추천 카드도 그대로 남아 선택할 수 있고,
@@ -46,28 +115,20 @@ type Message =
   | { from: 'bot' | 'me'; text: string }
   | { from: 'routes'; routes: WalkRouteResponse[] };
 
-// 대기 중 위에 순서대로 흘러가는 진행 상태 문구. 지금은 백엔드가 실제 진행 단계를 내려주지
-// 않아 자리표시자로 채워둔 것 — 나중에 백엔드가 단계별 상태를 보내주면(TODO) applyResponse
-// 쪽에서 받아 그대로 LoadingBubble에 꽂아 넣도록 바꾸면 된다. 지금은 시간 기반으로만 넘어간다.
-// 첫 메시지(init)는 서버 콜드 스타트로 8~20초까지 걸릴 수 있어 그에 맞는 문구를 쓴다.
-const INIT_LOADING_STEPS = [
-  '오늘 날씨를 확인하고 있어요',
-  '주변 정보를 불러오고 있어요',
-  '대화를 준비하고 있어요',
-];
-const FOLLOWUP_LOADING_STEPS = [
-  '메시지를 이해하고 있어요',
-  '어울리는 산책로를 찾고 있어요',
-  '경로를 계산하고 있어요',
-  '답변을 정리하고 있어요',
-];
+// 대기 중 LoadingBubble에 보여줄 기본 문구. 서버가 progress 이벤트를 보내주면 그걸로 즉시
+// 대체되므로(progressSteps), 이건 첫 이벤트가 도착하기 전 아주 짧은 순간에만 보인다.
+const DEFAULT_LOADING_STEP = '생각하고 있어요';
 
 const STATUS_MESSAGES: Partial<Record<ChatStatus, string>> = {
-  [ChatStatus.ACCESS_EXPIRED_TOKEN]: '로그인이 만료되었어요. 다시 로그인해주세요.',
-  [ChatStatus.INVALID_TOKEN]: '인증 정보가 올바르지 않아요. 다시 로그인해주세요.',
-  [ChatStatus.SESSION_NOT_FOUND]: '대화 세션을 찾을 수 없어요. 다시 시작해주세요.',
+  [ChatStatus.ACCESS_EXPIRED_TOKEN]:
+    '로그인이 만료되었어요. 다시 로그인해주세요.',
+  [ChatStatus.INVALID_TOKEN]:
+    '인증 정보가 올바르지 않아요. 다시 로그인해주세요.',
+  [ChatStatus.SESSION_NOT_FOUND]:
+    '대화 세션을 찾을 수 없어요. 다시 시작해주세요.',
   [ChatStatus.UNACCESSIBLE]: '지금은 서비스를 이용할 수 없어요.',
-  [ChatStatus.INTERNAL_ERROR]: '일시적인 오류가 발생했어요. 잠시 후 다시 시도해주세요.',
+  [ChatStatus.INTERNAL_ERROR]:
+    '일시적인 오류가 발생했어요. 잠시 후 다시 시도해주세요.',
 };
 
 // 이 상태들이 오면 현재 threadId는 더 이상 못 쓴다 — 새 세션을 만들어야 복구된다.
@@ -137,10 +198,19 @@ export const ChatConversation = forwardRef(function ChatConversation(
   const [threadId, setThreadId] = useState<string | null>(null);
   const [phase, setPhase] = useState<ChatPhase>('idle');
   const [sending, setSending] = useState(false);
+  // 진행 중인 요청이 SSE progress 이벤트로 보내온 문구들(도착 순서대로 누적) — LoadingBubble은
+  // 항상 마지막 항목만 보여준다. 요청을 새로 시작할 때마다 비운다.
+  const [progressSteps, setProgressSteps] = useState<string[]>([]);
+  // 직전 응답이 "이 코스로 진행할까요?" 같은 확인 질문이었는지 — true면 예/아니요 버튼을 보여준다.
+  const [awaitingConfirmation, setAwaitingConfirmation] = useState(false);
+  // 챗봇이 이해한 산책 조건(WalkConditionCard) — 조건이 갖춰지면 타임라인 위에 고정으로 보여주고,
+  // 이후 응답에서 값이 바뀔 때마다 최신값으로 덮어쓴다(한 번 뜨면 대화가 끝날 때까지 유지).
+  const [conditions, setConditions] = useState<WalkConditions | null>(null);
   // getInitMessage 실패 시 true — hasStartedRef가 재시도를 막아버리지 않도록 별도로 추적한다.
   const [initFailed, setInitFailed] = useState(false);
   const [previewGroupHeight, setPreviewGroupHeight] = useState(0);
-  const scrollRef = useRef<React.ElementRef<typeof BottomSheetScrollView>>(null);
+  const scrollRef =
+    useRef<React.ElementRef<typeof BottomSheetScrollView>>(null);
   const keyboardVisibleRef = useRef(false);
   const hasStartedRef = useRef(false);
   // 비동기 응답이 리셋된 대화/바뀐 세션에 섞이지 않도록: 요청마다 세대 번호를 올리고,
@@ -168,12 +238,23 @@ export const ChatConversation = forwardRef(function ChatConversation(
     (err as { name?: string })?.name === 'AbortError' ||
     (err as { code?: string })?.code === 'ERR_CANCELED';
 
+  // 이 요청이 여전히 최신 요청일 때만 progressSteps에 반영한다(오래된 요청의 뒤늦은 이벤트 무시).
+  const makeProgressHandler = (requestId: number) => (text: string) => {
+    if (requestId === requestIdRef.current)
+      setProgressSteps(prev => [...prev, text]);
+  };
+
   // 요청 직전에 최신 좌표를 받아온다. 실패하면 currentLocation(prop)으로 폴백.
   // retry()는 getLastKnownPositionAsync(캐시)로 먼저 seed하므로 최악의 경우에도 직전 좌표를 준다.
   const resolveCurrentLocation = async (): Promise<LocationInfo> => {
     const fresh = (await onRefreshLocation?.()) ?? null;
     return fresh
-      ? { lat: fresh.latitude, lon: fresh.longitude, address: null, place_name: null }
+      ? {
+          lat: fresh.latitude,
+          lon: fresh.longitude,
+          address: null,
+          place_name: null,
+        }
       : currentLocation;
   };
 
@@ -186,19 +267,31 @@ export const ChatConversation = forwardRef(function ChatConversation(
       is_complete: res.state?.is_complete,
       awaiting_confirmation: res.state?.awaiting_confirmation,
       mode: res.state?.mode,
-      route_result_type: Array.isArray(rr) ? `array(${rr.length})` : rr === null ? 'null' : typeof rr,
+      route_result_type: Array.isArray(rr)
+        ? `array(${rr.length})`
+        : rr === null
+        ? 'null'
+        : typeof rr,
       route_result_raw: rr,
       user_context: res.state?.user_context,
       response: res.state?.response,
     });
+    setAwaitingConfirmation(false);
+    if (options?.reset) setConditions(null);
     if (res.status !== ChatStatus.SUCCESS) {
       const text =
-        STATUS_MESSAGES[res.status] ?? STATUS_MESSAGES[ChatStatus.INTERNAL_ERROR]!;
-      setMessages(prev => (options?.reset ? [] : prev).concat({ from: 'bot', text }));
+        STATUS_MESSAGES[res.status] ??
+        STATUS_MESSAGES[ChatStatus.INTERNAL_ERROR]!;
+      setMessages(prev =>
+        (options?.reset ? [] : prev).concat({ from: 'bot', text }),
+      );
       // 실패 응답의 thread_id는 반영하지 않는다. 세션이 유실된 상태면 복구 UI로 전환.
       if (SESSION_EXPIRED_STATUSES.has(res.status)) setPhase('session_expired');
       return;
     }
+
+    const nextConditions = res.state ? extractWalkConditions(res.state) : null;
+    if (nextConditions) setConditions(nextConditions);
 
     if (res.thread_id) {
       threadIdRef.current = res.thread_id;
@@ -232,7 +325,13 @@ export const ChatConversation = forwardRef(function ChatConversation(
     });
     // is_complete=true인데 경로가 없는 응답도 막힌 화면이 되지 않도록 계속 대화 가능 상태로 둔다.
     setPhase(routeReady ? 'route_recommended' : 'chatting');
+    setAwaitingConfirmation(!!res.state?.awaiting_confirmation);
   };
+
+  // 요청 실패(스트림 에러 포함) 시 보여줄 문구. 서버가 error 이벤트로 사유를 알려준 경우 그걸
+  // 그대로 쓰고, 그 외(네트워크 오류 등)에는 fallback 문구를 쓴다.
+  const streamErrorText = (err: unknown, fallback: string) =>
+    err instanceof PrewalkStreamError ? err.message : fallback;
 
   const startConversation = async () => {
     const origin = await resolveCurrentLocation();
@@ -240,29 +339,33 @@ export const ChatConversation = forwardRef(function ChatConversation(
     const requestId = ++requestIdRef.current;
     abortRef.current?.abort();
     abortRef.current = new AbortController();
+    setProgressSteps([]);
     setSending(true);
     setInitFailed(false);
     try {
       const res = await getInitMessage(
         { lat: origin.lat, lon: origin.lon },
         abortRef.current.signal,
+        makeProgressHandler(requestId),
       );
       if (requestId !== requestIdRef.current) return;
       applyResponse(res, { reset: true });
     } catch (err) {
       if (isAbortError(err) || requestId !== requestIdRef.current) return;
       // TODO: 테스트 끝나면 아래 로그 제거
-      console.error(
-        '[ChatConversation] getInitMessage failed:',
-        (err as any)?.response?.status,
-        (err as any)?.response?.data ?? err,
-      );
+      console.error('[ChatConversation] getInitMessage failed:', err);
       // hasStartedRef를 다시 풀어줘야 재시도 버튼을 누르지 않고도(예: 위치가 뒤늦게 잡혀서
       // effect가 재실행되는 경우) 다음 시도가 막히지 않는다.
       hasStartedRef.current = false;
       setInitFailed(true);
       setMessages([
-        { from: 'bot', text: '대화를 시작하지 못했어요. 다시 시도해주세요.' },
+        {
+          from: 'bot',
+          text: streamErrorText(
+            err,
+            '대화를 시작하지 못했어요. 다시 시도해주세요.',
+          ),
+        },
       ]);
     } finally {
       if (requestId === requestIdRef.current) setSending(false);
@@ -295,17 +398,12 @@ export const ChatConversation = forwardRef(function ChatConversation(
     abortRef.current = new AbortController();
     const { signal } = abortRef.current;
     setMessages(prev => [...prev, { from: 'me', text: answer }]);
+    setProgressSteps([]);
     setSending(true);
     try {
       // 대화 도중 이동했을 수 있으니 이번 발화에도 최신 좌표를 함께 보낸다.
       const here = await resolveCurrentLocation();
       if (requestId !== requestIdRef.current) return;
-      console.log('[ChatConversation] getMessage →', {
-        thread_id: requestedThreadId,
-        user_prompt: answer,
-        lat: here.lat,
-        lon: here.lon,
-      });
       const res = await getMessage(
         {
           thread_id: requestedThreadId,
@@ -314,8 +412,8 @@ export const ChatConversation = forwardRef(function ChatConversation(
           lon: here.lon ?? undefined,
         },
         signal,
+        makeProgressHandler(requestId),
       );
-      console.log('[ChatConversation] getMessage ← status:', res?.status);
       // 응답이 돌아온 사이에 새 요청이 시작됐거나 thread가 바뀌었으면 버린다.
       if (requestId !== requestIdRef.current) return;
       if (threadIdRef.current !== requestedThreadId) return;
@@ -327,17 +425,67 @@ export const ChatConversation = forwardRef(function ChatConversation(
     } catch (err) {
       if (isAbortError(err) || requestId !== requestIdRef.current) return;
       // TODO: 테스트 끝나면 아래 로그 제거
-      console.error(
-        '[ChatConversation] getMessage failed:',
-        (err as any)?.response?.status,
-        (err as any)?.name,
-        (err as any)?.message,
-        (err as any)?.stack ?? (err as any),
-        JSON.stringify((err as any)?.response?.data ?? null),
-      );
+      console.error('[ChatConversation] getMessage failed:', err);
       setMessages(prev => [
         ...prev,
-        { from: 'bot', text: '메시지를 보내지 못했어요. 다시 시도해주세요.' },
+        {
+          from: 'bot',
+          text: streamErrorText(
+            err,
+            '메시지를 보내지 못했어요. 다시 시도해주세요.',
+          ),
+        },
+      ]);
+    } finally {
+      if (requestId === requestIdRef.current) setSending(false);
+    }
+  };
+
+  // "이 코스로 진행할까요?" 같은 확인 질문에 버튼으로 답한다. 자유 텍스트가 아니라
+  // confirmation 필드로 보내고, user_prompt는 비워 보낸다(confirmation과 함께면 공백 허용).
+  const submitConfirmation = async (confirmed: boolean) => {
+    if (sending || phase === 'session_expired' || !threadId) return;
+    const requestId = ++requestIdRef.current;
+    const requestedThreadId = threadId;
+    abortRef.current?.abort();
+    abortRef.current = new AbortController();
+    const { signal } = abortRef.current;
+    setMessages(prev => [
+      ...prev,
+      { from: 'me', text: confirmed ? '예' : '아니요' },
+    ]);
+    setAwaitingConfirmation(false);
+    setProgressSteps([]);
+    setSending(true);
+    try {
+      const here = await resolveCurrentLocation();
+      if (requestId !== requestIdRef.current) return;
+      const res = await getMessage(
+        {
+          thread_id: requestedThreadId,
+          user_prompt: '',
+          confirmation: confirmed,
+          lat: here.lat ?? undefined,
+          lon: here.lon ?? undefined,
+        },
+        signal,
+        makeProgressHandler(requestId),
+      );
+      if (requestId !== requestIdRef.current) return;
+      if (threadIdRef.current !== requestedThreadId) return;
+      applyResponse(res);
+    } catch (err) {
+      if (isAbortError(err) || requestId !== requestIdRef.current) return;
+      console.error('[ChatConversation] submitConfirmation failed:', err);
+      setMessages(prev => [
+        ...prev,
+        {
+          from: 'bot',
+          text: streamErrorText(
+            err,
+            '요청을 처리하지 못했어요. 다시 시도해주세요.',
+          ),
+        },
       ]);
     } finally {
       if (requestId === requestIdRef.current) setSending(false);
@@ -357,11 +505,13 @@ export const ChatConversation = forwardRef(function ChatConversation(
     const { signal } = abortRef.current;
     setInitFailed(false);
     setPhase('idle');
+    setProgressSteps([]);
     setSending(true);
     try {
       const initRes = await getInitMessage(
         { lat: origin.lat, lon: origin.lon },
         signal,
+        makeProgressHandler(requestId),
       );
       if (requestId !== requestIdRef.current) return;
       applyResponse(initRes, { reset: true });
@@ -371,6 +521,7 @@ export const ChatConversation = forwardRef(function ChatConversation(
         initRes.thread_id
       ) {
         setMessages(prev => [...prev, { from: 'me', text: pending }]);
+        setProgressSteps([]);
         const res = await getMessage(
           {
             thread_id: initRes.thread_id,
@@ -379,6 +530,7 @@ export const ChatConversation = forwardRef(function ChatConversation(
             lon: origin.lon ?? undefined,
           },
           signal,
+          makeProgressHandler(requestId),
         );
         if (requestId !== requestIdRef.current) return;
         if (threadIdRef.current !== initRes.thread_id) return;
@@ -390,14 +542,16 @@ export const ChatConversation = forwardRef(function ChatConversation(
     } catch (err) {
       if (isAbortError(err) || requestId !== requestIdRef.current) return;
       // TODO: 테스트 끝나면 아래 로그 제거
-      console.error(
-        '[ChatConversation] restartConversation failed:',
-        (err as any)?.response?.status,
-        (err as any)?.response?.data ?? err,
-      );
+      console.error('[ChatConversation] restartConversation failed:', err);
       setInitFailed(true);
       setMessages([
-        { from: 'bot', text: '대화를 다시 시작하지 못했어요. 다시 시도해주세요.' },
+        {
+          from: 'bot',
+          text: streamErrorText(
+            err,
+            '대화를 다시 시작하지 못했어요. 다시 시도해주세요.',
+          ),
+        },
       ]);
     } finally {
       if (requestId === requestIdRef.current) setSending(false);
@@ -437,8 +591,10 @@ export const ChatConversation = forwardRef(function ChatConversation(
   }, [previewGroupHeight, onPreviewHeightChange]);
 
   useEffect(() => {
-    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
-    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const showEvent =
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent =
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
 
     const showSub = Keyboard.addListener(showEvent, () => {
       keyboardVisibleRef.current = true;
@@ -478,7 +634,11 @@ export const ChatConversation = forwardRef(function ChatConversation(
 
   // 대화 시작 전(threadId 없음) 위치 좌표를 못 얻은 경우의 안내 + 행동 버튼.
   // 대화가 시작된 뒤엔 후속 메시지에 좌표가 필요 없으므로 노출하지 않는다.
-  const locationNotice: { text: string; actionLabel: string; onPress: () => void } | null =
+  const locationNotice: {
+    text: string;
+    actionLabel: string;
+    onPress: () => void;
+  } | null =
     threadId || !locationError
       ? null
       : locationError === 'permission_denied'
@@ -518,11 +678,24 @@ export const ChatConversation = forwardRef(function ChatConversation(
                   pressed && styles.retryButtonPressed,
                 ]}
               >
-                <Text style={styles.retryButtonText}>{locationNotice.actionLabel}</Text>
+                <Text style={styles.retryButtonText}>
+                  {locationNotice.actionLabel}
+                </Text>
               </Pressable>
             </View>
           ) : awaitingLocation ? (
             <ChatBubble text="위치 정보를 확인하는 중이에요…" />
+          ) : null}
+          {conditions ? (
+            <WalkConditionCard
+              origin={conditions.origin}
+              destination={conditions.destination}
+              showDestination={conditions.mode !== WalkMode.CIRCULAR_RANDOM}
+              targetKm={conditions.targetKm}
+              distanceEditable={conditions.targetKmEditable}
+              disabled={sending || phase === 'session_expired'}
+              onEdit={text => submitAnswer(text)}
+            />
           ) : null}
           {messages.map((message, index) => {
             const routeOffset = routeOffsets[index];
@@ -550,7 +723,8 @@ export const ChatConversation = forwardRef(function ChatConversation(
               ) : (
                 <MyBubble text={message.text} />
               );
-            // 첫 봇 메시지만 실측해 중간 스냅 높이 계산에 사용한다.
+            // 첫 봇 메시지만 실측해 중간 스냅 높이 계산에 사용한다. 아직 사용자가 아무것도
+            // 입력하지 않은 첫 화면에서는 조건 힌트 카드도 함께 보여준다.
             if (index === 0) {
               return (
                 <View
@@ -561,13 +735,40 @@ export const ChatConversation = forwardRef(function ChatConversation(
                   }
                 >
                   {bubble}
+                  {messages.length === 1 && !sending ? <WalkHintCard /> : null}
                 </View>
               );
             }
             return <View key={index}>{bubble}</View>;
           })}
           {sending ? (
-            <LoadingBubble steps={!threadId ? INIT_LOADING_STEPS : FOLLOWUP_LOADING_STEPS} />
+            <LoadingBubble
+              steps={
+                progressSteps.length ? progressSteps : [DEFAULT_LOADING_STEP]
+              }
+            />
+          ) : null}
+          {awaitingConfirmation && !sending && phase !== 'session_expired' ? (
+            <View style={styles.confirmRow}>
+              <Pressable
+                onPress={() => submitConfirmation(true)}
+                style={({ pressed }) => [
+                  styles.retryButton,
+                  pressed && styles.retryButtonPressed,
+                ]}
+              >
+                <Text style={styles.retryButtonText}>예</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => submitConfirmation(false)}
+                style={({ pressed }) => [
+                  styles.retryButton,
+                  pressed && styles.retryButtonPressed,
+                ]}
+              >
+                <Text style={styles.retryButtonText}>아니요</Text>
+              </Pressable>
+            </View>
           ) : null}
           {initFailed && !sending ? (
             <Pressable
@@ -617,6 +818,10 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   locationNotice: {
+    gap: spacing.sm,
+  },
+  confirmRow: {
+    flexDirection: 'row',
     gap: spacing.sm,
   },
   retryButton: {
