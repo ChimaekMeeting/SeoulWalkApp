@@ -96,7 +96,7 @@ function extractWalkConditions(state: State): WalkConditions | null {
 
 export type ChatConversationHandle = {
   submitAnswer: (answer: string) => void;
-  submitConfirmation: (confirmed: boolean) => void;
+  submitConfirmation: (confirmed: boolean, feedback?: string) => void;
 };
 
 /**
@@ -521,7 +521,8 @@ export const ChatConversation = forwardRef(function ChatConversation(
 
   // "이 코스로 진행할까요?" 같은 확인 질문에 버튼으로 답한다. 자유 텍스트가 아니라
   // confirmation 필드로 보내고, user_prompt는 비워 보낸다(confirmation과 함께면 공백 허용).
-  const submitConfirmation = async (confirmed: boolean) => {
+  // 아니요의 경우 사용자가 입력한 수정 요구사항(feedback)을 user_prompt로 함께 실어 보낸다.
+  const submitConfirmation = async (confirmed: boolean, feedback?: string) => {
     if (sending || phase === 'session_expired' || !threadId) return;
     const requestId = ++requestIdRef.current;
     const requestedThreadId = threadId;
@@ -530,7 +531,7 @@ export const ChatConversation = forwardRef(function ChatConversation(
     const { signal } = abortRef.current;
     setMessages(prev => [
       ...prev,
-      { from: 'me', text: confirmed ? '예' : '아니요' },
+      { from: 'me', text: feedback || (confirmed ? '예' : '아니요') },
     ]);
     setAwaitingConfirmation(false);
     setProgressSteps([]);
@@ -541,7 +542,7 @@ export const ChatConversation = forwardRef(function ChatConversation(
       const res = await getMessage(
         {
           thread_id: requestedThreadId,
-          user_prompt: '',
+          user_prompt: feedback ?? '',
           confirmation: confirmed,
           lat: here.lat ?? undefined,
           lon: here.lon ?? undefined,
@@ -703,8 +704,8 @@ export const ChatConversation = forwardRef(function ChatConversation(
     submitAnswer: (answer: string) => {
       submitAnswer(answer);
     },
-    submitConfirmation: (confirmed: boolean) => {
-      submitConfirmation(confirmed);
+    submitConfirmation: (confirmed: boolean, feedback?: string) => {
+      submitConfirmation(confirmed, feedback);
     },
   }));
 
