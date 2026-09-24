@@ -107,6 +107,13 @@ export const HomeScreen = forwardRef<HomeScreenHandle, HomeScreenProps>(function
   // "이 코스로 진행할까요?" 같은 확인 질문 대기 중인지 — true면 입력창 위에 예/아니요 버튼을
   // 띄우고, 자유 텍스트 입력은 막아 버튼으로만 답하게 한다.
   const [chatAwaitingConfirmation, setChatAwaitingConfirmation] = useState(false);
+  // 확인 질문에 "아니요"를 누른 뒤 수정 요구사항을 입력하는 중인지 — true면 예/아니요 버튼 대신
+  // 입력창에 "수정 요청" 칩을 붙이고 입력을 열어, 보낸 텍스트를 confirmation=false와 함께 전송한다.
+  const [composingRejection, setComposingRejection] = useState(false);
+  // 확인 질문이 사라지면(카드 수정 등으로 대체, 대화 리셋) 수정 요청 모드도 함께 해제한다.
+  useEffect(() => {
+    if (!chatAwaitingConfirmation) setComposingRejection(false);
+  }, [chatAwaitingConfirmation]);
   const [previewHeight, setPreviewHeight] = useState(50);
   const [manualRecenterKey, setManualRecenterKey] = useState(0);
   const [environmentRefreshKey, setEnvironmentRefreshKey] = useState(0);
@@ -270,7 +277,7 @@ export const HomeScreen = forwardRef<HomeScreenHandle, HomeScreenProps>(function
         style={[styles.chatInputBar, { bottom: chatInputBottom }]}
         onLayout={handleChatInputLayout}
       >
-        {chatAwaitingConfirmation ? (
+        {chatAwaitingConfirmation && !composingRejection ? (
           <View style={styles.confirmRow}>
             <Pressable
               onPress={() => {
@@ -288,10 +295,7 @@ export const HomeScreen = forwardRef<HomeScreenHandle, HomeScreenProps>(function
               <Text style={styles.confirmButtonTextYes}>예</Text>
             </Pressable>
             <Pressable
-              onPress={() => {
-                chatRef.current?.submitConfirmation(false);
-                sheetRef.current?.expand();
-              }}
+              onPress={() => setComposingRejection(true)}
               disabled={chatSending}
               style={({ pressed }) => [
                 styles.confirmButton,
@@ -306,19 +310,35 @@ export const HomeScreen = forwardRef<HomeScreenHandle, HomeScreenProps>(function
         ) : null}
         <ChatInput
           onSend={text => {
-            chatRef.current?.submitAnswer(text);
+            if (composingRejection) {
+              chatRef.current?.submitConfirmation(false, text);
+              setComposingRejection(false);
+            } else {
+              chatRef.current?.submitAnswer(text);
+            }
             // 메시지를 보내는 순간, 3단계 스와이프 중 가장 위(꽉 찬) 상태로 올려준다.
             sheetRef.current?.expand();
           }}
+          chip={
+            composingRejection
+              ? {
+                  label: '수정 요청',
+                  icon: 'create-outline',
+                  onRemove: () => setComposingRejection(false),
+                }
+              : null
+          }
           disabled={
             chatSending ||
             inputBlockedByLocation ||
             chatPhase === 'session_expired' ||
-            chatAwaitingConfirmation
+            (chatAwaitingConfirmation && !composingRejection)
           }
           placeholder={
             inputBlockedByLocation
               ? '위치 확인 후 대화를 시작할 수 있어요'
+              : composingRejection
+              ? '어떤 점을 바꾸고 싶은지 알려주세요'
               : chatAwaitingConfirmation
               ? '위 버튼으로 답해주세요'
               : undefined
